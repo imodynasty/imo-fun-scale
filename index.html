@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#080a10"><title>IMO DYNASTY</title>
-<link rel="preconnect" href="https://cdn.jsdelivr.net"><link rel="stylesheet" href="styles.css?v=2.3.1">
+<link rel="preconnect" href="https://cdn.jsdelivr.net"><link rel="stylesheet" href="styles.css?v=2.4.1">
 </head><body><div class="noise"></div>
 <header class="site-header v22-header">
   <div class="brand v22-brand">
@@ -99,5 +99,12 @@
     <div id="managerProfileContent" class="manager-profile-content"></div>
   </section>
 </div>
-<footer><strong>IMO DYNASTY</strong><span>Independent league dashboard · V2.3.1 · Not affiliated with Sleeper</span></footer>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script><script src="app.js?v=2.3.1"></script></body></html>
+<div id="playerHistoryModal" class="player-history-modal" aria-hidden="true">
+  <div class="player-history-backdrop" data-close-player-history></div>
+  <section class="player-history-sheet" role="dialog" aria-modal="true" aria-labelledby="playerHistoryTitle">
+    <button id="playerHistoryClose" class="player-history-close" type="button" aria-label="Close player history">×</button>
+    <div id="playerHistoryContent" class="player-history-content"></div>
+  </section>
+</div>
+<footer><strong>IMO DYNASTY</strong><span>Independent league dashboard · V2.4.1 · Not affiliated with Sleeper</span></footer>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script><script src="app.js?v=2.4.1"></script></body></html>
