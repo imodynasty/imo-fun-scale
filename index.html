@@ -22,7 +22,12 @@
 </header>
 <main>
 
-<section class="window-nav"><button class="window-btn active" data-window="14">14 DAYS</button><button class="window-btn" data-window="28">28 DAYS</button><button class="window-btn" data-window="season">SEASON</button><button class="window-btn" data-window="all">ALL TIME</button></section>
+<section class="window-nav">
+  <button class="window-btn active" data-window="14">14 DAYS</button>
+  <button class="window-btn" data-window="28">28 DAYS</button>
+  <button class="window-btn" data-window="season">SEASON</button>
+  <button class="window-btn" data-window="all">ALL TIME</button>
+</section>
 
 <section class="summary-grid" aria-label="Summary metrics">
   <article class="metric">
@@ -48,61 +53,111 @@
 </section>
 
 <div class="content-shell"><div class="main-column">
-<section class="panel power-rankings-hero merged-rankings-hero"><div class="panel-heading"><div><span class="eyebrow">🏛️ THE HOLY GRAIL · IMO PREDICTOR</span><h3>League Power Rankings</h3><p class="power-rankings-intro">Power rankings, championship odds and manager form</p></div></div>
-<!-- rest of page unchanged -->
-<section class="panel trade-week"><div class="panel-heading"><div><span class="eyebrow">🔥 FEATURED MOVE</span><h3>Trade of the Week</h3></div><span class="period-pill">Weekly standout</span></div></section>
 
+<section class="panel power-rankings-hero merged-rankings-hero">
+  <div class="panel-heading">
+    <div>
+      <span class="eyebrow">🏛️ THE HOLY GRAIL · IMO PREDICTOR</span>
+      <h3>League Power Rankings</h3>
+      <p class="power-rankings-intro">Power rankings, championship odds and manager form</p>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div id="powerRankings" class="loading">Calculating…</div>
+  </div>
+  <div class="panel-footer">
+    <div id="championshipOdds" class="loading">Loading championship odds…</div>
+  </div>
+</section>
 
+<section class="panel trade-week">
+  <div class="panel-heading">
+    <div><span class="eyebrow">🔥 FEATURED MOVE</span><h3>Trade of the Week</h3></div>
+    <span class="period-pill">Weekly standout</span>
+  </div>
+  <div class="panel-body" id="tradeOfTheWeek">Loading…</div>
+</section>
 
-<section class="panel leaderboard-panel"><div class="panel-heading active-heading"><div><span class="eyebrow">🥇 THE RANKING</span><h3>Most Active GM</h3></div></div><div class="active-window-nav loading" id="leaderboard">Loading…</div></section>
+<section class="panel leaderboard-panel">
+  <div class="panel-heading active-heading">
+    <div><span class="eyebrow">🥇 THE RANKING</span><h3>Most Active GM</h3></div>
+  </div>
+  <div class="active-window-nav loading" id="leaderboard">Loading…</div>
+</section>
 
-<section class="panel heatmap-panel"><div class="panel-heading"><div><span class="eyebrow">🤝 CONNECTIONS</span><h3>Trade Partner Heatmap</h3></div><button id="heatmapToggle" class="small-button" type="button">Toggle</button></div></section>
-
+<section class="panel heatmap-panel">
+  <div class="panel-heading">
+    <div><span class="eyebrow">🤝 CONNECTIONS</span><h3>Trade Partner Heatmap</h3></div>
+    <button id="heatmapToggle" class="small-button" type="button">Toggle</button>
+  </div>
+  <div class="panel-body">
+    <div id="tradeHeatmap" class="loading">Loading heatmap…</div>
+  </div>
+</section>
 
 <section class="dashboard-grid">
-<article class="panel"><div class="panel-heading"><div><span class="eyebrow">📉 TWO-WEEK WATCH</span><h3>POOR FORM</h3></div><span class="period-pill">Biggest fallers</span></div><div id="poorForm" class="loading">Loading…</div></article>
-<article class="panel"><div class="panel-heading"><div><span class="eyebrow">📈 TWO-WEEK WATCH</span><h3>GOOD FORM</h3></div><span class="period-pill">Biggest risers</span></div><div id="goodForm" class="loading">Loading…</div></article>
+  <article class="panel">
+    <div class="panel-heading"><div><span class="eyebrow">📉 TWO-WEEK WATCH</span><h3>POOR FORM</h3></div><span class="period-pill">Biggest fallers</span></div>
+    <div id="poorForm" class="loading">Loading…</div>
+  </article>
+  <article class="panel">
+    <div class="panel-heading"><div><span class="eyebrow">📈 TWO-WEEK WATCH</span><h3>GOOD FORM</h3></div><span class="period-pill">Biggest risers</span></div>
+    <div id="goodForm" class="loading">Loading…</div>
+  </article>
 </section>
-<section class="panel"><div class="panel-heading"><div><span class="eyebrow">📜 HISTORY BOOK</span><h3>League Records</h3></div></div><div id="leagueRecords" class="records-grid records-grid-eight loading">Loading…</div></section>
 
-<section class="panel recent-panel"><div class="panel-heading"><div><span class="eyebrow">LATEST MOVES</span><h3>RECENT TRADES</h3></div></div><div id="recentTrades" class="recent-trades loading">Loading…</div></section>
-<section class="panel biggest-trades-panel"><div class="panel-heading"><div><span class="eyebrow">💥 LEAGUE HISTORY</span><h3>Biggest Ever Trades</h3></div><button id="biggestTradesToggle" class="small-button" type="button">Toggle</button></div></section>
+<section class="panel">
+  <div class="panel-heading"><div><span class="eyebrow">📜 HISTORY BOOK</span><h3>League Records</h3></div></div>
+  <div id="leagueRecords" class="records-grid records-grid-eight loading">Loading…</div>
+</section>
+
+<section class="panel recent-panel">
+  <div class="panel-heading"><div><span class="eyebrow">LATEST MOVES</span><h3>RECENT TRADES</h3></div></div>
+  <div id="recentTrades" class="recent-trades loading">Loading…</div>
+</section>
+
+<section class="panel biggest-trades-panel">
+  <div class="panel-heading"><div><span class="eyebrow">💥 LEAGUE HISTORY</span><h3>Biggest Ever Trades</h3></div>
+  <button id="biggestTradesToggle" class="small-button" type="button">Toggle</button></div>
+  <div id="biggestTrades" class="loading">Loading…</div>
+</section>
 
 <section class="panel voting-panel" id="allNbaVoting">
-<div class="panel-heading"><div><span class="eyebrow">🗳️ LEAGUE BALLOT</span><h3>IMO AWARDS VOTING</h3></div><span class="period-pill">Results revealed 6 January</span></div>
-<div id="votingCountdown" class="voting-countdown">Voting opens 3 January 2027</div>
-<p class="voting-intro">Each ballot opens on 3 January 2027. One submission is allowed per ballot on each device.</p>
-<div class="award-voting-grid">
-<article class="ballot-card vote-category" data-category="allNba">
-<div class="vote-lock-overlay" id="allNbaLock"></div>
-<h4>IMO All-NBA Team</h4>
-<p>Select any team to open its manager profile.</p>
-<input id="allNbaSearch" class="vote-search" type="search" placeholder="Search top 50 players…">
-<div id="allNbaChoices" class="vote-choices loading">Loading players…</div>
-<div class="vote-count"><span id="allNbaCount">0</span>/10 selected</div>
-<button id="submitAllNba" class="small-button primary-button vote-submit" type="button">Submit All-NBA vote</button>
-<div id="allNbaStatus" class="vote-status"></div>
-</article>
+  <div class="panel-heading"><div><span class="eyebrow">🗳️ LEAGUE BALLOT</span><h3>IMO AWARDS VOTING</h3></div><span class="period-pill">Results revealed 6 January</span></div>
+  <div id="votingCountdown" class="voting-countdown">Voting opens 3 January 2027</div>
+  <p class="voting-intro">Each ballot opens on 3 January 2027. One submission is allowed per ballot on each device.</p>
+  <div class="award-voting-grid">
+    <article class="ballot-card vote-category" data-category="allNba">
+      <div class="vote-lock-overlay" id="allNbaLock"></div>
+      <h4>IMO All-NBA Team</h4>
+      <p>Vote for the All-NBA team.</p>
+      <input id="allNbaSearch" class="vote-search" type="search" placeholder="Search top 50 players…">
+      <div id="allNbaChoices" class="vote-choices loading">Loading players…</div>
+      <div class="vote-count"><span id="allNbaCount">0</span>/10 selected</div>
+      <button id="submitAllNba" class="small-button primary-button vote-submit" type="button">Submit All-NBA vote</button>
+      <div id="allNbaStatus" class="vote-status"></div>
+    </article>
 
-<article class="ballot-card vote-category" data-category="rookie">
-<div class="vote-lock-overlay" id="rookieLock"></div>
-<h4>Rookie of the Year</h4>
-<p>Select one eligible rookie. Options are sorted by current season fantasy average. Results are weighted 35% fan vote and 65% season average.</p>
-<select id="rookieVote" class="vote-select"><option>Loading…</option></select>
-<button id="submitRookie" class="small-button primary-button vote-submit" type="button">Submit ROTY vote</button>
-<div id="rookieStatus" class="vote-status"></div>
-</article>
+    <article class="ballot-card vote-category" data-category="rookie">
+      <div class="vote-lock-overlay" id="rookieLock"></div>
+      <h4>Rookie of the Year</h4>
+      <p>Select one eligible rookie.</p>
+      <select id="rookieVote" class="vote-select"><option>Loading…</option></select>
+      <button id="submitRookie" class="small-button primary-button vote-submit" type="button">Submit ROTY vote</button>
+      <div id="rookieStatus" class="vote-status"></div>
+    </article>
 
-<article class="ballot-card vote-category" data-category="mip">
-<div class="vote-lock-overlay" id="mipLock"></div>
-<h4>Most Improved Player</h4>
-<p>Select one player. Results are weighted 50% fan vote and 50% improvement from the 2025 season to the 2026 season.</p>
-<select id="mipVote" class="vote-select"><option>Loading…</option></select>
-<button id="submitMip" class="small-button primary-button vote-submit" type="button">Submit MIP vote</button>
-<div id="mipStatus" class="vote-status"></div>
-</article>
-</div>
+    <article class="ballot-card vote-category" data-category="mip">
+      <div class="vote-lock-overlay" id="mipLock"></div>
+      <h4>Most Improved Player</h4>
+      <p>Select one player.</p>
+      <select id="mipVote" class="vote-select"><option>Loading…</option></select>
+      <button id="submitMip" class="small-button primary-button vote-submit" type="button">Submit MIP vote</button>
+      <div id="mipStatus" class="vote-status"></div>
+    </article>
+  </div>
 </section>
+
 </div></div>
 </main>
 
@@ -118,6 +173,7 @@
     <div id="managerDirectoryList" class="manager-directory-list"></div>
   </section>
 </div>
+
 <div id="managerProfileModal" class="manager-profile-modal" aria-hidden="true">
   <div class="manager-profile-backdrop" data-close-manager-profile></div>
   <section class="manager-profile-sheet" role="dialog" aria-modal="true" aria-labelledby="managerProfileTitle">
@@ -125,6 +181,7 @@
     <div id="managerProfileContent" class="manager-profile-content"></div>
   </section>
 </div>
+
 <div id="playerHistoryModal" class="player-history-modal" aria-hidden="true">
   <div class="player-history-backdrop" data-close-player-history></div>
   <section class="player-history-sheet" role="dialog" aria-modal="true" aria-labelledby="playerHistoryTitle">
@@ -132,5 +189,6 @@
     <div id="playerHistoryContent" class="player-history-content"></div>
   </section>
 </div>
+
 <footer><strong>IMO DYNASTY</strong><span>Independent league dashboard · V2.5.1 · Not affiliated with Sleeper</span></footer>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script><script src="app.js?v=2.5.1"></script></body></html>
