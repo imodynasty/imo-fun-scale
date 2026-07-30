@@ -74,3 +74,22 @@
 .big-trade-card summary small{display:block;color:var(--muted);font-size:9px;margin-top:4px}
 .big-trade-rank{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:rgba(56,224,126,.12);color:var(--green);font-weight:950}
 .big-trade-value{color:var(--green);font-weight:950;font-size:12px;white-space:nowrap}
+
+
+/* Dynasty valuation + full-width championship odds update */
+.content-shell{display:block}
+.main-column{width:100%;min-width:0}
+.odds-panel-full{position:static;max-height:none;overflow:visible;margin-top:12px}
+.odds-panel-full .odds-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;overflow:visible;padding-right:0}
+.odds-panel-full .odds-row-wrap{margin-bottom:0}
+.odds-panel-full .odds-summary{grid-template-columns:30px minmax(0,1fr) minmax(145px,auto)}
+.odds-panel-full .odds-price-stack{min-width:145px}
+.odds-panel-full .odds-price-stack .odds-move{max-width:none}
+.big-trade-card summary{grid-template-columns:auto minmax(0,1fr) auto}
+.big-trade-chevron{color:var(--muted);font-size:10px;font-weight:800;white-space:nowrap}
+.big-trade-card[open] .big-trade-chevron{color:var(--green)}
+@media(max-width:800px){
+  .odds-panel-full .odds-list{grid-template-columns:1fr}
+  .odds-panel-full .odds-summary{grid-template-columns:28px minmax(0,1fr) minmax(112px,auto)}
+  .odds-panel-full .odds-price-stack{min-width:112px}
+}
