@@ -65,7 +65,14 @@ function ordinal(n){const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]
 function renderTradeWeek(){const recent=state.trades.filter(t=>t.created>=Date.now()-7*864e5),pool=recent.length?recent:state.trades.slice(0,25),t=[...pool].sort((a,b)=>tradeValue(b)-tradeValue(a))[0];if(!t){$("tradeOfWeek").innerHTML="No trade available";return}const sides=Object.entries(tradeAssets(t)).slice(0,3),html=sides.map(([mid,assets])=>`<div class="trade-side-v2"><strong>${esc(managerName(mid,t))} receives</strong>${assets.length?assets.map(a=>`<div class="asset-row"><span>${esc(a.name)}${a.owner?`<small class="asset-owner">Originally ${esc(a.owner)}'s pick</small>`:''}</span></div>`).join(""):'<div class="asset-row"><span>No listed assets</span></div>'}</div>`).join('<div class="trade-mid">⇄</div>');$("tradeOfWeek").classList.remove("loading");$("tradeOfWeek").innerHTML=`<div class="trade-feature-v2">${html}<div class="trade-foot-v2"><span>Selected by the private dynasty trade-ranking model</span><strong>${fmt(t.created)}</strong></div></div>`}
 function allPartnerPairs(){const teams=[...state.managers.values()],mat={};state.trades.forEach(t=>{const ids=mids(t);for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){const k=[ids[i],ids[j]].sort().join('|');mat[k]=(mat[k]||0)+1}});const pairs=[];for(let i=0;i<teams.length;i++)for(let j=i+1;j<teams.length;j++){const a=teams[i],b=teams[j],count=mat[[a.id,b.id].sort().join('|')]||0;if(count)pairs.push({a,b,count})}return pairs.sort((a,b)=>b.count-a.count||a.a.name.localeCompare(b.a.name))}
 function mostRecentPartnerTrade(a,b){return state.trades.find(t=>{const ids=mids(t);return ids.includes(String(a))&&ids.includes(String(b))})||null}
-function renderHeatmap(){const pairs=allPartnerPairs(),shown=pairs.slice(0,state.heatmapExpanded?30:8),max=Math.max(...pairs.map(x=>x.count),1);$("tradeHeatmap").classList.remove("loading");$("tradeHeatmap").innerHTML=`<div class="partner-grid v24-partner-grid">${shown.map((p,i)=>{const latest=mostRecentPartnerTrade(p.a.id,p.b.id),aAvatar=p.a.avatar?`<img src="${esc(p.a.avatar)}" alt="">`:`<span>${esc(p.a.initials||p.a.name.slice(0,2))}</span>`,bAvatar=p.b.avatar?`<img src="${esc(p.b.avatar)}" alt="">`:`<span>${esc(p.b.initials||p.b.name.slice(0,2))}</span>`;return `<details class="partner-card partner-card-v24" style="--heat:${Math.max(.1,p.count/max)}"><summary><span class="partner-rank">${i+1}</span><span class="partner-avatar-stack"><span>${aAvatar}</span><span>${bAvatar}</span></span><span class="partner-names"><strong>${esc(p.a.name)}</strong><small>with ${esc(p.b.name)}</small></span><span class="partner-total"><strong>${p.count}</strong><small>trades</small></span><span class="partner-chevron">⌄</span></summary><div class="partner-recent"><div class="partner-recent-heading"><span>Most recent trade</span><strong>${latest?fmt(latest.created):"—"}</strong></div>${latest?`<small>${esc(tradeSummary(latest))}</small><div class="trade-detail-body">${tradeDetailsHTML(latest)}</div>`:'<small>No trade details available.</small>'}</div></details>`}).join("")}</div>`;$("heatmapToggle").textContent=state.heatmapExpanded?'Show top 8':'Show top 30'}
+function renderHeatmap(){
+  const target=$("tradeHeatmap");
+  if(!target)return;
+  const pairs=allPartnerPairs().slice(0,8);
+  target.classList.remove("loading");
+  if(!pairs.length){target.innerHTML='<div class="block-empty">No trade partnerships found.</div>';return}
+  target.innerHTML=`<div class="partner-list-compact">${pairs.map((p,i)=>`<div class="partner-row-compact"><span class="partner-rank">${i+1}</span><span class="partner-team-pair"><button type="button" class="compact-manager-link manager-profile-link" data-manager-id="${esc(p.a.id)}">${esc(p.a.name)}</button><span class="partner-arrow">↔</span><button type="button" class="compact-manager-link manager-profile-link" data-manager-id="${esc(p.b.id)}">${esc(p.b.name)}</button></span><strong class="partner-count-compact">${p.count} ${p.count===1?'trade':'trades'}</strong></div>`).join("")}</div>`;
+}
 function renderBlock(){const moved={};state.trades.forEach(t=>Object.keys(t.adds||{}).forEach(id=>moved[id]=(moved[id]||0)+1));const rows=Object.entries(moved).sort((a,b)=>b[1]-a[1]).slice(0,5);$("tradeBlock").classList.remove("loading");$("tradeBlock").innerHTML=rows.length?rows.map(([id,n],i)=>`<div class="rank-item"><b>${i+1}</b><div><strong>${playerLink(id,playerName(id))}</strong><div class="meta">Most traded player of all time</div></div><span class="power-score">${n}x</span></div>`).join(""):'<div class="block-empty">No player movement yet.</div>'}
 
 function gameDateValue(row){const raw=row?.date||row?.game_date||row?.gameDate||row?.start_time||row?.startTime||row?.timestamp;const d=raw?new Date(raw):null;return d&&!Number.isNaN(d.getTime())?d:null}
@@ -315,7 +322,21 @@ function openManagerFromHash(){
   else closeManagerProfile(false);
 }
 
-function renderAll(){renderSummary();renderLeaderboard();renderPower();renderOdds();renderTradeWeek();renderHeatmap();renderPlayerForm();renderBlock();renderRecords();renderRecent();renderBiggestTrades();renderVoting()}
+function safeRender(name,fn){try{fn()}catch(error){console.error(`Failed to render ${name}:`,error)}}
+function renderAll(){
+  safeRender("summary",renderSummary);
+  safeRender("leaderboard",renderLeaderboard);
+  safeRender("power rankings",renderPower);
+  safeRender("odds",renderOdds);
+  safeRender("trade of the week",renderTradeWeek);
+  safeRender("trade partners",renderHeatmap);
+  safeRender("player form",renderPlayerForm);
+  safeRender("most traded players",renderBlock);
+  safeRender("league records",renderRecords);
+  safeRender("recent trades",renderRecent);
+  safeRender("biggest trades",renderBiggestTrades);
+  safeRender("voting",renderVoting);
+}
 
 function relevantPlayerIds(){
   const ids=new Set();
@@ -476,7 +497,43 @@ async function loadSeasonTotalAverages(){
 }
 
 async function loadSeason(id){const [league,users,rosters,drafts,tradedPicks,winnersBracket]=await Promise.all([getJSON(`${CONFIG.api}/league/${id}`,true),getJSON(`${CONFIG.api}/league/${id}/users`,true),getJSON(`${CONFIG.api}/league/${id}/rosters`,true),getJSON(`${CONFIG.api}/league/${id}/drafts`,true),getJSON(`${CONFIG.api}/league/${id}/traded_picks`,true),getJSON(`${CONFIG.api}/league/${id}/winners_bracket`,true)]);if(!league||!users||!rosters)return null;const draftPicks=(await Promise.all((drafts||[]).map(d=>getJSON(`${CONFIG.api}/draft/${d.draft_id}/picks`,true)))).flat().filter(Boolean);const draftPickMap={};draftPicks.forEach(p=>{if(p.player_id==null||p.round==null)return;[p.roster_id,p.draft_slot,p.picked_by].filter(x=>x!=null).forEach(key=>draftPickMap[`${league.season}|${key}|${p.round}`]=String(p.player_id))});const ownerByRoster={},userById=Object.fromEntries(users.map(u=>[String(u.user_id),u])),managerNameMap={};rosters.forEach(r=>{if(r.owner_id!=null){ownerByRoster[String(r.roster_id)]=String(r.owner_id);const u=userById[String(r.owner_id)]||{};managerNameMap[String(r.owner_id)]=u.metadata?.team_name||u.display_name||`Team ${r.roster_id}`}});const rounds=Array.from({length:CONFIG.roundsToCheck},(_,i)=>i+1),weeks=await limitedMap(rounds,8,async wk=>{const [tx,match]=await Promise.all([getJSON(`${CONFIG.api}/league/${id}/transactions/${wk}`,true),getJSON(`${CONFIG.api}/league/${id}/matchups/${wk}`,true)]);const trades=(tx||[]).filter(t=>t.type==='trade'&&(!t.status||t.status==='complete')).map(t=>{const participantRosters=new Set((t.roster_ids||[]).map(String));if(!participantRosters.size){Object.values(t.adds||{}).forEach(x=>participantRosters.add(String(x)));Object.values(t.drops||{}).forEach(x=>participantRosters.add(String(x)));(t.draft_picks||[]).forEach(p=>{if(p.owner_id!=null)participantRosters.add(String(p.owner_id));if(p.previous_owner_id!=null)participantRosters.add(String(p.previous_owner_id))})}return {...t,manager_ids:[...participantRosters].map(r=>ownerByRoster[r]).filter(Boolean),roster_owner_map:ownerByRoster,manager_name_map:managerNameMap,season_label:`${league.season} season`,league_id:id}});return{trades,matchups:(match||[]).map(x=>({...x,week:wk}))}});return{league,users,rosters,ownerByRoster,draftPickMap,tradedPicks:tradedPicks||[],winnersBracket:winnersBracket||[],trades:weeks.flatMap(x=>x?.trades||[]),matchups:weeks.flatMap(x=>x?.matchups||[])}}
-async function load(){$("refreshBtn").disabled=true;$("statusText").textContent='Connecting to Sleeper…';try{const [bundles,players,exactAverages]=await Promise.all([Promise.all(CONFIG.leagueIds.map(loadSeason)),getJSON(`${CONFIG.api}/players/nba`,true),getJSON(`season-averages.json`,true)]),valid=bundles.filter(Boolean),cur=valid.find(x=>String(x.league.league_id)===CONFIG.currentLeagueId)||valid[0];state.exactSeasonAverages=exactAverages||{};state.bundles=valid;state.league=cur.league;state.currentUsers=cur.users;state.currentRosters=cur.rosters;state.players=players||{};state.draftPickMap=Object.assign({},...valid.map(b=>b.draftPickMap||{}));$("statusText").textContent='Loading Sleeper season totals…';await loadSeasonTotalAverages();buildManagers();const unique=new Map();valid.flatMap(x=>x.trades).forEach(t=>unique.set(t.transaction_id||`${t.league_id}-${t.created}`,t));state.trades=[...unique.values()].sort((a,b)=>(b.created||0)-(a.created||0));prepareModels();renderAll();const averageCount=Object.values(state.seasonTotalMeta).reduce((sum,season)=>sum+Object.keys(season||{}).length,0);$("statusText").textContent=`Live · ${valid.length} seasons loaded · ${averageCount} player season averages`}catch(e){console.error(e);$("statusText").textContent='Could not load Sleeper data'}finally{$("refreshBtn").disabled=false}}
+async function load(){
+  const refresh=$("refreshBtn"),status=$("statusText");
+  if(refresh)refresh.disabled=true;
+  if(status)status.textContent='Connecting to Sleeper…';
+  try{
+    const [bundles,players,exactAverages]=await Promise.all([
+      Promise.all(CONFIG.leagueIds.map(loadSeason)),
+      getJSON(`${CONFIG.api}/players/nba`,true),
+      getJSON(`season-averages.json`,true)
+    ]);
+    const valid=(bundles||[]).filter(Boolean);
+    const cur=valid.find(x=>String(x.league.league_id)===CONFIG.currentLeagueId)||valid[0];
+    if(!cur)throw new Error('No Sleeper league data could be loaded');
+    state.exactSeasonAverages=exactAverages||{};
+    state.bundles=valid;
+    state.league=cur.league;
+    state.currentUsers=cur.users||[];
+    state.currentRosters=cur.rosters||[];
+    state.players=players||{};
+    state.draftPickMap=Object.assign({},...valid.map(b=>b.draftPickMap||{}));
+    if(status)status.textContent='Loading Sleeper season totals…';
+    try{await loadSeasonTotalAverages()}catch(error){console.error('Season totals failed; continuing with available data:',error)}
+    buildManagers();
+    const unique=new Map();
+    valid.flatMap(x=>x.trades||[]).forEach(t=>unique.set(t.transaction_id||`${t.league_id}-${t.created}`,t));
+    state.trades=[...unique.values()].sort((a,b)=>(b.created||0)-(a.created||0));
+    prepareModels();
+    renderAll();
+    const averageCount=Object.values(state.seasonTotalMeta||{}).reduce((sum,season)=>sum+Object.keys(season||{}).length,0);
+    if(status)status.textContent=`Live · ${valid.length} seasons loaded · ${averageCount} player season averages`;
+  }catch(e){
+    console.error('IMO DYNASTY load failed:',e);
+    if(status)status.textContent='Could not load Sleeper data';
+  }finally{
+    if(refresh)refresh.disabled=false;
+  }
+}
 document.querySelectorAll('.window-btn').forEach(b=>b.addEventListener('click',()=>{state.selectedWindow=b.dataset.window;document.querySelectorAll('.window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary()}));document.querySelectorAll('.active-window-btn').forEach(b=>b.addEventListener('click',()=>{state.activeWindow=b.dataset.activeWindow;document.querySelectorAll('.active-window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary();renderLeaderboard()}));$("refreshBtn").addEventListener('click',load);$("biggestTradesToggle").addEventListener('click',()=>{state.biggestTradesExpanded=!state.biggestTradesExpanded;renderBiggestTrades()});
 document.addEventListener("click",e=>{
   const playerLinkEl=e.target.closest(".player-history-link");if(playerLinkEl){openPlayerHistory(playerLinkEl.dataset.playerId);return}
