@@ -176,3 +176,53 @@
   .manager-profile-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .manager-profile-stat-grid strong{font-size:18px}
 }
+
+
+/* Championship odds: full section, no internal scrolling */
+.odds-panel-full,#championshipOdds,.odds-panel-full .odds-list{
+  max-height:none!important;overflow:visible!important;overscroll-behavior:auto!important;
+  scrollbar-width:none!important;padding-right:0!important
+}
+#championshipOdds::-webkit-scrollbar{display:none!important}
+.odds-tag{
+  display:inline-flex;align-items:center;gap:5px;margin-top:7px;padding:5px 9px;border-radius:999px;
+  font-size:8px;font-weight:950;letter-spacing:.11em;text-transform:uppercase;width:max-content;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),0 5px 14px rgba(0,0,0,.22)
+}
+.favourite-tag{color:#071008;background:linear-gradient(135deg,#69f29a,#b8ff77)}
+.smokey-tag{color:#fff3df;background:linear-gradient(135deg,#6a3421,#ff7a3d);box-shadow:inset 0 0 0 1px rgba(255,192,133,.32),0 5px 18px rgba(255,96,38,.16)}
+
+/* Power Rankings becomes the primary experience */
+.power-rankings-hero{border-color:rgba(56,224,126,.46);background:linear-gradient(145deg,rgba(56,224,126,.09),rgba(14,19,28,.98) 42%)}
+.power-rankings-hero .panel-heading h3{font-size:clamp(26px,3vw,42px)}
+.power-rankings-intro{color:var(--muted);font-size:11px;margin:7px 0 0}
+.power-rankings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.power-profile-card{
+  width:100%;grid-template-columns:30px 46px minmax(0,1fr) auto!important;text-decoration:none!important;
+  border-radius:14px;padding:12px!important;background:rgba(7,11,17,.72)!important
+}
+.power-profile-card:hover,.power-profile-card:focus-visible{transform:translateY(-1px);border-color:var(--rank-colour);box-shadow:0 10px 28px rgba(0,0,0,.25);color:inherit}
+.power-avatar{width:42px;height:42px;border-radius:12px;overflow:hidden;display:grid;place-items:center;background:var(--rank-colour);color:#081008;font-weight:950}
+.power-avatar img{width:100%;height:100%;object-fit:cover}
+.power-copy{min-width:0;text-align:left}
+.power-copy strong{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.power-copy small{display:block;color:var(--green);font-size:8px;text-transform:uppercase;letter-spacing:.08em;margin-top:4px}
+@media(max-width:700px){.power-rankings-grid{grid-template-columns:1fr}}
+
+/* Manager roster avatars, season toggle and badges */
+.manager-profile-avatar img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
+.profile-roster-row{grid-template-columns:24px 42px minmax(0,1fr) auto!important}
+.player-avatar-wrap{width:38px;height:38px;border-radius:10px;overflow:hidden;background:#151b25;display:grid;place-items:center}
+.player-avatar-wrap img{width:100%;height:100%;object-fit:cover}
+.player-avatar-fallback{display:none;width:100%;height:100%;place-items:center;font-size:10px;font-weight:900;color:var(--green)}
+.roster-season-toggle{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.roster-season-toggle button{border:1px solid var(--line);background:#0a0e15;color:var(--muted);padding:7px 9px;border-radius:999px;font-size:8px;font-weight:900;text-transform:uppercase;cursor:pointer}
+.roster-season-toggle button.active{background:var(--green);color:#061008;border-color:var(--green)}
+.achievement-wall{margin-bottom:14px;background:linear-gradient(135deg,rgba(140,114,255,.08),rgba(255,255,255,.025))}
+.gm-badge-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.gm-badge{display:flex;align-items:flex-start;gap:11px;padding:13px;border:1px solid rgba(255,255,255,.08);border-radius:13px;background:rgba(4,8,13,.48)}
+.gm-badge>span{font-size:24px}
+.gm-badge strong{display:block;font-size:12px}
+.gm-badge small{display:block;color:var(--muted);font-size:9px;line-height:1.45;margin-top:4px}
+@media(max-width:850px){.gm-badge-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.gm-badge-grid{grid-template-columns:1fr}.roster-season-toggle{justify-content:flex-start}.manager-profile-card-heading{flex-direction:column}}
