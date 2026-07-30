@@ -38,3 +38,39 @@
 .vote-status{display:block;margin-top:9px;min-height:16px}
 @media(max-width:1050px){.award-voting-grid{grid-template-columns:1fr 1fr}.award-voting-grid .vote-category:first-child{grid-column:1/-1}}
 @media(max-width:700px){.award-voting-grid{grid-template-columns:1fr}.award-voting-grid .vote-category:first-child{grid-column:auto}}
+
+
+/* History, form and desktop layout update */
+.content-shell{grid-template-columns:minmax(0,1fr) minmax(390px,430px)}
+.odds-panel{max-height:calc(100vh - 78px)}
+#championshipOdds{min-height:0}
+.odds-summary{grid-template-columns:30px minmax(0,1fr) minmax(112px,auto);padding:13px 12px;min-height:76px}
+.odds-summary-main{min-width:0}
+.odds-summary-main strong{font-size:15px;line-height:1.16;overflow-wrap:anywhere}
+.odds-price-stack{min-width:112px}
+.odds-price-stack .odds{font-size:20px;white-space:nowrap}
+.odds-price-stack .odds-move{white-space:normal;line-height:1.25;max-width:130px;margin-left:auto}
+.odds-detail{padding:11px 14px 14px 50px}
+@media(max-width:1200px){.content-shell{grid-template-columns:minmax(0,1fr) 370px}}
+@media(max-width:1080px){.content-shell{grid-template-columns:1fr}.odds-panel{max-height:none}.sidebar{display:grid;grid-template-columns:1fr 1fr}.odds-summary-main strong{font-size:14px}}
+
+.active-window-nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin:-4px 0 13px}
+.active-window-btn{border:1px solid var(--line);background:#0a0e15;color:var(--muted);border-radius:8px;padding:7px 4px;font-size:8px;font-weight:900;text-transform:uppercase;cursor:pointer}
+.active-window-btn.active{background:var(--green);border-color:var(--green);color:#041108}
+@media(max-width:600px){.active-window-nav{grid-template-columns:repeat(2,1fr)}}
+
+.history-dropdown{margin-top:13px;border:1px solid var(--line);border-radius:12px;background:rgba(7,10,16,.45);overflow:hidden}
+.history-dropdown>summary{cursor:pointer;list-style:none;padding:13px 15px;font-size:11px;font-weight:900}
+.history-dropdown>summary::-webkit-details-marker{display:none}
+.history-dropdown>summary:after{content:'＋';float:right;color:var(--green)}
+.history-dropdown[open]>summary:after{content:'−'}
+.history-dropdown .rank-list{padding:0 12px 12px}
+
+.biggest-trades-list{display:grid;gap:8px}
+.big-trade-card{border:1px solid var(--line);border-radius:12px;background:rgba(7,10,16,.48);overflow:hidden}
+.big-trade-card>summary{cursor:pointer;list-style:none;display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;padding:13px}
+.big-trade-card>summary::-webkit-details-marker{display:none}
+.big-trade-card summary strong{display:block;font-size:12px}
+.big-trade-card summary small{display:block;color:var(--muted);font-size:9px;margin-top:4px}
+.big-trade-rank{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:rgba(56,224,126,.12);color:var(--green);font-weight:950}
+.big-trade-value{color:var(--green);font-weight:950;font-size:12px;white-space:nowrap}

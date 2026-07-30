@@ -15,7 +15,7 @@
 <div class="content-shell"><div class="main-column">
 <section class="panel trade-week"><div class="panel-heading"><div><span class="eyebrow">🔥 FEATURED MOVE</span><h3>Trade of the Week</h3></div><span class="period-pill">Value exchanged</span></div><div id="tradeOfWeek" class="loading">Analysing this week's trades…</div></section>
 
-<section class="dashboard-grid"><article class="panel leaderboard-panel"><div class="panel-heading"><div><span class="eyebrow">🥇 THE RANKING</span><h3>Most Active GM</h3></div><span id="rankingWindow" class="period-pill">14 days</span></div><div id="leaderboard" class="leaderboard loading">Loading teams…</div></article><article class="panel"><div class="panel-heading"><div><span class="eyebrow">📈 FORM GUIDE</span><h3>Power Rankings</h3></div><span class="period-pill">Live estimate</span></div><div id="powerRankings" class="rank-list loading">Calculating…</div></article></section>
+<section class="dashboard-grid"><article class="panel leaderboard-panel"><div class="panel-heading active-heading"><div><span class="eyebrow">🥇 THE RANKING</span><h3>Most Active GM</h3></div></div><div class="active-window-nav" aria-label="Most Active GM timeframe"><button class="active-window-btn active" data-active-window="14">14 days</button><button class="active-window-btn" data-active-window="28">28 days</button><button class="active-window-btn" data-active-window="90">90 days</button><button class="active-window-btn" data-active-window="season">2026 season</button><button class="active-window-btn" data-active-window="all">All time</button></div><div id="leaderboard" class="leaderboard loading">Loading teams…</div></article><article class="panel"><div class="panel-heading"><div><span class="eyebrow">📈 FORM GUIDE</span><h3>Power Rankings</h3></div><span class="period-pill">Live estimate</span></div><div id="powerRankings" class="rank-list loading">Calculating…</div></article></section>
 
 <section class="panel heatmap-panel"><div class="panel-heading"><div><span class="eyebrow">🤝 CONNECTIONS</span><h3>Trade Partner Heatmap</h3></div><button id="heatmapToggle" class="small-button" type="button">Show top 30</button></div><div id="tradeHeatmap" class="heatmap-wrap loading">Building heatmap…</div></section>
 
@@ -24,9 +24,10 @@
 <article class="panel"><div class="panel-heading"><div><span class="eyebrow">📉 TWO-WEEK WATCH</span><h3>POOR FORM</h3></div><span class="period-pill">Biggest fallers</span></div><div id="poorForm" class="rank-list loading">Calculating recent form…</div></article>
 <article class="panel"><div class="panel-heading"><div><span class="eyebrow">📈 TWO-WEEK WATCH</span><h3>GOOD FORM</h3></div><span class="period-pill">Biggest risers</span></div><div id="goodForm" class="rank-list loading">Calculating recent form…</div></article>
 </section>
-<section class="panel"><div class="panel-heading"><div><span class="eyebrow">🎯 ALL-TIME MOVEMENT</span><h3>NO ONE WANTS HIM</h3></div><span class="period-pill">Top 5 all time</span></div><div id="tradeBlock" class="rank-list loading">Analysing player movement…</div></section><section class="panel"><div class="panel-heading"><div><span class="eyebrow">📜 HISTORY BOOK</span><h3>League Records</h3></div></div><div id="leagueRecords" class="records-grid records-grid-eight loading">Calculating records…</div></section>
+<section class="panel"><div class="panel-heading"><div><span class="eyebrow">📜 HISTORY BOOK</span><h3>League Records</h3></div></div><div id="leagueRecords" class="records-grid records-grid-eight loading">Calculating records…</div><details class="history-dropdown"><summary>Most traded players ever</summary><div id="tradeBlock" class="rank-list loading">Analysing player movement…</div></details></section>
 
 <section class="panel recent-panel"><div class="panel-heading"><div><span class="eyebrow">LATEST MOVES</span><h3>RECENT TRADES</h3></div></div><div id="recentTrades" class="recent-trades loading">Loading trade history…</div></section>
+<section class="panel biggest-trades-panel"><div class="panel-heading"><div><span class="eyebrow">💥 LEAGUE HISTORY</span><h3>Biggest Ever Trades</h3></div><button id="biggestTradesToggle" class="small-button" type="button">Show top 8</button></div><p class="method-note">Ranked by total fantasy value exchanged, including historical player averages and draft-pick values.</p><div id="biggestTrades" class="biggest-trades-list loading">Calculating the largest trades…</div></section>
 
 <section class="panel voting-panel" id="allNbaVoting">
 <div class="panel-heading"><div><span class="eyebrow">🗳️ LEAGUE BALLOT</span><h3>IMO AWARDS VOTING</h3></div><span class="period-pill">Results revealed 6 January</span></div>
@@ -36,7 +37,7 @@
 <article class="ballot-card vote-category" data-category="allNba">
 <div class="vote-lock-overlay" id="allNbaLock"></div>
 <h4>IMO All-NBA Team</h4>
-<p>Select up to 10 players from the top 50 by season fantasy average. The final team is positionless: five starters and five reserves. Results are weighted 50% fan vote and 50% season average.</p>
+<p>Select up to 10 players from the top 50 by season fantasy average. The final team is positionless: five starters and five reserves. Results are weighted 35% fan vote and 65% season average.</p>
 <input id="allNbaSearch" class="vote-search" type="search" placeholder="Search top 50 players…">
 <div id="allNbaChoices" class="vote-choices loading">Loading players…</div>
 <div class="vote-count"><span id="allNbaCount">0</span>/10 selected</div>
@@ -47,7 +48,7 @@
 <article class="ballot-card vote-category" data-category="rookie">
 <div class="vote-lock-overlay" id="rookieLock"></div>
 <h4>Rookie of the Year</h4>
-<p>Select one eligible rookie. Options are sorted by current season fantasy average.</p>
+<p>Select one eligible rookie. Options are sorted by current season fantasy average. Results are weighted 35% fan vote and 65% season average.</p>
 <select id="rookieVote" class="vote-select"><option>Loading…</option></select>
 <button id="submitRookie" class="small-button primary-button vote-submit" type="button">Submit ROTY vote</button>
 <div id="rookieStatus" class="vote-status"></div>
