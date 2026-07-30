@@ -352,3 +352,10 @@ footer span{display:flex;align-items:center;gap:6px}
 .trade-week .player-history-link{color:var(--text);font-weight:800;text-align:left}
 .trade-week .player-history-link:hover{color:#b8aaff}
 @media(max-width:620px){.profile-h2h-list{grid-template-columns:1fr}}
+
+/* V2.6.3 head-to-head record states */
+.profile-h2h-row strong{display:flex;align-items:baseline;gap:5px}
+.profile-h2h-row strong span{font-size:9px;font-weight:750;color:var(--muted)}
+.profile-h2h-row.winning strong{color:var(--green)}
+.profile-h2h-row.losing strong{color:#ff5f67}
+.profile-h2h-row.even strong{color:var(--yellow)}
