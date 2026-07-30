@@ -45,7 +45,7 @@ function tradeValue(t){return Object.values(tradeAssets(t)).flat().reduce((sum,a
 function tradeSummary(t){const assets=Object.values(tradeAssets(t)).flat().filter(a=>a.type==='player').map(a=>a.name);const core=assets.slice(0,3).join(' / ')||'Draft-pick trade';return core}
 function renderSummary(){const w=state.selectedWindow,ts=tradesFor(w),latest=state.trades[0],active=activeRanked(state.activeWindow),lead=active[0];$("leagueTrades").textContent=ts.length;$("leagueTradesLabel").textContent=w==="all"?`${CONFIG.leagueIds.length} seasons combined`:`Last ${w} days`;let weeks;if(w==="all"){const oldest=state.trades.at(-1)?.created||Date.now();weeks=Math.max(1,(Date.now()-oldest)/6048e5)}else weeks=Math.max(1,Number(w)/7);$("averageTrades").textContent=(ts.length/weeks).toFixed(1);$("leaderName").textContent=lead?.name||"—";$("leaderTrades").textContent=lead?.count||0;$("leaderWindow").textContent=activeWindowLabel(state.activeWindow);$("latestTradeShort").textContent=latest?tradeSummary(latest):"—";$("latestTradeDate").textContent=latest?`${mids(latest).map(id=>managerName(id,latest)).join(" ↔ ")} · ${fmt(latest.created)}`:"No trade"}
 function renderLeaderboard(){const r=activeRanked(state.activeWindow),max=Math.max(...r.map(x=>x.count),1);$("leaderboard").classList.remove("loading");$("leaderboard").innerHTML=r.map((x,i)=>`<div class="leader-row"><span class="rank">${i+1}</span><span class="team-name">${esc(x.name)}</span><div class="bar-track"><div class="bar-fill" style="width:${x.count/max*100}%"></div></div><span class="trade-count">${x.count}</span></div>`).join("")}
-function renderPower(){const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,p=modelRows(state.modelBundle,through,"power"),n=Math.max(p.length-1,1);$("powerRankings").classList.remove("loading");$("powerRankings").innerHTML=p.map((x,i)=>{const old=state.previousPowerRanks[x.id]??x.rank,diff=old-x.rank,arrow=diff>0?`<span class="movement up">▲ ${diff}</span>`:diff<0?`<span class="movement down">▼ ${Math.abs(diff)}</span>`:`<span class="movement flat">—</span>`,hue=140-(140*i/n),fire=x.streak>=3?' 🔥':'';return `<div class="rank-item power-row" style="--rank-colour:hsl(${hue} 85% 52%)"><b>${x.rank}</b><strong class="power-name">${esc(x.name)}${fire}</strong>${arrow}</div>`}).join("")}
+function renderPower(){const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,p=modelRows(state.modelBundle,through,"power"),n=Math.max(p.length-1,1);$("powerRankings").classList.remove("loading");$("powerRankings").innerHTML=p.map((x,i)=>{const old=state.previousPowerRanks[x.id]??x.rank,diff=old-x.rank,arrow=diff>0?`<span class="movement up">▲ ${diff}</span>`:diff<0?`<span class="movement down">▼ ${Math.abs(diff)}</span>`:`<span class="movement flat">—</span>`,hue=140-(140*i/n),fire=x.streak>=3?' 🔥':'';return `<div class="rank-item power-row" style="--rank-colour:hsl(${hue} 85% 52%)"><b>${x.rank}</b><button class="power-name manager-profile-link" type="button" data-manager-id="${esc(x.id)}" aria-label="Open ${esc(x.name)} manager profile">${esc(x.name)}${fire}</button>${arrow}</div>`}).join("")}
 function roundFive(x){return Math.round(x*20)/20}
 function priceRows(through){const rows=modelRows(state.modelBundle,through,"odds"),strengths=rows.map(x=>Math.pow(CONFIG.oddsBaseline+(1-CONFIG.oddsBaseline)*Math.max(0,Math.min(1,x.score)),CONFIG.oddsExponent)),sum=strengths.reduce((a,b)=>a+b,0)||1;return rows.map((x,i)=>{const fair=strengths[i]/sum,market=Math.min(.99,fair*CONFIG.bookmakerMargin),odds=roundFive(Math.min(CONFIG.maxDisplayedOdds,Math.max(1.01,1/market)));return {...x,odds}})}
 function renderOdds(){const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,prior=weeks.length>1?weeks.at(-2):through,rows=priceRows(through),old=Object.fromEntries(priceRows(prior).map(x=>[x.id,x]));$("championshipOdds").classList.remove("loading");$("championshipOdds").innerHTML=rows.map((x,i)=>{const prev=old[x.id]?.odds??x.odds,delta=x.odds-prev,cls=delta<0?'up':delta>0?'down':'flat',icon=delta<0?'📈':delta>0?'📉':'➖',streak=x.streak>=1?`Won last ${x.streak}`:`Form: ${Math.round(x.form*5)} wins from last 5`,ladderMove=(old[x.id]?.standingRank||x.standingRank)-x.standingRank,ladderText=ladderMove>0?`Moved up to ${ordinal(x.standingRank)} on ladder`:ladderMove<0?`Dropped to ${ordinal(x.standingRank)} on ladder`:`Currently ${ordinal(x.standingRank)} on ladder`,moveText=prev===x.odds?'No price movement':`$${prev.toFixed(2)} → $${x.odds.toFixed(2)}`;return `<details class="odds-row-wrap"><summary class="odds-summary"><b>${i+1}</b><div class="odds-summary-main"><strong>${esc(x.name)}</strong>${i===0?'<div class="favourite">FAVOURITE</div>':''}</div><div class="odds-price-stack"><span class="odds">$${x.odds.toFixed(2)}</span><div class="odds-move ${cls}">${icon} ${moveText}<span class="odds-chevron">▼</span></div></div></summary><div class="odds-detail"><div>${x.streak?`${x.streak>=3?'🔥':'✅'} ${streak}`:`⚪ ${streak}`}</div><div>🔥 Averaging ${x.avg5.toFixed(1)} over last five weeks</div><div>${ladderMove<0?'⬇':'⬆'} ${ladderText}</div></div></details>`}).join("")}
@@ -243,7 +243,101 @@ function renderVoting(){
   clearInterval(window.__imoVotingTimer);
   window.__imoVotingTimer=setInterval(applyVotingLocks,1000)
 }
+
+function managerTrades(managerId){return state.trades.filter(t=>mids(t).includes(String(managerId)))}
+function managerRosterPlayers(managerId){
+  const manager=state.managers.get(String(managerId));
+  const ids=[...(manager?.roster?.players||[])];
+  return ids.map(id=>{const p=state.players[id]||{},avg=Number(state.playerAverages[id]||0);return{id:String(id),name:playerName(id),avg,position:p.position||p.fantasy_positions?.[0]||"—",age:Number(p.age)||null}}).sort((a,b)=>b.avg-a.avg||a.name.localeCompare(b.name))
+}
+function managerFormData(managerId){
+  const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity;
+  const outcomes=outcomesForBundle(state.modelBundle,through)[String(managerId)]||[];
+  const recent=outcomes.slice(-5);
+  const wins=outcomes.reduce((sum,g)=>sum+g.result,0);
+  const avg5=recent.length?recent.reduce((sum,g)=>sum+g.points,0)/recent.length:0;
+  return{outcomes,recent,wins,games:outcomes.length,avg5,streak:winningStreak(outcomes)}
+}
+function managerTradeSummaryHTML(t,managerId){
+  const partnerIds=mids(t).filter(id=>id!==String(managerId));
+  const partnerNames=partnerIds.map(id=>managerName(id,t)).join(", ")||"League trade";
+  return `<details class="profile-trade-card"><summary><div><strong>Trade with ${esc(partnerNames)}</strong><small>${fmt(t.created)} · ${esc(t.season_label||"")}</small></div><span>View</span></summary><div class="trade-detail-body">${tradeDetailsHTML(t)}</div></details>`
+}
+function managerProfileHTML(managerId){
+  const id=String(managerId),manager=state.managers.get(id);
+  if(!manager)return `<div class="profile-empty">Manager profile unavailable.</div>`;
+  const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity;
+  const power=modelRows(state.modelBundle,through,"power").find(x=>x.id===id);
+  const odds=priceRows(through).find(x=>x.id===id);
+  const form=managerFormData(id);
+  const roster=managerRosterPlayers(id);
+  const trades=managerTrades(id);
+  const biggest=[...trades].map(t=>({t,value:tradeValue(t)})).sort((a,b)=>b.value-a.value||(b.t.created||0)-(a.t.created||0)).slice(0,3);
+  const recent=trades.slice(0,5);
+  const formPills=form.recent.map(g=>`<span class="profile-form-pill ${g.result===1?"win":g.result===.5?"draw":"loss"}">${g.result===1?"W":g.result===.5?"D":"L"}</span>`).join("")||'<span class="profile-muted">No completed games</span>';
+  const rosterRows=roster.slice(0,15).map((p,i)=>`<div class="profile-roster-row"><span class="profile-roster-rank">${i+1}</span><div><strong>${esc(p.name)}</strong><small>${esc(p.position)}${p.age?` · Age ${p.age}`:""}</small></div><b>${p.avg.toFixed(2)}</b></div>`).join("")||'<div class="profile-empty">No current roster data.</div>';
+  return `<header class="manager-profile-hero">
+    <div class="manager-profile-avatar">${esc(manager.initials||manager.name.slice(0,2).toUpperCase())}</div>
+    <div><span class="eyebrow">MANAGER PROFILE</span><h2 id="managerProfileTitle">${esc(manager.name)}</h2><p>Current franchise overview and league history</p></div>
+  </header>
+  <div class="manager-profile-stat-grid">
+    <div><span>Power rank</span><strong>${power?`#${power.rank}`:"—"}</strong></div>
+    <div><span>Ladder</span><strong>${power?`#${power.standingRank}`:"—"}</strong></div>
+    <div><span>Record</span><strong>${form.games?`${form.wins}-${form.games-form.wins}`:"—"}</strong></div>
+    <div><span>Championship odds</span><strong>${odds?`$${odds.odds.toFixed(2)}`:"—"}</strong></div>
+    <div><span>Last 5 average</span><strong>${form.avg5?form.avg5.toFixed(1):"—"}</strong></div>
+    <div><span>Career trades</span><strong>${trades.length}</strong></div>
+  </div>
+  <div class="manager-profile-grid">
+    <section class="manager-profile-card profile-roster-card">
+      <div class="manager-profile-card-heading"><div><span class="eyebrow">CURRENT TEAM</span><h3>Roster</h3></div><span class="period-pill">${roster.length} players</span></div>
+      <div class="profile-roster-list">${rosterRows}</div>
+    </section>
+    <section class="manager-profile-card">
+      <div class="manager-profile-card-heading"><div><span class="eyebrow">CURRENT FORM</span><h3>Last Five</h3></div></div>
+      <div class="profile-form-strip">${formPills}</div>
+      <div class="profile-form-copy"><strong>${form.streak?`${form.streak}-game winning streak`:`${form.recent.reduce((s,g)=>s+g.result,0)} wins from the last ${form.recent.length}`}</strong><span>${form.avg5?`${form.avg5.toFixed(1)} average team score`:"Season has not started"}</span></div>
+    </section>
+    <section class="manager-profile-card">
+      <div class="manager-profile-card-heading"><div><span class="eyebrow">LATEST ACTIVITY</span><h3>Recent Trades</h3></div></div>
+      <div class="profile-trades-list">${recent.map(t=>managerTradeSummaryHTML(t,id)).join("")||'<div class="profile-empty">No trades found.</div>'}</div>
+    </section>
+    <section class="manager-profile-card">
+      <div class="manager-profile-card-heading"><div><span class="eyebrow">FRANCHISE HISTORY</span><h3>Biggest Ever Trades</h3></div><span class="period-pill">Private value model</span></div>
+      <div class="profile-trades-list">${biggest.map((row,i)=>`<div class="profile-big-trade"><span class="profile-big-rank">${i+1}</span>${managerTradeSummaryHTML(row.t,id)}</div>`).join("")||'<div class="profile-empty">No trades found.</div>'}</div>
+    </section>
+  </div>`
+}
+function openManagerProfile(managerId,pushState=true){
+  const modal=$("managerProfileModal"),content=$("managerProfileContent");
+  if(!modal||!content)return;
+  content.innerHTML=managerProfileHTML(managerId);
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden","false");
+  document.body.classList.add("manager-profile-open");
+  modal.dataset.managerId=String(managerId);
+  if(pushState)history.pushState({managerProfile:String(managerId)},"",`#manager=${encodeURIComponent(managerId)}`);
+  requestAnimationFrame(()=>$("managerProfileClose")?.focus());
+}
+function closeManagerProfile(updateHistory=true){
+  const modal=$("managerProfileModal");
+  if(!modal)return;
+  modal.classList.remove("open");
+  modal.setAttribute("aria-hidden","true");
+  document.body.classList.remove("manager-profile-open");
+  if(updateHistory&&location.hash.startsWith("#manager="))history.pushState({},"",location.pathname+location.search);
+}
+function openManagerFromHash(){
+  const match=location.hash.match(/^#manager=(.+)$/);
+  if(match&&state.managers.size)openManagerProfile(decodeURIComponent(match[1]),false);
+  else closeManagerProfile(false);
+}
+
 function renderAll(){renderSummary();renderLeaderboard();renderPower();renderOdds();renderTradeWeek();renderHeatmap();renderPlayerForm();renderBlock();renderRecords();renderRecent();renderBiggestTrades();renderVoting()}
 async function loadSeason(id){const [league,users,rosters,drafts]=await Promise.all([getJSON(`${CONFIG.api}/league/${id}`,true),getJSON(`${CONFIG.api}/league/${id}/users`,true),getJSON(`${CONFIG.api}/league/${id}/rosters`,true),getJSON(`${CONFIG.api}/league/${id}/drafts`,true)]);if(!league||!users||!rosters)return null;const draftPicks=(await Promise.all((drafts||[]).map(d=>getJSON(`${CONFIG.api}/draft/${d.draft_id}/picks`,true)))).flat().filter(Boolean);const draftPickMap={};draftPicks.forEach(p=>{if(p.player_id!=null&&p.roster_id!=null&&p.round!=null)draftPickMap[`${league.season}|${p.roster_id}|${p.round}`]=String(p.player_id)});const ownerByRoster={},userById=Object.fromEntries(users.map(u=>[String(u.user_id),u])),managerNameMap={};rosters.forEach(r=>{if(r.owner_id!=null){ownerByRoster[String(r.roster_id)]=String(r.owner_id);const u=userById[String(r.owner_id)]||{};managerNameMap[String(r.owner_id)]=u.metadata?.team_name||u.display_name||`Team ${r.roster_id}`}});const rounds=Array.from({length:CONFIG.roundsToCheck},(_,i)=>i+1),weeks=await limitedMap(rounds,8,async wk=>{const [tx,match]=await Promise.all([getJSON(`${CONFIG.api}/league/${id}/transactions/${wk}`,true),getJSON(`${CONFIG.api}/league/${id}/matchups/${wk}`,true)]);const trades=(tx||[]).filter(t=>t.type==='trade'&&(!t.status||t.status==='complete')).map(t=>{const participantRosters=new Set((t.roster_ids||[]).map(String));if(!participantRosters.size){Object.values(t.adds||{}).forEach(x=>participantRosters.add(String(x)));Object.values(t.drops||{}).forEach(x=>participantRosters.add(String(x)));(t.draft_picks||[]).forEach(p=>{if(p.owner_id!=null)participantRosters.add(String(p.owner_id));if(p.previous_owner_id!=null)participantRosters.add(String(p.previous_owner_id))})}return {...t,manager_ids:[...participantRosters].map(r=>ownerByRoster[r]).filter(Boolean),roster_owner_map:ownerByRoster,manager_name_map:managerNameMap,season_label:`${league.season} season`,league_id:id}});return{trades,matchups:(match||[]).map(x=>({...x,week:wk}))}});return{league,users,rosters,ownerByRoster,draftPickMap,trades:weeks.flatMap(x=>x?.trades||[]),matchups:weeks.flatMap(x=>x?.matchups||[])}}
 async function load(){$("refreshBtn").disabled=true;$("statusText").textContent='Connecting to Sleeper…';try{const [bundles,players]=await Promise.all([Promise.all(CONFIG.leagueIds.map(loadSeason)),getJSON(`${CONFIG.api}/players/nba`,true)]),valid=bundles.filter(Boolean),cur=valid.find(x=>String(x.league.league_id)===CONFIG.currentLeagueId)||valid[0];state.bundles=valid;state.league=cur.league;state.currentUsers=cur.users;state.currentRosters=cur.rosters;state.players=players||{};state.draftPickMap=Object.assign({},...valid.map(b=>b.draftPickMap||{}));buildManagers();const unique=new Map();valid.flatMap(x=>x.trades).forEach(t=>unique.set(t.transaction_id||`${t.league_id}-${t.created}`,t));state.trades=[...unique.values()].sort((a,b)=>(b.created||0)-(a.created||0));prepareModels();renderAll();$("statusText").textContent=`Live · ${valid.length} seasons loaded · model: ${state.modelBundle?.league?.season||'current'}`}catch(e){console.error(e);$("statusText").textContent='Could not load Sleeper data'}finally{$("refreshBtn").disabled=false}}
-document.querySelectorAll('.window-btn').forEach(b=>b.addEventListener('click',()=>{state.selectedWindow=b.dataset.window;document.querySelectorAll('.window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary()}));document.querySelectorAll('.active-window-btn').forEach(b=>b.addEventListener('click',()=>{state.activeWindow=b.dataset.activeWindow;document.querySelectorAll('.active-window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary();renderLeaderboard()}));$("refreshBtn").addEventListener('click',load);$("heatmapToggle").addEventListener('click',()=>{state.heatmapExpanded=!state.heatmapExpanded;renderHeatmap()});$("biggestTradesToggle").addEventListener('click',()=>{state.biggestTradesExpanded=!state.biggestTradesExpanded;renderBiggestTrades()});load();
+document.querySelectorAll('.window-btn').forEach(b=>b.addEventListener('click',()=>{state.selectedWindow=b.dataset.window;document.querySelectorAll('.window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary()}));document.querySelectorAll('.active-window-btn').forEach(b=>b.addEventListener('click',()=>{state.activeWindow=b.dataset.activeWindow;document.querySelectorAll('.active-window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary();renderLeaderboard()}));$("refreshBtn").addEventListener('click',load);$("heatmapToggle").addEventListener('click',()=>{state.heatmapExpanded=!state.heatmapExpanded;renderHeatmap()});$("biggestTradesToggle").addEventListener('click',()=>{state.biggestTradesExpanded=!state.biggestTradesExpanded;renderBiggestTrades()});
+document.addEventListener("click",e=>{const link=e.target.closest(".manager-profile-link");if(link){openManagerProfile(link.dataset.managerId);return}if(e.target.closest("[data-close-manager-profile]")||e.target.closest("#managerProfileClose"))closeManagerProfile()});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("managerProfileModal")?.classList.contains("open"))closeManagerProfile()});
+window.addEventListener("popstate",openManagerFromHash);
+load().then?.(()=>openManagerFromHash());

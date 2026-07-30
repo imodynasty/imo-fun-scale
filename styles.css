@@ -93,3 +93,86 @@
   .odds-panel-full .odds-summary{grid-template-columns:28px minmax(0,1fr) minmax(112px,auto)}
   .odds-panel-full .odds-price-stack{min-width:112px}
 }
+
+
+/* Clickable manager profiles */
+.manager-profile-link{
+  appearance:none;border:0;background:none;padding:0;margin:0;text-align:left;
+  color:inherit;font:inherit;font-weight:800;cursor:pointer;min-width:0;
+  text-decoration:underline;text-decoration-color:transparent;text-underline-offset:4px;
+  transition:color .18s ease,text-decoration-color .18s ease
+}
+.manager-profile-link:hover,.manager-profile-link:focus-visible{
+  color:var(--green);text-decoration-color:currentColor;outline:none
+}
+.manager-profile-modal{
+  position:fixed;inset:0;z-index:1000;display:none
+}
+.manager-profile-modal.open{display:block}
+.manager-profile-backdrop{
+  position:absolute;inset:0;background:rgba(3,8,12,.78);backdrop-filter:blur(8px)
+}
+.manager-profile-sheet{
+  position:absolute;inset:24px;max-width:1180px;margin:auto;background:var(--bg,#0b1015);
+  border:1px solid rgba(255,255,255,.12);border-radius:24px;overflow:auto;
+  box-shadow:0 30px 100px rgba(0,0,0,.55)
+}
+.manager-profile-close{
+  position:sticky;top:16px;z-index:4;float:right;margin:16px 16px 0 0;width:42px;height:42px;
+  border-radius:50%;border:1px solid rgba(255,255,255,.14);background:rgba(15,22,28,.9);
+  color:#fff;font-size:28px;line-height:1;cursor:pointer
+}
+.manager-profile-content{padding:34px}
+.manager-profile-open{overflow:hidden}
+.manager-profile-hero{display:flex;align-items:center;gap:18px;padding:8px 56px 24px 0}
+.manager-profile-hero h2{font-size:clamp(34px,5vw,64px);line-height:.95;margin:6px 0 8px}
+.manager-profile-hero p{margin:0;color:var(--muted)}
+.manager-profile-avatar{
+  width:82px;height:82px;flex:0 0 82px;border-radius:22px;display:grid;place-items:center;
+  background:linear-gradient(135deg,var(--green),#b9ff8a);color:#071008;font-size:27px;font-weight:950
+}
+.manager-profile-stat-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:18px}
+.manager-profile-stat-grid>div,.manager-profile-card{
+  background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.09);border-radius:16px
+}
+.manager-profile-stat-grid>div{padding:15px}
+.manager-profile-stat-grid span{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:800}
+.manager-profile-stat-grid strong{display:block;font-size:22px;margin-top:5px}
+.manager-profile-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:14px}
+.manager-profile-card{padding:18px;min-width:0}
+.profile-roster-card{grid-row:span 2}
+.manager-profile-card-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+.manager-profile-card-heading h3{margin:3px 0 0;font-size:21px}
+.profile-roster-list{display:grid;gap:5px}
+.profile-roster-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px 6px;border-bottom:1px solid rgba(255,255,255,.06)}
+.profile-roster-row:last-child{border-bottom:0}
+.profile-roster-row small,.profile-trade-card small{display:block;color:var(--muted);font-size:10px;margin-top:2px}
+.profile-roster-rank{color:var(--muted);font-size:11px;font-weight:800}
+.profile-roster-row>b{font-variant-numeric:tabular-nums}
+.profile-form-strip{display:flex;gap:8px;margin:22px 0}
+.profile-form-pill{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-weight:900}
+.profile-form-pill.win{background:rgba(65,230,124,.16);color:#62ef94;border:1px solid rgba(98,239,148,.28)}
+.profile-form-pill.loss{background:rgba(255,91,91,.14);color:#ff8585;border:1px solid rgba(255,133,133,.25)}
+.profile-form-pill.draw{background:rgba(255,213,92,.13);color:#ffd96a;border:1px solid rgba(255,217,106,.25)}
+.profile-form-copy{display:grid;gap:5px}.profile-form-copy span,.profile-muted{color:var(--muted)}
+.profile-trades-list{display:grid;gap:8px}
+.profile-trade-card{border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.025)}
+.profile-trade-card summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;cursor:pointer;list-style:none}
+.profile-trade-card summary::-webkit-details-marker{display:none}
+.profile-trade-card summary>span{font-size:10px;color:var(--green);font-weight:850;text-transform:uppercase}
+.profile-big-trade{display:grid;grid-template-columns:28px minmax(0,1fr);gap:8px;align-items:start}
+.profile-big-rank{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--green);color:#071008;font-size:11px;font-weight:950;margin-top:8px}
+.profile-empty{padding:18px;text-align:center;color:var(--muted)}
+@media(max-width:900px){
+  .manager-profile-stat-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .manager-profile-grid{grid-template-columns:1fr}
+  .profile-roster-card{grid-row:auto}
+}
+@media(max-width:600px){
+  .manager-profile-sheet{inset:0;border-radius:0}
+  .manager-profile-content{padding:22px 14px 36px}
+  .manager-profile-hero{align-items:flex-start;padding-right:42px}
+  .manager-profile-avatar{width:58px;height:58px;flex-basis:58px;border-radius:16px;font-size:20px}
+  .manager-profile-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .manager-profile-stat-grid strong{font-size:18px}
+}
