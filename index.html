@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#080a10"><link rel="icon" href="data:,"><title>IMO DYNASTY</title>
-<link rel="preconnect" href="https://cdn.jsdelivr.net"><link rel="stylesheet" href="styles.css?v=2.6.1">
+<link rel="preconnect" href="https://cdn.jsdelivr.net"><link rel="stylesheet" href="styles.css?v=2.6.2">
 </head><body><div class="noise"></div>
 <header class="site-header v26-header">
   <div class="brand v26-brand">
@@ -34,17 +34,16 @@
 
 <section class="panel leaderboard-panel"><div class="panel-heading active-heading"><div><span class="eyebrow">🥇 THE RANKING</span><h3>Most Active GM</h3></div></div><div class="active-window-nav" aria-label="Most Active GM timeframe"><button class="active-window-btn active" data-active-window="14">14 days</button><button class="active-window-btn" data-active-window="28">28 days</button><button class="active-window-btn" data-active-window="season">2026 season</button><button class="active-window-btn" data-active-window="all">All time</button></div><div id="leaderboard" class="leaderboard loading">Loading teams…</div></section>
 
-<section class="panel heatmap-panel"><div class="panel-heading"><div><span class="eyebrow">🤝 CONNECTIONS</span><h3>Favourite Trade Partners</h3></div><span class="period-pill">Top 8</span></div><div id="tradeHeatmap" class="heatmap-wrap loading">Building heatmap…</div></section>
-
-
 <section class="dashboard-grid">
 <article class="panel"><div class="panel-heading"><div><span class="eyebrow">📉 TWO-WEEK WATCH</span><h3>POOR FORM</h3></div><span class="period-pill">Biggest fallers</span></div><div id="poorForm" class="rank-list loading">Calculating recent form…</div></article>
 <article class="panel"><div class="panel-heading"><div><span class="eyebrow">📈 TWO-WEEK WATCH</span><h3>GOOD FORM</h3></div><span class="period-pill">Biggest risers</span></div><div id="goodForm" class="rank-list loading">Calculating recent form…</div></article>
 </section>
-<section class="panel"><div class="panel-heading"><div><span class="eyebrow">📜 HISTORY BOOK</span><h3>League Records</h3></div></div><div id="leagueRecords" class="records-grid records-grid-eight loading">Calculating records…</div><details class="history-dropdown"><summary>Most traded players ever</summary><div id="tradeBlock" class="rank-list loading">Analysing player movement…</div></details></section>
-
 <section class="panel recent-panel"><div class="panel-heading"><div><span class="eyebrow">LATEST MOVES</span><h3>RECENT TRADES</h3></div></div><div id="recentTrades" class="recent-trades loading">Loading trade history…</div></section>
 <section class="panel biggest-trades-panel"><div class="panel-heading"><div><span class="eyebrow">💥 LEAGUE HISTORY</span><h3>Biggest Ever Trades</h3></div><button id="biggestTradesToggle" class="small-button" type="button">Show top 8</button></div><p class="method-note">Ranked using the league’s private dynasty-value model.</p><div id="biggestTrades" class="biggest-trades-list loading">Calculating the largest trades…</div></section>
+
+<section class="panel heatmap-panel"><div class="panel-heading"><div><span class="eyebrow">🤝 CONNECTIONS</span><h3>Favourite Trade Partners</h3></div><span class="period-pill">Top 8</span></div><div id="tradeHeatmap" class="heatmap-wrap loading">Building heatmap…</div></section>
+
+
 
 <section class="panel voting-panel" id="allNbaVoting">
 <div class="panel-heading"><div><span class="eyebrow">🗳️ LEAGUE BALLOT</span><h3>IMO AWARDS VOTING</h3></div><span class="period-pill">Results revealed 6 January</span></div>
@@ -81,6 +80,10 @@
 </article>
 </div>
 </section>
+
+<section class="panel"><div class="panel-heading"><div><span class="eyebrow">📜 HISTORY BOOK</span><h3>League Records</h3></div></div><div id="leagueRecords" class="records-grid records-grid-eight loading">Calculating records…</div><details class="history-dropdown"><summary>Most traded players ever</summary><div id="tradeBlock" class="rank-list loading">Analysing player movement…</div></details></section>
+
+
 </div></div>
 </main>
 
@@ -110,5 +113,5 @@
     <div id="playerHistoryContent" class="player-history-content"></div>
   </section>
 </div>
-<footer><strong>IMO DYNASTY</strong><span>Independent league dashboard · V2.6.1 · Not affiliated with Sleeper</span></footer>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script><script src="app.js?v=2.6.1"></script></body></html>
+<footer><strong>IMO DYNASTY</strong><span>Independent league dashboard · V2.6.2 · Not affiliated with Sleeper</span></footer>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script><script src="app.js?v=2.6.2"></script></body></html>

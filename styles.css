@@ -329,3 +329,26 @@ footer span{display:flex;align-items:center;gap:6px}
   .power-odds-price{font-size:15px}
   .power-detail{padding:0 12px 12px;grid-template-columns:1fr}
 }
+
+
+/* V2.6.2 manager intelligence and layout refinements */
+.profile-form-guide-card{padding:10px 13px!important;align-self:start}
+.profile-form-guide-card .manager-profile-card-heading{margin-bottom:2px}
+.profile-form-guide-card .manager-profile-card-heading h3{font-size:15px}
+.profile-form-guide-card .profile-form-strip{margin:5px 0;gap:5px}
+.profile-form-guide-card .profile-form-pill{width:29px;height:29px;font-size:11px}
+.profile-roster-more{margin-top:7px;border-top:1px solid var(--line);padding-top:7px}
+.profile-roster-more>summary{list-style:none;cursor:pointer;text-align:center;padding:10px;border:1px solid var(--line);border-radius:9px;color:var(--green);font-size:10px;font-weight:900;background:rgba(56,224,126,.06)}
+.profile-roster-more>summary::-webkit-details-marker{display:none}
+.profile-roster-more>summary:after{content:' ↓';color:var(--muted)}
+.profile-roster-more[open]>summary:after{content:' ↑'}
+.profile-roster-more>.profile-roster-list{margin-top:7px}
+.profile-h2h-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.profile-h2h-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 8px;align-items:center;padding:9px;border:1px solid var(--line);border-radius:9px;background:rgba(5,9,14,.48)}
+.profile-h2h-row .manager-profile-link{font-size:10px;font-weight:850;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.profile-h2h-row strong{color:var(--green);font-variant-numeric:tabular-nums}
+.profile-h2h-row small{grid-column:1/-1;color:var(--muted);font-size:8px}
+.profile-partner-row .manager-profile-link{font-size:11px;font-weight:850;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trade-week .player-history-link{color:var(--text);font-weight:800;text-align:left}
+.trade-week .player-history-link:hover{color:#b8aaff}
+@media(max-width:620px){.profile-h2h-list{grid-template-columns:1fr}}
