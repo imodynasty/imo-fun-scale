@@ -15,3 +15,26 @@
 @media(max-width:650px){.recent-trades{grid-template-columns:1fr}}
 /* Voting + expandable odds update */
 .odds-row-wrap>summary{list-style:none;cursor:pointer}.odds-row-wrap>summary::-webkit-details-marker{display:none}.odds-summary{display:grid;grid-template-columns:26px 1fr auto;align-items:center;gap:9px;padding:10px}.odds-summary-main strong{display:block}.odds-price-stack{text-align:right}.odds-price-stack .odds-move{font-size:9px;margin-top:4px;white-space:nowrap}.odds-chevron{color:var(--muted);font-size:10px;margin-left:6px}.odds-row-wrap[open] .odds-chevron{transform:rotate(180deg)}.odds-detail{border-top:1px solid var(--line);padding-top:10px}.odds-detail div{margin:3px 0}.voting-panel{margin-top:12px}.voting-intro{color:var(--muted);max-width:850px;line-height:1.55}.voting-grid{display:grid;grid-template-columns:1.35fr 1fr;gap:12px;margin-top:16px}.ballot-card{border:1px solid var(--line);border-radius:14px;background:rgba(7,10,16,.5);padding:16px}.ballot-card h4{margin:0 0 6px;font-size:17px}.ballot-card p{margin:0 0 12px;color:var(--muted);font-size:10px;line-height:1.45}.mip-heading{margin-top:20px!important}.vote-search,.vote-select{width:100%;box-sizing:border-box;border:1px solid var(--line);background:#090d14;color:var(--text);border-radius:10px;padding:11px;font:inherit}.vote-choices{max-height:330px;overflow-y:auto;display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:9px;padding-right:5px}.vote-option{display:grid;grid-template-columns:18px 1fr auto;align-items:center;gap:8px;border:1px solid var(--line);border-radius:9px;padding:9px;background:#0a0e15;cursor:pointer}.vote-option input{accent-color:var(--green)}.vote-option small{color:var(--green)}.vote-count{margin-top:10px;color:var(--muted);font-size:10px}.vote-actions{display:flex;align-items:center;gap:9px;margin-top:14px;flex-wrap:wrap}.primary-button{background:var(--green);color:#06110a;border-color:var(--green)}.vote-status{color:var(--muted);font-size:10px}@media(max-width:850px){.voting-grid{grid-template-columns:1fr}.vote-choices{grid-template-columns:1fr}}
+
+
+/* Form panels and locked award voting */
+.form-player-row{grid-template-columns:28px minmax(0,1fr) auto}
+.form-player-row>div{min-width:0}
+.form-player-row .meta{margin-top:4px;color:var(--muted);font-size:9px}
+.form-change{min-width:68px;text-align:right;font-size:17px;font-weight:950}
+.form-change.positive{color:var(--green)}
+.form-change.negative{color:#ff5f67}
+.good-form-row{border-left:4px solid rgba(56,224,126,.8)}
+.poor-form-row{border-left:4px solid rgba(255,95,103,.85)}
+
+.voting-countdown{margin:12px 0 0;padding:13px 15px;border:1px solid rgba(56,224,126,.3);border-radius:12px;background:rgba(56,224,126,.08);color:var(--green);font-size:15px;font-weight:900;letter-spacing:.02em}
+.award-voting-grid{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:12px;margin-top:16px}
+.vote-category{position:relative;overflow:hidden;min-height:260px}
+.vote-submit{width:100%;margin-top:12px}
+.vote-lock-overlay{display:none}
+.vote-category.vote-locked .vote-lock-overlay{display:grid;position:absolute;inset:0;z-index:5;place-items:center;background:rgba(7,10,16,.84);backdrop-filter:blur(3px);padding:20px;text-align:center}
+.vote-category.vote-locked .vote-lock-overlay strong{display:inline-block;padding:12px 16px;border:1px solid var(--line);border-radius:999px;background:#0a0e15;color:var(--text);font-size:12px}
+.vote-category.vote-locked{min-height:260px}
+.vote-status{display:block;margin-top:9px;min-height:16px}
+@media(max-width:1050px){.award-voting-grid{grid-template-columns:1fr 1fr}.award-voting-grid .vote-category:first-child{grid-column:1/-1}}
+@media(max-width:700px){.award-voting-grid{grid-template-columns:1fr}.award-voting-grid .vote-category:first-child{grid-column:auto}}

@@ -1,4 +1,4 @@
-const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:""};
+const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-01-03T00:00:00+08:00"};
 const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[]};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","90":"90 days","all":"All time"};
 async function getJSON(url,optional=false){try{const r=await fetch(url);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){if(optional)return null;throw e}}
@@ -39,42 +39,65 @@ function renderTradeWeek(){const recent=state.trades.filter(t=>t.created>=Date.n
 function allPartnerPairs(){const teams=[...state.managers.values()],mat={};state.trades.forEach(t=>{const ids=mids(t);for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){const k=[ids[i],ids[j]].sort().join('|');mat[k]=(mat[k]||0)+1}});const pairs=[];for(let i=0;i<teams.length;i++)for(let j=i+1;j<teams.length;j++){const a=teams[i],b=teams[j],count=mat[[a.id,b.id].sort().join('|')]||0;if(count)pairs.push({a,b,count})}return pairs.sort((a,b)=>b.count-a.count||a.a.name.localeCompare(b.a.name))}
 function renderHeatmap(){const pairs=allPartnerPairs(),shown=pairs.slice(0,state.heatmapExpanded?30:6),max=Math.max(...pairs.map(x=>x.count),1);$("tradeHeatmap").classList.remove("loading");$("tradeHeatmap").innerHTML=`<div class="partner-grid compact">${shown.map((p,i)=>`<article class="partner-card" style="--heat:${Math.max(.08,p.count/max)}"><div class="partner-rank">${i+1}</div><div class="partner-names"><strong>${esc(p.a.name)}</strong><span>↔</span><strong>${esc(p.b.name)}</strong></div><div class="partner-total"><strong>${p.count}</strong><span>trades</span></div></article>`).join("")}</div>`;$("heatmapToggle").textContent=state.heatmapExpanded?'Show top 6':'Show top 30'}
 function renderBlock(){const moved={};state.trades.forEach(t=>Object.keys(t.adds||{}).forEach(id=>moved[id]=(moved[id]||0)+1));const rows=Object.entries(moved).sort((a,b)=>b[1]-a[1]).slice(0,5);$("tradeBlock").classList.remove("loading");$("tradeBlock").innerHTML=rows.length?rows.map(([id,n],i)=>`<div class="rank-item"><b>${i+1}</b><div><strong>${esc(playerName(id))}</strong><div class="meta">Most traded player of all time</div></div><span class="power-score">${n}x</span></div>`).join(""):'<div class="block-empty">No player movement yet.</div>'}
-function extractPlayerIds(value,keyHint="",out=new Set(),depth=0){
-  if(depth>6||value==null)return out;
-  const key=String(keyHint||"").toLowerCase();
-  if(typeof value==='string'){
-    const text=value.trim();
-    if(/^p_nick_/.test(key)&&/(^|\b)(otb|on the block|trade block|available)(\b|$)/i.test(text)){
-      const id=keyHint.match(/p_nick_(\d+)/i)?.[1];if(id&&state.players[id])out.add(id)
-    }
-    let parsed=null;if((text.startsWith('{')&&text.endsWith('}'))||(text.startsWith('[')&&text.endsWith(']'))){try{parsed=JSON.parse(text)}catch{}}
-    if(parsed!=null)extractPlayerIds(parsed,keyHint,out,depth+1);
-    if(/trade.?block|on.?block|available.?trade|player.?block/i.test(key)){
-      (text.match(/\d{2,}/g)||[]).forEach(id=>{if(state.players[id])out.add(id)})
-    }
-    return out;
-  }
-  if(typeof value==='number'){
-    const id=String(value);if(/trade.?block|on.?block|available.?trade|player.?block/i.test(key)&&state.players[id])out.add(id);return out
-  }
-  if(Array.isArray(value)){value.forEach(v=>extractPlayerIds(v,keyHint,out,depth+1));return out}
-  if(typeof value==='object'){
-    const directId=String(value.player_id??value.playerId??value.pid??value.id??'');
-    const status=String(value.status??value.tag??value.type??value.label??'');
-    if(directId&&state.players[directId]&&/(trade.?block|on.?block|available|otb)/i.test(`${key} ${status}`))out.add(directId);
-    Object.entries(value).forEach(([k,v])=>extractPlayerIds(v,k,out,depth+1));
-  }
-  return out
+
+function playerWeekAverages(bundle){
+  const rows=matchupRows(bundle),weeks=meaningfulWeeks(bundle),weekMap={};
+  weeks.forEach(w=>weekMap[w]={});
+  rows.forEach(row=>Object.entries(row.players_points||{}).forEach(([id,value])=>{
+    const points=Number(value);
+    if(!Number.isFinite(points))return;
+    const slot=weekMap[row.week]||(weekMap[row.week]={});
+    const current=slot[id]||(slot[id]={sum:0,games:0});
+    current.sum+=points;
+    current.games+=1
+  }));
+  return {weeks,weekMap}
 }
-function parseTradeBlock(roster,user=null){
+function recentPlayerForm(){
+  const bundle=state.modelBundle;
+  if(!bundle)return {poor:[],good:[]};
+  const {weeks,weekMap}=playerWeekAverages(bundle);
+  if(weeks.length<3)return {poor:[],good:[]};
+  const recentWeeks=weeks.slice(-2),priorWeeks=weeks.slice(0,-2);
   const ids=new Set();
-  extractPlayerIds(roster,'roster',ids);
-  extractPlayerIds(user,'user',ids);
-  return [...ids]
+  weeks.forEach(w=>Object.keys(weekMap[w]||{}).forEach(id=>ids.add(id)));
+  const rows=[];
+  ids.forEach(id=>{
+    let priorSum=0,priorGames=0,recentSum=0,recentGames=0;
+    priorWeeks.forEach(w=>{
+      const x=weekMap[w]?.[id];
+      if(x){priorSum+=x.sum;priorGames+=x.games}
+    });
+    recentWeeks.forEach(w=>{
+      const x=weekMap[w]?.[id];
+      if(x){recentSum+=x.sum;recentGames+=x.games}
+    });
+    if(!priorGames||!recentGames)return;
+    const priorAvg=priorSum/priorGames,recentAvg=recentSum/recentGames;
+    rows.push({id,name:playerName(id),priorAvg,recentAvg,change:recentAvg-priorAvg})
+  });
+  return {
+    poor:rows.filter(x=>x.priorAvg>20&&x.change<0).sort((a,b)=>a.change-b.change).slice(0,5),
+    good:rows.filter(x=>x.priorAvg>15&&x.change>0).sort((a,b)=>b.change-a.change).slice(0,5)
+  }
 }
-function renderOnBlock(){
-  $("onTheBlock").classList.remove("loading");
-  $("onTheBlock").innerHTML='<div class="block-empty"><strong>Automatic trade-block data is unavailable.</strong><br>Sleeper shows this publicly inside the app, but it is not included in its documented public API responses. A static GitHub Pages site cannot access Sleeper authenticated internal data.</div>'
+function renderFormList(targetId,rows,positive){
+  const target=$(targetId);
+  target.classList.remove("loading");
+  target.innerHTML=rows.length?rows.map((x,i)=>`
+    <div class="rank-item form-player-row ${positive?'good-form-row':'poor-form-row'}">
+      <b>${i+1}</b>
+      <div>
+        <strong>${esc(x.name)}</strong>
+        <div class="meta">${x.priorAvg.toFixed(1)} previously → ${x.recentAvg.toFixed(1)} last 2 weeks</div>
+      </div>
+      <span class="form-change ${positive?'positive':'negative'}">${x.change>0?'+':''}${x.change.toFixed(1)}</span>
+    </div>`).join(""):`<div class="block-empty">Not enough completed weekly player data yet.</div>`
+}
+function renderPlayerForm(){
+  const form=recentPlayerForm();
+  renderFormList("poorForm",form.poor,false);
+  renderFormList("goodForm",form.good,true)
 }
 function managerTradeCounts(trades){const c={};trades.forEach(t=>mids(t).forEach(id=>c[id]=(c[id]||0)+1));return c}
 function topEntry(obj){return Object.entries(obj).sort((a,b)=>b[1]-a[1])[0]}
@@ -85,11 +108,126 @@ function tradeDetailsHTML(t){const sides=Object.entries(tradeAssets(t));return s
 function renderRecent(){const r=state.trades.slice(0,4);$("recentTrades").classList.remove("loading");$("recentTrades").innerHTML=r.map(t=>`<details><summary><div class="trade-date">${fmt(t.created)} · ${esc(t.season_label||'')}</div><div class="trade-teams">${mids(t).map(id=>esc(managerName(id,t))).join(' ↔ ')}</div><div class="trade-meta">${tradeSummary(t)}</div></summary><div class="trade-detail-body">${tradeDetailsHTML(t)}</div></details>`).join('')||'<div class="block-empty">No trades.</div>'}
 function currentVoteAverageMap(){const current=state.bundles.find(b=>String(b.league.league_id)===CONFIG.currentLeagueId);if(current&&meaningfulWeeks(current).length)return buildPlayerAverages(current,meaningfulWeeks(current).at(-1));return state.playerAverages}
 function previousSeasonAverageMap(){const sorted=state.bundles.filter(b=>meaningfulWeeks(b).length).sort((a,b)=>Number(b.league.season)-Number(a.league.season));const previous=sorted.find(b=>b!==state.modelBundle)||sorted[1];return previous?buildPlayerAverages(previous,meaningfulWeeks(previous).at(-1)):{} }
-function eligibleRookie(id){const p=state.players[id]||{};return Number(p.years_exp)===0||String(p.rookie_year||p.first_season||'')===String(state.league?.season||'')}
-function renderVoting(){const avgs=currentVoteAverageMap(),prev=previousSeasonAverageMap();state.previousPlayerAverages=prev;const top=Object.entries(avgs).filter(([,v])=>Number(v)>0).sort((a,b)=>b[1]-a[1]).slice(0,50).map(([id,avg])=>({id,avg,name:playerName(id)}));state.votePlayers=top;const saved=JSON.parse(localStorage.getItem('imoBallot')||'{}'),chosen=new Set(saved.allNba||[]);$("allNbaChoices").classList.remove('loading');const draw=(query='')=>{$("allNbaChoices").innerHTML=top.filter(x=>x.name.toLowerCase().includes(query.toLowerCase())).map(x=>`<label class="vote-option"><input type="checkbox" value="${x.id}" ${chosen.has(x.id)?'checked':''}><span>${esc(x.name)}</span><small>${x.avg.toFixed(1)}</small></label>`).join('')};draw();$("allNbaCount").textContent=chosen.size;$("allNbaSearch").oninput=e=>draw(e.target.value);$("allNbaChoices").onchange=e=>{if(!e.target.matches('input'))return;if(e.target.checked&&chosen.size>=10){e.target.checked=false;return}e.target.checked?chosen.add(e.target.value):chosen.delete(e.target.value);$("allNbaCount").textContent=chosen.size};const rookies=top.filter(x=>eligibleRookie(x.id));$("rookieVote").innerHTML='<option value="">Select a rookie…</option>'+rookies.map(x=>`<option value="${x.id}" ${saved.rookie===x.id?'selected':''}>${esc(x.name)} — ${x.avg.toFixed(1)}</option>`).join('');const mip=[...top].sort((a,b)=>((b.avg-(prev[b.id]||0))-(a.avg-(prev[a.id]||0))));$("mipVote").innerHTML='<option value="">Select a player…</option>'+mip.map(x=>`<option value="${x.id}" ${saved.mip===x.id?'selected':''}>${esc(x.name)} — ${x.avg.toFixed(1)} (${(x.avg-(prev[x.id]||0))>=0?'+':''}${(x.avg-(prev[x.id]||0)).toFixed(1)})</option>`).join('');const ballot=()=>({allNba:[...chosen],rookie:$("rookieVote").value,mip:$("mipVote").value,submittedAt:new Date().toISOString()});$("saveBallot").onclick=()=>{localStorage.setItem('imoBallot',JSON.stringify(ballot()));$("voteStatus").textContent='Ballot saved on this device.'};$("copyBallot").onclick=async()=>{const b=ballot(),names=b.allNba.map(playerName),text=`IMO ALL-NBA: ${names.join(', ')}
-ROOKIE OF THE YEAR: ${b.rookie?playerName(b.rookie):'—'}
-MOST IMPROVED: ${b.mip?playerName(b.mip):'—'}`;try{await navigator.clipboard.writeText(text);$("voteStatus").textContent='Ballot copied — paste it into the league chat.'}catch{$("voteStatus").textContent='Could not copy automatically.'}}}
-function renderAll(){renderSummary();renderLeaderboard();renderPower();renderOdds();renderTradeWeek();renderHeatmap();renderBlock();renderOnBlock();renderRecords();renderRecent();renderVoting()}
+
+function eligibleRookie(id){
+  const p=state.players[id]||{},season=String(state.league?.season||"2026");
+  return Number(p.years_exp)===0||
+    String(p.rookie_year||p.first_season||"")===season||
+    String(p.status||"").toLowerCase()==="rookie"
+}
+function votingOpen(){
+  return Date.now()>=new Date(CONFIG.votingOpens).getTime()
+}
+function votingCountdownText(){
+  const remaining=Math.max(0,new Date(CONFIG.votingOpens).getTime()-Date.now());
+  if(remaining<=0)return "Voting is open";
+  const days=Math.floor(remaining/864e5);
+  const hours=Math.floor((remaining%864e5)/36e5);
+  const minutes=Math.floor((remaining%36e5)/6e4);
+  const seconds=Math.floor((remaining%6e4)/1000);
+  return `Voting opens in ${days}d ${hours}h ${minutes}m ${seconds}s`
+}
+function categoryKey(category){return `imoVoteSubmitted:${category}:2027`}
+function categorySubmitted(category){return Boolean(localStorage.getItem(categoryKey(category)))}
+function lockCategory(category,message){
+  const card=document.querySelector(`.vote-category[data-category="${category}"]`);
+  const overlay=$(`${category}Lock`);
+  if(!card||!overlay)return;
+  card.classList.add("vote-locked");
+  overlay.innerHTML=`<div><strong>🔒 ${esc(message)}</strong></div>`;
+  card.querySelectorAll("input,select,button").forEach(el=>el.disabled=true)
+}
+function unlockCategory(category){
+  const card=document.querySelector(`.vote-category[data-category="${category}"]`);
+  const overlay=$(`${category}Lock`);
+  if(!card||!overlay)return;
+  card.classList.remove("vote-locked");
+  overlay.innerHTML="";
+  card.querySelectorAll("input,select,button").forEach(el=>el.disabled=false)
+}
+function applyVotingLocks(){
+  const open=votingOpen(),countdown=votingCountdownText();
+  $("votingCountdown").textContent=countdown;
+  ["allNba","rookie","mip"].forEach(category=>{
+    const status=$(category==="allNba"?"allNbaStatus":category==="rookie"?"rookieStatus":"mipStatus");
+    if(categorySubmitted(category)){
+      lockCategory(category,"Vote submitted");
+      if(status)status.textContent="Your vote has been locked on this device."
+    }else if(!open){
+      lockCategory(category,"Voting opens 3 January 2027");
+      if(status)status.textContent=countdown
+    }else{
+      unlockCategory(category);
+      if(status)status.textContent="One submission allowed on this device."
+    }
+  })
+}
+function storeVote(category,payload){
+  if(!votingOpen())return false;
+  if(categorySubmitted(category))return false;
+  localStorage.setItem(categoryKey(category),JSON.stringify({...payload,submittedAt:new Date().toISOString()}));
+  applyVotingLocks();
+  return true
+}
+function renderVoting(){
+  const avgs=currentVoteAverageMap(),prev=previousSeasonAverageMap();
+  state.previousPlayerAverages=prev;
+  const allPlayers=Object.entries(avgs)
+    .filter(([,v])=>Number(v)>0)
+    .map(([id,avg])=>({id,avg:Number(avg),name:playerName(id)}))
+    .sort((a,b)=>b.avg-a.avg||a.name.localeCompare(b.name));
+  const top=allPlayers.slice(0,50);
+  state.votePlayers=top;
+  const chosen=new Set();
+
+  $("allNbaChoices").classList.remove("loading");
+  const draw=(query="")=>{
+    $("allNbaChoices").innerHTML=top
+      .filter(x=>x.name.toLowerCase().includes(query.toLowerCase()))
+      .map(x=>`<label class="vote-option"><input type="checkbox" value="${x.id}" ${chosen.has(x.id)?"checked":""}><span>${esc(x.name)}</span><small>${x.avg.toFixed(1)}</small></label>`)
+      .join("")
+  };
+  draw();
+  $("allNbaCount").textContent=chosen.size;
+  $("allNbaSearch").oninput=e=>draw(e.target.value);
+  $("allNbaChoices").onchange=e=>{
+    if(!e.target.matches("input"))return;
+    if(e.target.checked&&chosen.size>=10){e.target.checked=false;return}
+    e.target.checked?chosen.add(e.target.value):chosen.delete(e.target.value);
+    $("allNbaCount").textContent=chosen.size
+  };
+
+  const rookies=allPlayers.filter(x=>eligibleRookie(x.id));
+  $("rookieVote").innerHTML='<option value="">Select a rookie…</option>'+
+    rookies.map(x=>`<option value="${x.id}">${esc(x.name)} — ${x.avg.toFixed(1)}</option>`).join("");
+
+  const mip=allPlayers
+    .filter(x=>Number(prev[x.id])>0)
+    .map(x=>({...x,improvement:x.avg-Number(prev[x.id])}))
+    .sort((a,b)=>b.improvement-a.improvement||b.avg-a.avg);
+  $("mipVote").innerHTML='<option value="">Select a player…</option>'+
+    mip.map(x=>`<option value="${x.id}">${esc(x.name)} — ${x.improvement>=0?"+":""}${x.improvement.toFixed(1)} PPG</option>`).join("");
+
+  $("submitAllNba").onclick=()=>{
+    if(chosen.size===0||chosen.size>10){$("allNbaStatus").textContent="Select between 1 and 10 players.";return}
+    if(storeVote("allNba",{players:[...chosen]}))$("allNbaStatus").textContent="All-NBA vote submitted."
+  };
+  $("submitRookie").onclick=()=>{
+    const player=$("rookieVote").value;
+    if(!player){$("rookieStatus").textContent="Select one rookie.";return}
+    if(storeVote("rookie",{player}))$("rookieStatus").textContent="ROTY vote submitted."
+  };
+  $("submitMip").onclick=()=>{
+    const player=$("mipVote").value;
+    if(!player){$("mipStatus").textContent="Select one player.";return}
+    if(storeVote("mip",{player}))$("mipStatus").textContent="MIP vote submitted."
+  };
+
+  applyVotingLocks();
+  clearInterval(window.__imoVotingTimer);
+  window.__imoVotingTimer=setInterval(applyVotingLocks,1000)
+}
+function renderAll(){renderSummary();renderLeaderboard();renderPower();renderOdds();renderTradeWeek();renderHeatmap();renderPlayerForm();renderBlock();renderRecords();renderRecent();renderVoting()}
 async function loadSeason(id){const [league,users,rosters,drafts]=await Promise.all([getJSON(`${CONFIG.api}/league/${id}`,true),getJSON(`${CONFIG.api}/league/${id}/users`,true),getJSON(`${CONFIG.api}/league/${id}/rosters`,true),getJSON(`${CONFIG.api}/league/${id}/drafts`,true)]);if(!league||!users||!rosters)return null;const draftPicks=(await Promise.all((drafts||[]).map(d=>getJSON(`${CONFIG.api}/draft/${d.draft_id}/picks`,true)))).flat().filter(Boolean);const draftPickMap={};draftPicks.forEach(p=>{if(p.player_id!=null&&p.roster_id!=null&&p.round!=null)draftPickMap[`${league.season}|${p.roster_id}|${p.round}`]=String(p.player_id)});const ownerByRoster={},userById=Object.fromEntries(users.map(u=>[String(u.user_id),u])),managerNameMap={};rosters.forEach(r=>{if(r.owner_id!=null){ownerByRoster[String(r.roster_id)]=String(r.owner_id);const u=userById[String(r.owner_id)]||{};managerNameMap[String(r.owner_id)]=u.metadata?.team_name||u.display_name||`Team ${r.roster_id}`}});const rounds=Array.from({length:CONFIG.roundsToCheck},(_,i)=>i+1),weeks=await limitedMap(rounds,8,async wk=>{const [tx,match]=await Promise.all([getJSON(`${CONFIG.api}/league/${id}/transactions/${wk}`,true),getJSON(`${CONFIG.api}/league/${id}/matchups/${wk}`,true)]);const trades=(tx||[]).filter(t=>t.type==='trade'&&(!t.status||t.status==='complete')).map(t=>{const participantRosters=new Set((t.roster_ids||[]).map(String));if(!participantRosters.size){Object.values(t.adds||{}).forEach(x=>participantRosters.add(String(x)));Object.values(t.drops||{}).forEach(x=>participantRosters.add(String(x)));(t.draft_picks||[]).forEach(p=>{if(p.owner_id!=null)participantRosters.add(String(p.owner_id));if(p.previous_owner_id!=null)participantRosters.add(String(p.previous_owner_id))})}return {...t,manager_ids:[...participantRosters].map(r=>ownerByRoster[r]).filter(Boolean),roster_owner_map:ownerByRoster,manager_name_map:managerNameMap,season_label:`${league.season} season`,league_id:id}});return{trades,matchups:(match||[]).map(x=>({...x,week:wk}))}});return{league,users,rosters,ownerByRoster,draftPickMap,trades:weeks.flatMap(x=>x?.trades||[]),matchups:weeks.flatMap(x=>x?.matchups||[])}}
 async function load(){$("refreshBtn").disabled=true;$("statusText").textContent='Connecting to Sleeper…';try{const [bundles,players]=await Promise.all([Promise.all(CONFIG.leagueIds.map(loadSeason)),getJSON(`${CONFIG.api}/players/nba`,true)]),valid=bundles.filter(Boolean),cur=valid.find(x=>String(x.league.league_id)===CONFIG.currentLeagueId)||valid[0];state.bundles=valid;state.league=cur.league;state.currentUsers=cur.users;state.currentRosters=cur.rosters;state.players=players||{};state.draftPickMap=Object.assign({},...valid.map(b=>b.draftPickMap||{}));buildManagers();const unique=new Map();valid.flatMap(x=>x.trades).forEach(t=>unique.set(t.transaction_id||`${t.league_id}-${t.created}`,t));state.trades=[...unique.values()].sort((a,b)=>(b.created||0)-(a.created||0));prepareModels();renderAll();$("statusText").textContent=`Live · ${valid.length} seasons loaded · model: ${state.modelBundle?.league?.season||'current'}`}catch(e){console.error(e);$("statusText").textContent='Could not load Sleeper data'}finally{$("refreshBtn").disabled=false}}
 document.querySelectorAll('.window-btn').forEach(b=>b.addEventListener('click',()=>{state.selectedWindow=b.dataset.window;document.querySelectorAll('.window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary();renderLeaderboard()}));$("refreshBtn").addEventListener('click',load);$("heatmapToggle").addEventListener('click',()=>{state.heatmapExpanded=!state.heatmapExpanded;renderHeatmap()});load();

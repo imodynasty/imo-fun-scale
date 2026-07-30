@@ -20,11 +20,49 @@
 <section class="panel heatmap-panel"><div class="panel-heading"><div><span class="eyebrow">🤝 CONNECTIONS</span><h3>Trade Partner Heatmap</h3></div><button id="heatmapToggle" class="small-button" type="button">Show top 30</button></div><div id="tradeHeatmap" class="heatmap-wrap loading">Building heatmap…</div></section>
 
 
-<section class="dashboard-grid"><article class="panel"><div class="panel-heading"><div><span class="eyebrow">🎯 ALL-TIME MOVEMENT</span><h3>NO ONE WANTS HIM</h3></div></div><div id="tradeBlock" class="rank-list loading">Analysing player movement…</div></article><article class="panel"><div class="panel-heading"><div><span class="eyebrow">🛒 AVAILABLE NOW</span><h3>ON THE BLOCK</h3></div></div><div id="onTheBlock" class="rank-list loading">Reading current trade blocks…</div></article></section><section class="panel"><div class="panel-heading"><div><span class="eyebrow">📜 HISTORY BOOK</span><h3>League Records</h3></div></div><div id="leagueRecords" class="records-grid records-grid-eight loading">Calculating records…</div></section>
+<section class="dashboard-grid">
+<article class="panel"><div class="panel-heading"><div><span class="eyebrow">📉 TWO-WEEK WATCH</span><h3>POOR FORM</h3></div><span class="period-pill">Biggest fallers</span></div><div id="poorForm" class="rank-list loading">Calculating recent form…</div></article>
+<article class="panel"><div class="panel-heading"><div><span class="eyebrow">📈 TWO-WEEK WATCH</span><h3>GOOD FORM</h3></div><span class="period-pill">Biggest risers</span></div><div id="goodForm" class="rank-list loading">Calculating recent form…</div></article>
+</section>
+<section class="panel"><div class="panel-heading"><div><span class="eyebrow">🎯 ALL-TIME MOVEMENT</span><h3>NO ONE WANTS HIM</h3></div><span class="period-pill">Top 5 all time</span></div><div id="tradeBlock" class="rank-list loading">Analysing player movement…</div></section><section class="panel"><div class="panel-heading"><div><span class="eyebrow">📜 HISTORY BOOK</span><h3>League Records</h3></div></div><div id="leagueRecords" class="records-grid records-grid-eight loading">Calculating records…</div></section>
 
 <section class="panel recent-panel"><div class="panel-heading"><div><span class="eyebrow">LATEST MOVES</span><h3>RECENT TRADES</h3></div></div><div id="recentTrades" class="recent-trades loading">Loading trade history…</div></section>
 
-<section class="panel voting-panel" id="allNbaVoting"><div class="panel-heading"><div><span class="eyebrow">🗳️ LEAGUE BALLOT</span><h3>ALL NBA VOTING</h3></div><span class="period-pill">Revealed 6 January</span></div><p class="voting-intro">Choose up to 10 players for the positionless IMO All-NBA team: five starters and five reserves. Final results are weighted 50% public vote and 50% season fantasy average.</p><div class="voting-grid"><article class="ballot-card"><h4>IMO All-NBA Team</h4><p>Select up to 10 from the top 50 players by season average.</p><input id="allNbaSearch" class="vote-search" type="search" placeholder="Search players…"><div id="allNbaChoices" class="vote-choices loading">Loading players…</div><div class="vote-count"><span id="allNbaCount">0</span>/10 selected</div></article><article class="ballot-card"><h4>Rookie of the Year</h4><p>Select one eligible rookie.</p><select id="rookieVote" class="vote-select"><option>Loading…</option></select><h4 class="mip-heading">Most Improved Player</h4><p>Select one player. Final results are 50% fan vote and 50% year-on-year points improvement.</p><select id="mipVote" class="vote-select"><option>Loading…</option></select></article></div><div class="vote-actions"><button id="saveBallot" class="small-button primary-button" type="button">Save ballot</button><button id="copyBallot" class="small-button" type="button">Copy ballot</button><span id="voteStatus" class="vote-status">Votes are saved on this device.</span></div></section>
+<section class="panel voting-panel" id="allNbaVoting">
+<div class="panel-heading"><div><span class="eyebrow">🗳️ LEAGUE BALLOT</span><h3>IMO AWARDS VOTING</h3></div><span class="period-pill">Results revealed 6 January</span></div>
+<div id="votingCountdown" class="voting-countdown">Voting opens 3 January 2027</div>
+<p class="voting-intro">Each ballot opens on 3 January 2027. One submission is allowed per ballot on each device.</p>
+<div class="award-voting-grid">
+<article class="ballot-card vote-category" data-category="allNba">
+<div class="vote-lock-overlay" id="allNbaLock"></div>
+<h4>IMO All-NBA Team</h4>
+<p>Select up to 10 players from the top 50 by season fantasy average. The final team is positionless: five starters and five reserves. Results are weighted 50% fan vote and 50% season average.</p>
+<input id="allNbaSearch" class="vote-search" type="search" placeholder="Search top 50 players…">
+<div id="allNbaChoices" class="vote-choices loading">Loading players…</div>
+<div class="vote-count"><span id="allNbaCount">0</span>/10 selected</div>
+<button id="submitAllNba" class="small-button primary-button vote-submit" type="button">Submit All-NBA vote</button>
+<div id="allNbaStatus" class="vote-status"></div>
+</article>
+
+<article class="ballot-card vote-category" data-category="rookie">
+<div class="vote-lock-overlay" id="rookieLock"></div>
+<h4>Rookie of the Year</h4>
+<p>Select one eligible rookie. Options are sorted by current season fantasy average.</p>
+<select id="rookieVote" class="vote-select"><option>Loading…</option></select>
+<button id="submitRookie" class="small-button primary-button vote-submit" type="button">Submit ROTY vote</button>
+<div id="rookieStatus" class="vote-status"></div>
+</article>
+
+<article class="ballot-card vote-category" data-category="mip">
+<div class="vote-lock-overlay" id="mipLock"></div>
+<h4>Most Improved Player</h4>
+<p>Select one player. Results are weighted 50% fan vote and 50% improvement from the 2025 season to the 2026 season.</p>
+<select id="mipVote" class="vote-select"><option>Loading…</option></select>
+<button id="submitMip" class="small-button primary-button vote-submit" type="button">Submit MIP vote</button>
+<div id="mipStatus" class="vote-status"></div>
+</article>
+</div>
+</section>
 </div>
 <aside class="sidebar"><section class="panel odds-panel"><div class="panel-heading"><div><span class="eyebrow">🏆 IMO PREDICTOR</span><h3>Championship Odds</h3></div></div><p class="disclaimer">Priced from five-game form, recent scoring and ladder position.</p><div id="championshipOdds" class="odds-list loading">Calculating odds…</div></section><section class="panel sticky-note"><span class="eyebrow">LIVE MODEL</span><h3>How it works</h3><p>Odds and power rankings refresh whenever the page loads. They are analytical estimates, not real betting markets.</p></section></aside></div>
 </main><footer><strong>THE IMO FUN SCALE</strong><span>Independent league dashboard · Not affiliated with Sleeper</span></footer>
