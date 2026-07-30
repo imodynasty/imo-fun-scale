@@ -1,5 +1,5 @@
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-01-03T00:00:00+08:00"};
-const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},gameLogs:{}};
+const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{}};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
 async function getJSON(url,optional=false){try{const r=await fetch(url);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){if(optional)return null;throw e}}
 async function limitedMap(items,limit,fn){const out=new Array(items.length);let n=0;async function run(){while(n<items.length){const i=n++;try{out[i]=await fn(items[i])}catch{out[i]=null}}}await Promise.all(Array.from({length:limit},run));return out}
@@ -26,8 +26,15 @@ function modelRows(bundle,throughWeek=Infinity,mode="power"){const standings=sta
 function winningStreak(games){let n=0;for(let i=games.length-1;i>=0;i--){if(games[i].result===1)n++;else break}return n}
 function calculatedPlayerAverages(bundle,throughWeek=Infinity){const sums={},games={};matchupRows(bundle,throughWeek).forEach(row=>Object.entries(row.players_points||{}).forEach(([id,v])=>{const pts=Number(v);if(!Number.isFinite(pts)||pts<=0)return;sums[id]=(sums[id]||0)+pts;games[id]=(games[id]||0)+1}));return Object.fromEntries(Object.keys(sums).map(id=>[id,games[id]?sums[id]/games[id]:0]))}
 function exactAverageMap(season){return state.exactSeasonAverages?.[String(season)]||{}}
+function seasonTotalAverageMap(season){return state.seasonTotalAverages?.[String(season)]||{}}
 function gameLogAverageMap(season){return state.gameLogAverages?.[String(season)]||{}}
-function buildPlayerAverages(bundle,throughWeek=Infinity){const season=String(bundle?.league?.season||"");const calculated=calculatedPlayerAverages(bundle,throughWeek),exact=exactAverageMap(season),logs=gameLogAverageMap(season);return {...calculated,...exact,...logs}}
+function buildPlayerAverages(bundle,throughWeek=Infinity){
+  const season=String(bundle?.league?.season||"");
+  const calculated=calculatedPlayerAverages(bundle,throughWeek);
+  const exact=exactAverageMap(season);
+  const totals=seasonTotalAverageMap(season);
+  return {...calculated,...exact,...totals};
+}
 function prepareModels(){state.modelBundle=selectModelBundle();const weeks=meaningfulWeeks(state.modelBundle),last=weeks.at(-1)||Infinity,prior=weeks.length>1?weeks.at(-2):last;state.previousPowerRanks=Object.fromEntries(modelRows(state.modelBundle,prior,"power").map(x=>[x.id,x.rank]));state.playerAverages=buildPlayerAverages(state.modelBundle,last)}
 function playerName(id){const p=state.players[id]||{};return p.full_name||[p.first_name,p.last_name].filter(Boolean).join(" ")||`Player ${id}`}
 function pickOriginalOwner(p,t){const owner=t.roster_owner_map?.[String(p.roster_id)];return owner?managerName(owner,t):null}
@@ -195,7 +202,14 @@ function renderVoting(){
 }
 
 function managerTrades(managerId){return state.trades.filter(t=>mids(t).includes(String(managerId)))}
-function seasonAverageMap(season){const logs=gameLogAverageMap(season),exact=exactAverageMap(season),bundle=bundleForSeason(season);if(!bundle)return {...exact,...logs};if(!meaningfulWeeks(bundle).length)return {...exact,...logs};return buildPlayerAverages(bundle,meaningfulWeeks(bundle).at(-1))}
+function seasonAverageMap(season){
+  const totals=seasonTotalAverageMap(season);
+  const exact=exactAverageMap(season);
+  const bundle=bundleForSeason(season);
+  if(!bundle)return {...exact,...totals};
+  if(!meaningfulWeeks(bundle).length)return {...exact,...totals};
+  return buildPlayerAverages(bundle,meaningfulWeeks(bundle).at(-1));
+}
 function managerRosterPlayers(managerId,season=state.profileAverageSeason){
   const manager=state.managers.get(String(managerId)),ids=[...(manager?.roster?.players||[])],avgMap=seasonAverageMap(season);
   return ids.map(id=>{const p=state.players[id]||{},avg=Number(avgMap[id]||0);return{id:String(id),name:playerName(id),avg,position:p.position||p.fantasy_positions?.[0]||"—",age:Number(p.age)||null,avatar:`https://sleepercdn.com/content/nba/players/${id}.jpg`}}).sort((a,b)=>b.avg-a.avg||a.name.localeCompare(b.name))
@@ -381,8 +395,70 @@ async function loadGameLogAverages(){
   if(jokic){bySeason["2025"]??={};bySeason["2025"][jokic[0]]=41.55;meta["2025"]??={};meta["2025"][jokic[0]]={...(meta["2025"][jokic[0]]||{}),average:41.55,source:"verified Sleeper display"}}
 }
 
+
+function statNumber(stats,keys){
+  for(const key of keys){
+    const n=Number(stats?.[key]);
+    if(Number.isFinite(n))return n;
+  }
+  return 0;
+}
+function scoreSeasonStats(stats,scoring){
+  let total=0;
+  const aliases={
+    pts:["pts"],reb:["reb"],ast:["ast"],stl:["stl"],blk:["blk"],to:["to"],
+    fgm:["fgm"],fga:["fga"],fgmi:["fgmi"],ftm:["ftm"],fta:["fta"],ftmi:["ftmi"],
+    tpm:["tpm"],tpa:["tpa"],tpmi:["tpmi"],oreb:["oreb"],dreb:["dreb"],
+    pf:["pf"],tf:["tf"],ff:["ff"],dd:["dd"],td:["td"],
+    bonus_double_double:["dd"],bonus_triple_double:["td"],
+    bonus_pt_40p:["bonus_pt_40p"],bonus_pt_50p:["bonus_pt_50p"],
+    bonus_ast_15p:["bonus_ast_15p"],bonus_reb_20p:["bonus_reb_20p"]
+  };
+  Object.entries(scoring||{}).forEach(([key,multiplier])=>{
+    const mult=Number(multiplier);
+    if(!Number.isFinite(mult)||mult===0)return;
+    const value=statNumber(stats,aliases[key]||[key]);
+    total+=value*mult;
+  });
+  return total;
+}
+async function loadPlayerSeasonAverage(playerId,season,scoring){
+  const url=`${CONFIG.statsApi}/${encodeURIComponent(playerId)}?season_type=regular&season=${encodeURIComponent(season)}`;
+  const payload=await getJSON(url,true);
+  const stats=payload?.stats||{};
+  const gp=Number(stats.gp);
+  if(!Number.isFinite(gp)||gp<=0)return null;
+  const total=scoreSeasonStats(stats,scoring);
+  if(!Number.isFinite(total))return null;
+  return {average:total/gp,totalFantasyPoints:total,gamesPlayed:gp};
+}
+async function loadSeasonTotalAverages(){
+  const playerIds=relevantPlayerIds();
+  const bySeason={},meta={};
+  for(const bundle of state.bundles){
+    const season=String(bundle.league.season);
+    bySeason[season]={};
+    meta[season]={};
+    const scoring=bundle.league.scoring_settings||{};
+    const rows=await limitedMap(playerIds,8,async id=>{
+      const result=await loadPlayerSeasonAverage(id,season,scoring);
+      return result?{id,...result}:null;
+    });
+    rows.filter(Boolean).forEach(row=>{
+      bySeason[season][row.id]=row.average;
+      meta[season][row.id]={
+        gamesPlayed:row.gamesPlayed,
+        totalFantasyPoints:row.totalFantasyPoints,
+        average:row.average
+      };
+    });
+  }
+  state.seasonTotalAverages=bySeason;
+  state.seasonTotalMeta=meta;
+}
+
 async function loadSeason(id){const [league,users,rosters,drafts,tradedPicks,winnersBracket]=await Promise.all([getJSON(`${CONFIG.api}/league/${id}`,true),getJSON(`${CONFIG.api}/league/${id}/users`,true),getJSON(`${CONFIG.api}/league/${id}/rosters`,true),getJSON(`${CONFIG.api}/league/${id}/drafts`,true),getJSON(`${CONFIG.api}/league/${id}/traded_picks`,true),getJSON(`${CONFIG.api}/league/${id}/winners_bracket`,true)]);if(!league||!users||!rosters)return null;const draftPicks=(await Promise.all((drafts||[]).map(d=>getJSON(`${CONFIG.api}/draft/${d.draft_id}/picks`,true)))).flat().filter(Boolean);const draftPickMap={};draftPicks.forEach(p=>{if(p.player_id==null||p.round==null)return;[p.roster_id,p.draft_slot,p.picked_by].filter(x=>x!=null).forEach(key=>draftPickMap[`${league.season}|${key}|${p.round}`]=String(p.player_id))});const ownerByRoster={},userById=Object.fromEntries(users.map(u=>[String(u.user_id),u])),managerNameMap={};rosters.forEach(r=>{if(r.owner_id!=null){ownerByRoster[String(r.roster_id)]=String(r.owner_id);const u=userById[String(r.owner_id)]||{};managerNameMap[String(r.owner_id)]=u.metadata?.team_name||u.display_name||`Team ${r.roster_id}`}});const rounds=Array.from({length:CONFIG.roundsToCheck},(_,i)=>i+1),weeks=await limitedMap(rounds,8,async wk=>{const [tx,match]=await Promise.all([getJSON(`${CONFIG.api}/league/${id}/transactions/${wk}`,true),getJSON(`${CONFIG.api}/league/${id}/matchups/${wk}`,true)]);const trades=(tx||[]).filter(t=>t.type==='trade'&&(!t.status||t.status==='complete')).map(t=>{const participantRosters=new Set((t.roster_ids||[]).map(String));if(!participantRosters.size){Object.values(t.adds||{}).forEach(x=>participantRosters.add(String(x)));Object.values(t.drops||{}).forEach(x=>participantRosters.add(String(x)));(t.draft_picks||[]).forEach(p=>{if(p.owner_id!=null)participantRosters.add(String(p.owner_id));if(p.previous_owner_id!=null)participantRosters.add(String(p.previous_owner_id))})}return {...t,manager_ids:[...participantRosters].map(r=>ownerByRoster[r]).filter(Boolean),roster_owner_map:ownerByRoster,manager_name_map:managerNameMap,season_label:`${league.season} season`,league_id:id}});return{trades,matchups:(match||[]).map(x=>({...x,week:wk}))}});return{league,users,rosters,ownerByRoster,draftPickMap,tradedPicks:tradedPicks||[],winnersBracket:winnersBracket||[],trades:weeks.flatMap(x=>x?.trades||[]),matchups:weeks.flatMap(x=>x?.matchups||[])}}
-async function load(){$("refreshBtn").disabled=true;$("statusText").textContent='Connecting to Sleeper…';try{const [bundles,players,exactAverages]=await Promise.all([Promise.all(CONFIG.leagueIds.map(loadSeason)),getJSON(`${CONFIG.api}/players/nba`,true),getJSON(`season-averages.json`,true)]),valid=bundles.filter(Boolean),cur=valid.find(x=>String(x.league.league_id)===CONFIG.currentLeagueId)||valid[0];state.exactSeasonAverages=exactAverages||{};state.bundles=valid;state.league=cur.league;state.currentUsers=cur.users;state.currentRosters=cur.rosters;state.players=players||{};state.draftPickMap=Object.assign({},...valid.map(b=>b.draftPickMap||{}));$("statusText").textContent='Loading individual Sleeper game logs…';await loadGameLogAverages();buildManagers();const unique=new Map();valid.flatMap(x=>x.trades).forEach(t=>unique.set(t.transaction_id||`${t.league_id}-${t.created}`,t));state.trades=[...unique.values()].sort((a,b)=>(b.created||0)-(a.created||0));prepareModels();renderAll();const gameCount=Object.values(state.gameLogMeta).reduce((sum,season)=>sum+Object.keys(season||{}).length,0);$("statusText").textContent=`Live · ${valid.length} seasons loaded · ${gameCount} player game-log averages`}catch(e){console.error(e);$("statusText").textContent='Could not load Sleeper data'}finally{$("refreshBtn").disabled=false}}
+async function load(){$("refreshBtn").disabled=true;$("statusText").textContent='Connecting to Sleeper…';try{const [bundles,players,exactAverages]=await Promise.all([Promise.all(CONFIG.leagueIds.map(loadSeason)),getJSON(`${CONFIG.api}/players/nba`,true),getJSON(`season-averages.json`,true)]),valid=bundles.filter(Boolean),cur=valid.find(x=>String(x.league.league_id)===CONFIG.currentLeagueId)||valid[0];state.exactSeasonAverages=exactAverages||{};state.bundles=valid;state.league=cur.league;state.currentUsers=cur.users;state.currentRosters=cur.rosters;state.players=players||{};state.draftPickMap=Object.assign({},...valid.map(b=>b.draftPickMap||{}));$("statusText").textContent='Loading Sleeper season totals…';await loadSeasonTotalAverages();buildManagers();const unique=new Map();valid.flatMap(x=>x.trades).forEach(t=>unique.set(t.transaction_id||`${t.league_id}-${t.created}`,t));state.trades=[...unique.values()].sort((a,b)=>(b.created||0)-(a.created||0));prepareModels();renderAll();const averageCount=Object.values(state.seasonTotalMeta).reduce((sum,season)=>sum+Object.keys(season||{}).length,0);$("statusText").textContent=`Live · ${valid.length} seasons loaded · ${averageCount} player season averages`}catch(e){console.error(e);$("statusText").textContent='Could not load Sleeper data'}finally{$("refreshBtn").disabled=false}}
 document.querySelectorAll('.window-btn').forEach(b=>b.addEventListener('click',()=>{state.selectedWindow=b.dataset.window;document.querySelectorAll('.window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary()}));document.querySelectorAll('.active-window-btn').forEach(b=>b.addEventListener('click',()=>{state.activeWindow=b.dataset.activeWindow;document.querySelectorAll('.active-window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary();renderLeaderboard()}));$("refreshBtn").addEventListener('click',load);$("heatmapToggle").addEventListener('click',()=>{state.heatmapExpanded=!state.heatmapExpanded;renderHeatmap()});$("biggestTradesToggle").addEventListener('click',()=>{state.biggestTradesExpanded=!state.biggestTradesExpanded;renderBiggestTrades()});
 document.addEventListener("click",e=>{const seasonBtn=e.target.closest("[data-profile-season]");if(seasonBtn){state.profileAverageSeason=seasonBtn.dataset.profileSeason;const id=$("managerProfileModal")?.dataset.managerId;if(id)$("managerProfileContent").innerHTML=managerProfileHTML(id);return}const link=e.target.closest(".manager-profile-link");if(link){openManagerProfile(link.dataset.managerId);return}if(e.target.closest("[data-close-manager-profile]")||e.target.closest("#managerProfileClose"))closeManagerProfile()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("managerProfileModal")?.classList.contains("open"))closeManagerProfile()});

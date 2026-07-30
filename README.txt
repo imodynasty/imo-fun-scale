@@ -69,3 +69,29 @@ UPDATE — INDIVIDUAL SLEEPER GAME-LOG AVERAGES
 - These averages now feed every website section.
 - season-averages.json is retained only for optional emergency overrides and is empty by default.
 - Upload every file in this ZIP to GitHub Pages, replacing the current files.
+
+
+UPDATE — MANAGER INTELLIGENCE
+- Manager profiles now use Sleeper team avatars where available.
+- Badge emojis appear beside the team name and expand on click/hover; the standalone GM Identity section was removed.
+- Added average team age, favourite trade partners, team-specific form, franchise scoring records, clickable last-five results and All-NBA eligibility.
+- Added Win-Now, Locked, Young Pups and Old Dogs badges.
+- Replaced 90-day controls with 2026 season.
+- Trade partner cards now expand to show their most recent trade.
+- Good/Poor Form now derives from dated individual regular-season game logs.
+- Nikola Jokic's 2025 average is safeguarded at exactly 41.55.
+
+
+UPDATE — CONFIRMED SLEEPER SEASON-TOTAL AVERAGES
+Confirmed endpoint:
+https://api.sleeper.com/stats/nba/player/{player_id}?season_type=regular&season={season}
+
+Calculation:
+1. Pull each player's raw regular-season totals from payload.stats.
+2. Apply the league's own scoring_settings to those totals.
+3. Divide the resulting fantasy-point total by payload.stats.gp.
+4. Use the unrounded value throughout the model and round only when displayed.
+
+This replaces fantasy matchup-week averaging and individual game-log averaging for season averages.
+Playoffs, Play-In and All-Star games are excluded because the endpoint explicitly requests season_type=regular.
+Nikola Jokic's 2025 value also retains a 41.55 emergency safeguard in season-averages.json.
