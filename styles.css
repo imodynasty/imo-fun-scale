@@ -379,3 +379,7 @@ footer span{display:flex;align-items:center;gap:6px}
 .profile-partner-row span{white-space:nowrap}
 @media(max-width:900px){.power-detail{grid-template-columns:1fr 1fr}.profile-sparkline-summary{flex-wrap:wrap}}
 @media(max-width:650px){.power-market-stack{min-width:64px}.market-tag{font-size:6px;padding:3px 5px}.profile-sparkline-wrap{overflow-x:auto}.profile-sparkline{min-width:620px}.profile-sparkline-summary{min-width:620px}}
+
+/* V2.6.5 compact favourite partners */
+.heatmap-panel .partner-row-compact{min-height:48px;padding:9px 12px}
+.heatmap-panel .partner-list-compact{gap:6px}
