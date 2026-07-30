@@ -1,5 +1,5 @@
-const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-01-03T00:00:00+08:00"};
-const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025"};
+const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-01-03T00:00:00+08:00"};
+const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{}};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","90":"90 days","all":"All time"};
 async function getJSON(url,optional=false){try{const r=await fetch(url);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){if(optional)return null;throw e}}
 async function limitedMap(items,limit,fn){const out=new Array(items.length);let n=0;async function run(){while(n<items.length){const i=n++;try{out[i]=await fn(items[i])}catch{out[i]=null}}}await Promise.all(Array.from({length:limit},run));return out}
@@ -24,7 +24,10 @@ function minMax(value,values,higher=true){const nums=values.filter(Number.isFini
 function standingsTable(bundle,throughWeek=Infinity){const outcomes=outcomesForBundle(bundle,throughWeek);return [...state.managers.values()].map(m=>{const games=outcomes[m.id]||[],wins=games.reduce((s,g)=>s+g.result,0),pts=games.reduce((s,g)=>s+g.points,0);return {...m,wins,games:games.length,pts}}).sort((a,b)=>b.wins-a.wins||b.pts-a.pts||a.name.localeCompare(b.name)).map((x,i)=>({...x,standingRank:i+1}))}
 function modelRows(bundle,throughWeek=Infinity,mode="power"){const standings=standingsTable(bundle,throughWeek),outcomes=outcomesForBundle(bundle,throughWeek),teamCount=Math.max(standings.length,1);const raw=standings.map(team=>{const games=outcomes[team.id]||[],formN=mode==="odds"?5:3,recent=games.slice(-formN),last5=games.slice(-5),form=recent.length?recent.reduce((s,g)=>s+g.result,0)/recent.length:0,avg5=last5.length?last5.reduce((s,g)=>s+g.points,0)/last5.length:0,ladder=teamCount===1?1:1-(team.standingRank-1)/(teamCount-1),streak=winningStreak(games);return {...team,form,avg5,ladder,streak}});const avgs=raw.map(x=>x.avg5);return raw.map(x=>{const avgNorm=minMax(x.avg5,avgs,true),score=mode==="odds"?x.form*.50+avgNorm*.25+x.ladder*.25:x.ladder*.35+x.form*.35+avgNorm*.30;return {...x,score}}).sort((a,b)=>b.score-a.score||b.avg5-a.avg5||a.name.localeCompare(b.name)).map((x,i)=>({...x,rank:i+1}))}
 function winningStreak(games){let n=0;for(let i=games.length-1;i>=0;i--){if(games[i].result===1)n++;else break}return n}
-function buildPlayerAverages(bundle,throughWeek=Infinity){const sums={},games={};matchupRows(bundle,throughWeek).forEach(row=>Object.entries(row.players_points||{}).forEach(([id,v])=>{const pts=Number(v);if(!Number.isFinite(pts)||pts<=0)return;sums[id]=(sums[id]||0)+pts;games[id]=(games[id]||0)+1}));return Object.fromEntries(Object.keys(sums).map(id=>[id,games[id]?sums[id]/games[id]:0]))}
+function calculatedPlayerAverages(bundle,throughWeek=Infinity){const sums={},games={};matchupRows(bundle,throughWeek).forEach(row=>Object.entries(row.players_points||{}).forEach(([id,v])=>{const pts=Number(v);if(!Number.isFinite(pts)||pts<=0)return;sums[id]=(sums[id]||0)+pts;games[id]=(games[id]||0)+1}));return Object.fromEntries(Object.keys(sums).map(id=>[id,games[id]?sums[id]/games[id]:0]))}
+function exactAverageMap(season){return state.exactSeasonAverages?.[String(season)]||{}}
+function gameLogAverageMap(season){return state.gameLogAverages?.[String(season)]||{}}
+function buildPlayerAverages(bundle,throughWeek=Infinity){const season=String(bundle?.league?.season||"");const calculated=calculatedPlayerAverages(bundle,throughWeek),exact=exactAverageMap(season),logs=gameLogAverageMap(season);return {...calculated,...exact,...logs}}
 function prepareModels(){state.modelBundle=selectModelBundle();const weeks=meaningfulWeeks(state.modelBundle),last=weeks.at(-1)||Infinity,prior=weeks.length>1?weeks.at(-2):last;state.previousPowerRanks=Object.fromEntries(modelRows(state.modelBundle,prior,"power").map(x=>[x.id,x.rank]));state.playerAverages=buildPlayerAverages(state.modelBundle,last)}
 function playerName(id){const p=state.players[id]||{};return p.full_name||[p.first_name,p.last_name].filter(Boolean).join(" ")||`Player ${id}`}
 function pickOriginalOwner(p,t){const owner=t.roster_owner_map?.[String(p.roster_id)];return owner?managerName(owner,t):null}
@@ -245,7 +248,7 @@ function renderVoting(){
 }
 
 function managerTrades(managerId){return state.trades.filter(t=>mids(t).includes(String(managerId)))}
-function seasonAverageMap(season){const bundle=bundleForSeason(season);if(!bundle)return{};const weeks=meaningfulWeeks(bundle);if(!weeks.length)return{};return buildPlayerAverages(bundle,weeks.at(-1))}
+function seasonAverageMap(season){const logs=gameLogAverageMap(season),exact=exactAverageMap(season),bundle=bundleForSeason(season);if(!bundle)return {...exact,...logs};if(!meaningfulWeeks(bundle).length)return {...exact,...logs};return buildPlayerAverages(bundle,meaningfulWeeks(bundle).at(-1))}
 function managerRosterPlayers(managerId,season=state.profileAverageSeason){
   const manager=state.managers.get(String(managerId)),ids=[...(manager?.roster?.players||[])],avgMap=seasonAverageMap(season);
   return ids.map(id=>{const p=state.players[id]||{},avg=Number(avgMap[id]||0);return{id:String(id),name:playerName(id),avg,position:p.position||p.fantasy_positions?.[0]||"—",age:Number(p.age)||null,avatar:`https://sleepercdn.com/content/nba/players/${id}.jpg`}}).sort((a,b)=>b.avg-a.avg||a.name.localeCompare(b.name))
@@ -332,8 +335,100 @@ function openManagerFromHash(){
 }
 
 function renderAll(){renderSummary();renderLeaderboard();renderPower();renderOdds();renderTradeWeek();renderHeatmap();renderPlayerForm();renderBlock();renderRecords();renderRecent();renderBiggestTrades();renderVoting()}
+
+function relevantPlayerIds(){
+  const ids=new Set();
+  state.bundles.forEach(bundle=>{
+    (bundle.rosters||[]).forEach(r=>(r.players||[]).forEach(id=>ids.add(String(id))));
+    (bundle.trades||[]).forEach(t=>{
+      Object.keys(t.adds||{}).forEach(id=>ids.add(String(id)));
+      Object.keys(t.drops||{}).forEach(id=>ids.add(String(id)));
+    });
+    Object.values(bundle.draftPickMap||{}).forEach(id=>ids.add(String(id)));
+  });
+  return [...ids].filter(id=>id&&id!=="0");
+}
+function gameLogRows(payload){
+  if(Array.isArray(payload))return payload;
+  for(const key of ["data","games","stats","items","rows"]){
+    if(Array.isArray(payload?.[key]))return payload[key];
+  }
+  if(payload&&typeof payload==="object"){
+    const values=Object.values(payload);
+    if(values.length&&values.every(v=>v&&typeof v==="object"))return values;
+  }
+  return [];
+}
+function numericValue(row,keys){
+  for(const key of keys){
+    const n=Number(row?.[key]);
+    if(Number.isFinite(n))return n;
+  }
+  return null;
+}
+function gameWasPlayed(row){
+  const minutes=numericValue(row,["min","mins","minutes","minutes_played"]);
+  if(minutes!==null)return minutes>0;
+  const status=String(row?.status||row?.game_status||"").toLowerCase();
+  return !(status.includes("dnp")||status.includes("inactive")||status.includes("did not play"));
+}
+function rawFantasyPoints(row,scoring){
+  const direct=numericValue(row,["fantasy_points","fantasy_pts","fpts","fp"]);
+  if(direct!==null)return direct;
+  let total=0,matched=false;
+  Object.entries(scoring||{}).forEach(([key,multiplier])=>{
+    if(key.startsWith("bonus_"))return;
+    const stat=numericValue(row,[key]);
+    const mult=Number(multiplier);
+    if(stat!==null&&Number.isFinite(mult)){total+=stat*mult;matched=true}
+  });
+  const pts=numericValue(row,["pts","points"]);
+  const reb=numericValue(row,["reb","rebounds"]);
+  const ast=numericValue(row,["ast","assists"]);
+  const stl=numericValue(row,["stl","steals"]);
+  const blk=numericValue(row,["blk","blocks"]);
+  const doubles=[pts,reb,ast,stl,blk].filter(v=>v!==null&&v>=10).length;
+  if(Number(scoring?.bonus_double_double)&&doubles>=2)total+=Number(scoring.bonus_double_double);
+  if(Number(scoring?.bonus_triple_double)&&doubles>=3)total+=Number(scoring.bonus_triple_double);
+  return matched?total:null;
+}
+async function loadPlayerGameLogAverage(playerId,season,scoring){
+  const url=`${CONFIG.statsApi}/${encodeURIComponent(playerId)}?season_type=regular&season=${encodeURIComponent(season)}&grouping=game`;
+  const payload=await getJSON(url,true);
+  const rows=gameLogRows(payload);
+  let points=0,games=0;
+  rows.forEach(row=>{
+    if(!gameWasPlayed(row))return;
+    const fpts=rawFantasyPoints(row,scoring);
+    if(!Number.isFinite(fpts))return;
+    points+=fpts;
+    games+=1;
+  });
+  return games?{average:points/games,points,games}:null;
+}
+async function loadGameLogAverages(){
+  const playerIds=relevantPlayerIds();
+  const bySeason={},meta={};
+  for(const bundle of state.bundles){
+    const season=String(bundle.league.season);
+    bySeason[season]={};
+    meta[season]={};
+    const scoring=bundle.league.scoring_settings||{};
+    const rows=await limitedMap(playerIds,8,async id=>{
+      const result=await loadPlayerGameLogAverage(id,season,scoring);
+      return result?{id,...result}:null;
+    });
+    rows.filter(Boolean).forEach(row=>{
+      bySeason[season][row.id]=row.average;
+      meta[season][row.id]={gamesPlayed:row.games,totalFantasyPoints:row.points,average:row.average};
+    });
+  }
+  state.gameLogAverages=bySeason;
+  state.gameLogMeta=meta;
+}
+
 async function loadSeason(id){const [league,users,rosters,drafts,tradedPicks,winnersBracket]=await Promise.all([getJSON(`${CONFIG.api}/league/${id}`,true),getJSON(`${CONFIG.api}/league/${id}/users`,true),getJSON(`${CONFIG.api}/league/${id}/rosters`,true),getJSON(`${CONFIG.api}/league/${id}/drafts`,true),getJSON(`${CONFIG.api}/league/${id}/traded_picks`,true),getJSON(`${CONFIG.api}/league/${id}/winners_bracket`,true)]);if(!league||!users||!rosters)return null;const draftPicks=(await Promise.all((drafts||[]).map(d=>getJSON(`${CONFIG.api}/draft/${d.draft_id}/picks`,true)))).flat().filter(Boolean);const draftPickMap={};draftPicks.forEach(p=>{if(p.player_id==null||p.round==null)return;[p.roster_id,p.draft_slot,p.picked_by].filter(x=>x!=null).forEach(key=>draftPickMap[`${league.season}|${key}|${p.round}`]=String(p.player_id))});const ownerByRoster={},userById=Object.fromEntries(users.map(u=>[String(u.user_id),u])),managerNameMap={};rosters.forEach(r=>{if(r.owner_id!=null){ownerByRoster[String(r.roster_id)]=String(r.owner_id);const u=userById[String(r.owner_id)]||{};managerNameMap[String(r.owner_id)]=u.metadata?.team_name||u.display_name||`Team ${r.roster_id}`}});const rounds=Array.from({length:CONFIG.roundsToCheck},(_,i)=>i+1),weeks=await limitedMap(rounds,8,async wk=>{const [tx,match]=await Promise.all([getJSON(`${CONFIG.api}/league/${id}/transactions/${wk}`,true),getJSON(`${CONFIG.api}/league/${id}/matchups/${wk}`,true)]);const trades=(tx||[]).filter(t=>t.type==='trade'&&(!t.status||t.status==='complete')).map(t=>{const participantRosters=new Set((t.roster_ids||[]).map(String));if(!participantRosters.size){Object.values(t.adds||{}).forEach(x=>participantRosters.add(String(x)));Object.values(t.drops||{}).forEach(x=>participantRosters.add(String(x)));(t.draft_picks||[]).forEach(p=>{if(p.owner_id!=null)participantRosters.add(String(p.owner_id));if(p.previous_owner_id!=null)participantRosters.add(String(p.previous_owner_id))})}return {...t,manager_ids:[...participantRosters].map(r=>ownerByRoster[r]).filter(Boolean),roster_owner_map:ownerByRoster,manager_name_map:managerNameMap,season_label:`${league.season} season`,league_id:id}});return{trades,matchups:(match||[]).map(x=>({...x,week:wk}))}});return{league,users,rosters,ownerByRoster,draftPickMap,tradedPicks:tradedPicks||[],winnersBracket:winnersBracket||[],trades:weeks.flatMap(x=>x?.trades||[]),matchups:weeks.flatMap(x=>x?.matchups||[])}}
-async function load(){$("refreshBtn").disabled=true;$("statusText").textContent='Connecting to Sleeper…';try{const [bundles,players]=await Promise.all([Promise.all(CONFIG.leagueIds.map(loadSeason)),getJSON(`${CONFIG.api}/players/nba`,true)]),valid=bundles.filter(Boolean),cur=valid.find(x=>String(x.league.league_id)===CONFIG.currentLeagueId)||valid[0];state.bundles=valid;state.league=cur.league;state.currentUsers=cur.users;state.currentRosters=cur.rosters;state.players=players||{};state.draftPickMap=Object.assign({},...valid.map(b=>b.draftPickMap||{}));buildManagers();const unique=new Map();valid.flatMap(x=>x.trades).forEach(t=>unique.set(t.transaction_id||`${t.league_id}-${t.created}`,t));state.trades=[...unique.values()].sort((a,b)=>(b.created||0)-(a.created||0));prepareModels();renderAll();$("statusText").textContent=`Live · ${valid.length} seasons loaded · model: ${state.modelBundle?.league?.season||'current'}`}catch(e){console.error(e);$("statusText").textContent='Could not load Sleeper data'}finally{$("refreshBtn").disabled=false}}
+async function load(){$("refreshBtn").disabled=true;$("statusText").textContent='Connecting to Sleeper…';try{const [bundles,players,exactAverages]=await Promise.all([Promise.all(CONFIG.leagueIds.map(loadSeason)),getJSON(`${CONFIG.api}/players/nba`,true),getJSON(`season-averages.json`,true)]),valid=bundles.filter(Boolean),cur=valid.find(x=>String(x.league.league_id)===CONFIG.currentLeagueId)||valid[0];state.exactSeasonAverages=exactAverages||{};state.bundles=valid;state.league=cur.league;state.currentUsers=cur.users;state.currentRosters=cur.rosters;state.players=players||{};state.draftPickMap=Object.assign({},...valid.map(b=>b.draftPickMap||{}));$("statusText").textContent='Loading individual Sleeper game logs…';await loadGameLogAverages();buildManagers();const unique=new Map();valid.flatMap(x=>x.trades).forEach(t=>unique.set(t.transaction_id||`${t.league_id}-${t.created}`,t));state.trades=[...unique.values()].sort((a,b)=>(b.created||0)-(a.created||0));prepareModels();renderAll();const gameCount=Object.values(state.gameLogMeta).reduce((sum,season)=>sum+Object.keys(season||{}).length,0);$("statusText").textContent=`Live · ${valid.length} seasons loaded · ${gameCount} player game-log averages`}catch(e){console.error(e);$("statusText").textContent='Could not load Sleeper data'}finally{$("refreshBtn").disabled=false}}
 document.querySelectorAll('.window-btn').forEach(b=>b.addEventListener('click',()=>{state.selectedWindow=b.dataset.window;document.querySelectorAll('.window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary()}));document.querySelectorAll('.active-window-btn').forEach(b=>b.addEventListener('click',()=>{state.activeWindow=b.dataset.activeWindow;document.querySelectorAll('.active-window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary();renderLeaderboard()}));$("refreshBtn").addEventListener('click',load);$("heatmapToggle").addEventListener('click',()=>{state.heatmapExpanded=!state.heatmapExpanded;renderHeatmap()});$("biggestTradesToggle").addEventListener('click',()=>{state.biggestTradesExpanded=!state.biggestTradesExpanded;renderBiggestTrades()});
 document.addEventListener("click",e=>{const seasonBtn=e.target.closest("[data-profile-season]");if(seasonBtn){state.profileAverageSeason=seasonBtn.dataset.profileSeason;const id=$("managerProfileModal")?.dataset.managerId;if(id)$("managerProfileContent").innerHTML=managerProfileHTML(id);return}const link=e.target.closest(".manager-profile-link");if(link){openManagerProfile(link.dataset.managerId);return}if(e.target.closest("[data-close-manager-profile]")||e.target.closest("#managerProfileClose"))closeManagerProfile()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("managerProfileModal")?.classList.contains("open"))closeManagerProfile()});
