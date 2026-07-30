@@ -244,3 +244,35 @@ header{padding:28px 20px!important}.v2-header-tools{display:flex;justify-content
 .rankings-duo .odds-panel-full{position:static;max-height:none;overflow:visible}.rankings-duo .odds-panel-full .odds-list{display:flex;flex-direction:column;gap:8px;overflow:visible;padding:0}.rankings-duo .odds-row-wrap{margin:0;border-radius:12px}.rankings-duo .odds-summary{grid-template-columns:34px minmax(0,1fr) auto;min-height:62px;padding:10px 12px}.rankings-duo .odds-summary>b{font-size:20px;color:var(--green);text-align:center}.rankings-duo .odds-price-stack{min-width:118px}.rankings-duo .odds-price-stack .odds{font-size:18px}.rankings-duo .odds-price-stack .odds-move{font-size:8px}.rankings-duo .odds-detail{padding-left:56px}.rankings-duo .disclaimer{min-height:30px;margin:0 0 10px;font-size:9px;line-height:1.45}
 @media(max-width:900px){.rankings-duo{grid-template-columns:1fr}.rankings-duo>.panel{height:auto}.v22-brand-copy p{white-space:normal}.v22-header{align-items:flex-start}.v22-header-actions{max-width:48%}}
 @media(max-width:600px){.v22-header{padding:10px 12px!important}.v22-header-actions #statusText{display:none}.v22-brand-copy p{display:none}.v22-header-actions{max-width:none;gap:6px}.v2-manager-btn,.refresh-btn{padding:8px 10px;font-size:9px}.rankings-duo .power-row{grid-template-columns:30px 34px minmax(0,1fr) auto}.rankings-duo .odds-summary{grid-template-columns:30px minmax(0,1fr) auto}.rankings-duo .odds-price-stack{min-width:96px}.rankings-duo .odds-price-stack .odds-move{max-width:96px;white-space:normal}}
+
+/* ===== IMO DYNASTY V2.3: manager navigation + compact profiles ===== */
+.manager-directory-modal{display:none;position:fixed;inset:0;z-index:1200}
+.manager-directory-modal.open{display:block}
+.manager-directory-backdrop{position:absolute;inset:0;background:rgba(2,5,9,.78);backdrop-filter:blur(10px)}
+.manager-directory-sheet{position:relative;width:min(620px,calc(100% - 28px));max-height:calc(100vh - 48px);overflow:auto;margin:24px auto;padding:26px;border:1px solid var(--line);border-radius:22px;background:linear-gradient(180deg,#101722,#080d15);box-shadow:0 28px 80px rgba(0,0,0,.55)}
+.manager-directory-close{position:absolute;right:16px;top:14px;width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:#0a1018;color:var(--text);font-size:22px;cursor:pointer}
+.manager-directory-heading{padding-right:46px;margin-bottom:18px}.manager-directory-heading h2{margin:4px 0 7px;font-size:32px}.manager-directory-heading p{margin:0;color:var(--muted)}
+.manager-directory-list{display:grid;gap:8px}
+.manager-directory-item{width:100%;display:grid;grid-template-columns:38px 44px minmax(0,1fr) 24px;align-items:center;gap:11px;padding:11px 13px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.025);color:var(--text);text-align:left;cursor:pointer;transition:.18s ease}
+.manager-directory-item:hover{transform:translateY(-1px);border-color:rgba(140,114,255,.55);background:rgba(140,114,255,.08)}
+.manager-directory-rank{font-weight:900;color:var(--green)}
+.manager-directory-avatar{width:42px;height:42px;display:grid;place-items:center;overflow:hidden;border-radius:12px;background:#151d2a;font-weight:900}.manager-directory-avatar img{width:100%;height:100%;object-fit:cover}
+.manager-directory-copy{display:grid;gap:2px}.manager-directory-copy strong{font-size:13px}.manager-directory-copy small{font-size:9px;color:var(--muted)}.manager-directory-arrow{font-size:18px;color:var(--muted)}
+.manager-directory-open{overflow:hidden}
+
+.manager-profile-content{padding:24px}
+.manager-profile-hero{gap:14px;padding:2px 48px 16px 0}
+.manager-profile-hero h2{font-size:clamp(30px,4vw,52px)}
+.manager-profile-avatar{width:66px;height:66px;flex-basis:66px;border-radius:17px}
+.manager-profile-stat-grid{gap:7px;margin-bottom:10px}.manager-profile-stat-grid>div{padding:11px}.manager-profile-stat-grid strong{font-size:19px;margin-top:3px}
+.manager-profile-grid{gap:9px}.manager-profile-card{padding:13px}.manager-profile-card-heading{margin-bottom:8px}.manager-profile-card-heading h3{font-size:17px}.manager-profile-card .eyebrow{font-size:7px}
+.profile-form-strip{margin:9px 0 2px;gap:6px}.profile-form-pill{width:33px;height:33px}.profile-help{margin:5px 0 0}
+.profile-partner-list,.eligible-player-list{gap:5px}.profile-partner-row,.eligible-player,.profile-record-row,.profile-form-player{padding:8px;border-radius:9px}
+.profile-roster-row{padding:8px 0!important}.profile-trades-list{gap:6px!important}.profile-trade-card summary{padding:9px!important}.profile-trade-card .trade-detail-body{padding:9px!important}
+.profile-badge-pop>div,.profile-form-result>div{box-shadow:0 16px 42px rgba(0,0,0,.6)}
+.profile-badge-pop[open] summary,.profile-form-result[open] summary{outline:2px solid rgba(140,114,255,.38);outline-offset:2px}
+@media(max-width:620px){.manager-directory-sheet{width:100%;max-height:100vh;height:100vh;margin:0;border-radius:0;padding:22px 14px}.manager-profile-content{padding:18px 12px 28px}.manager-profile-card{padding:11px}.manager-profile-stat-grid{gap:6px}}
+
+/* V2.3.1 cache-busted rebuild */
+footer span{display:flex;align-items:center;gap:6px}
+#managerDirectoryBtn{white-space:nowrap}
