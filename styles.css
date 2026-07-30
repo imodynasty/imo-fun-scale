@@ -359,3 +359,23 @@ footer span{display:flex;align-items:center;gap:6px}
 .profile-h2h-row.winning strong{color:var(--green)}
 .profile-h2h-row.losing strong{color:#ff5f67}
 .profile-h2h-row.even strong{color:var(--yellow)}
+
+/* V2.6.4 rankings intelligence + profile trends */
+.power-market-stack{display:flex;flex-direction:column;align-items:flex-end;gap:3px;min-width:80px}
+.market-tag{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:3px 7px;font-size:7px;font-weight:950;letter-spacing:.08em;text-transform:uppercase;line-height:1}
+.favourite-tag{color:#171006;background:linear-gradient(135deg,#ffe28a,#dcae31);border:1px solid rgba(255,226,138,.8);box-shadow:0 0 15px rgba(255,209,102,.18)}
+.smokey-tag{color:#e8ddff;background:rgba(140,114,255,.16);border:1px solid rgba(140,114,255,.58)}
+.power-detail{grid-template-columns:repeat(5,minmax(0,1fr))}
+.luck-rating.lucky{color:var(--green)}.luck-rating.unlucky{color:#ff7c89}.luck-rating.neutral{color:var(--yellow)}
+.profile-power-trend-card{grid-column:1/-1}
+.profile-sparkline-wrap{border:1px solid var(--line);border-radius:13px;background:rgba(5,9,14,.52);padding:12px}
+.profile-sparkline{display:block;width:100%;height:auto;overflow:visible}
+.profile-sparkline line{stroke:rgba(146,157,175,.32);stroke-width:1}
+.profile-sparkline polyline{fill:none;stroke:var(--green);stroke-width:4;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 6px rgba(56,224,126,.3))}
+.profile-sparkline circle{fill:#07100b;stroke:var(--green);stroke-width:3}
+.profile-sparkline text{fill:var(--muted);font-size:10px;font-weight:800}
+.profile-sparkline-summary{display:flex;justify-content:space-between;gap:12px;align-items:center;padding-top:8px;color:var(--muted);font-size:9px}
+.profile-sparkline-summary strong{color:var(--green);font-size:11px}
+.profile-partner-row span{white-space:nowrap}
+@media(max-width:900px){.power-detail{grid-template-columns:1fr 1fr}.profile-sparkline-summary{flex-wrap:wrap}}
+@media(max-width:650px){.power-market-stack{min-width:64px}.market-tag{font-size:6px;padding:3px 5px}.profile-sparkline-wrap{overflow-x:auto}.profile-sparkline{min-width:620px}.profile-sparkline-summary{min-width:620px}}
