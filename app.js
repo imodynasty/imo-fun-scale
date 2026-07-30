@@ -1,15 +1,20 @@
 
 const CONFIG = {
-  leagueId: "1341763186407276544",
+  currentLeagueId: "1341763186407276544",
+  leagueIds: [
+    "1341763186407276544", // Current season
+    "1212553673821929472", // 2025/26
+    "1138349648558624768"  // 2024/25
+  ],
   api: "https://api.sleeper.app/v1",
   roundsToCheck: 60
 };
 
 const state = {
   league: null,
-  users: [],
-  rosters: [],
-  teams: new Map(),
+  currentUsers: [],
+  currentRosters: [],
+  managers: new Map(),
   trades: [],
   selectedWindow: "14",
   charts: {}
@@ -41,34 +46,29 @@ async function limitedMap(items, limit, worker) {
   return output;
 }
 
-function buildTeams() {
-  const usersById = Object.fromEntries(state.users.map(u => [u.user_id, u]));
-  state.teams.clear();
+function buildCurrentManagers() {
+  const usersById = Object.fromEntries(state.currentUsers.map(u => [u.user_id, u]));
+  state.managers.clear();
 
-  state.rosters.forEach(roster => {
+  state.currentRosters.forEach(roster => {
     const user = usersById[roster.owner_id] || {};
     const name = user.metadata?.team_name || user.display_name || `Team ${roster.roster_id}`;
-    state.teams.set(String(roster.roster_id), {
-      id: String(roster.roster_id),
+
+    state.managers.set(String(roster.owner_id), {
+      id: String(roster.owner_id),
       name,
       initials: name.split(/\s+/).slice(0,2).map(x => x[0]).join("").toUpperCase()
     });
   });
 }
 
-function teamName(id) {
-  return state.teams.get(String(id))?.name || `Team ${id}`;
+function managerName(id) {
+  return state.managers.get(String(id))?.name || "Former manager";
 }
 
-function involvedTeamIds(trade) {
-  const ids = new Set((trade.roster_ids || []).map(String));
-  Object.values(trade.adds || {}).forEach(id => ids.add(String(id)));
-  Object.values(trade.drops || {}).forEach(id => ids.add(String(id)));
-  (trade.draft_picks || []).forEach(pick => {
-    if (pick.owner_id != null) ids.add(String(pick.owner_id));
-    if (pick.previous_owner_id != null) ids.add(String(pick.previous_owner_id));
-  });
-  return [...ids].filter(id => state.teams.has(id));
+function involvedManagerIds(trade) {
+  return [...new Set((trade.manager_ids || []).map(String))]
+    .filter(id => state.managers.has(id));
 }
 
 function cutoffDays(days) {
@@ -82,17 +82,19 @@ function tradesForWindow(windowKey) {
 }
 
 function countsForWindow(windowKey) {
-  const counts = Object.fromEntries([...state.teams.keys()].map(id => [id, 0]));
+  const counts = Object.fromEntries([...state.managers.keys()].map(id => [id, 0]));
+
   tradesForWindow(windowKey).forEach(trade => {
-    involvedTeamIds(trade).forEach(id => counts[id]++);
+    involvedManagerIds(trade).forEach(id => counts[id]++);
   });
+
   return counts;
 }
 
 function ranked(windowKey) {
   const counts = countsForWindow(windowKey);
-  return [...state.teams.values()]
-    .map(team => ({...team, count: counts[team.id] || 0}))
+  return [...state.managers.values()]
+    .map(manager => ({...manager, count: counts[manager.id] || 0}))
     .sort((a,b) => b.count - a.count || a.name.localeCompare(b.name));
 }
 
@@ -113,9 +115,15 @@ function renderSummary() {
   const leader = ranking[0];
 
   $("leagueTrades").textContent = windowTrades.length;
-  $("leagueTradesLabel").textContent = windowKey === "all" ? "Complete available history" : `Last ${windowKey} days`;
+  $("leagueTradesLabel").textContent = windowKey === "all"
+    ? `${CONFIG.leagueIds.length} IMO seasons combined`
+    : `Last ${windowKey} days`;
+
   $("activeTeams").textContent = active;
-  $("averageTrades").textContent = state.teams.size ? (participationTotal / state.teams.size).toFixed(1) : "0.0";
+  $("averageTrades").textContent = state.managers.size
+    ? (participationTotal / state.managers.size).toFixed(1)
+    : "0.0";
+
   $("rankingWindow").textContent = WINDOW_LABELS[windowKey];
   $("leaderWindow").textContent = WINDOW_LABELS[windowKey];
 
@@ -126,8 +134,13 @@ function renderSummary() {
   }
 
   const latest = state.trades[0];
-  $("latestTradeShort").textContent = latest ? involvedTeamIds(latest).length + "-team" : "—";
-  $("latestTradeDate").textContent = latest ? formatDate(latest.created) : "No trade loaded";
+  $("latestTradeShort").textContent = latest
+    ? involvedManagerIds(latest).length + "-team"
+    : "—";
+
+  $("latestTradeDate").textContent = latest
+    ? formatDate(latest.created)
+    : "No trade loaded";
 }
 
 function renderLeaderboard() {
@@ -239,11 +252,13 @@ function startOfWeek(timestamp) {
 function renderWeekly() {
   const nowWeek = startOfWeek(Date.now());
   const weeks = [];
+
   for (let i=12;i>=0;i--) {
     const d = new Date(nowWeek);
     d.setDate(d.getDate() - i * 7);
     weeks.push({start:d.getTime(), label:formatDate(d.getTime(), true), count:0});
   }
+
   state.trades.forEach(trade => {
     const week = startOfWeek(Number(trade.created || 0)).getTime();
     const target = weeks.find(w => w.start === week);
@@ -274,13 +289,19 @@ function renderScorecard() {
   const windows = ["14","28","90","all"];
   const allCounts = Object.fromEntries(windows.map(w => [w, countsForWindow(w)]));
   const current = ranked(state.selectedWindow);
-  const maxes = Object.fromEntries(windows.map(w => [w, Math.max(...Object.values(allCounts[w]),0)]));
+  const maxes = Object.fromEntries(
+    windows.map(w => [w, Math.max(...Object.values(allCounts[w]),0)])
+  );
 
   $("scorecardBody").innerHTML = current.map((team,i) => `
     <tr>
       <td>${i+1}</td>
       <td class="table-team">${escapeHTML(team.name)}</td>
-      ${windows.map(w => `<td class="${allCounts[w][team.id] === maxes[w] && maxes[w] > 0 ? "top-value" : ""}">${allCounts[w][team.id] || 0}</td>`).join("")}
+      ${windows.map(w => `
+        <td class="${allCounts[w][team.id] === maxes[w] && maxes[w] > 0 ? "top-value" : ""}">
+          ${allCounts[w][team.id] || 0}
+        </td>
+      `).join("")}
     </tr>
   `).join("");
 }
@@ -288,13 +309,15 @@ function renderScorecard() {
 function renderRecentTrades() {
   const recent = state.trades.slice(0, 8);
   $("recentTrades").classList.remove("loading");
+
   $("recentTrades").innerHTML = recent.length ? recent.map(trade => {
-    const teams = involvedTeamIds(trade).map(teamName);
+    const teams = involvedManagerIds(trade).map(managerName);
     const playerMoves = Object.keys(trade.adds || {}).length;
     const picks = (trade.draft_picks || []).length;
+
     return `
       <article class="trade-card">
-        <div class="trade-date">${formatDate(trade.created)}</div>
+        <div class="trade-date">${formatDate(trade.created)} · ${escapeHTML(trade.season_label || "")}</div>
         <div class="trade-teams">${teams.map(escapeHTML).join(" ↔ ") || "Teams unavailable"}</div>
         <div class="trade-meta">${playerMoves} player move${playerMoves===1?"":"s"} · ${picks} draft pick${picks===1?"":"s"}</div>
       </article>
@@ -304,8 +327,10 @@ function renderRecentTrades() {
 
 function escapeHTML(value) {
   return String(value ?? "")
-    .replaceAll("&","&amp;").replaceAll("<","&lt;")
-    .replaceAll(">","&gt;").replaceAll('"',"&quot;")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
     .replaceAll("'","&#039;");
 }
 
@@ -319,21 +344,67 @@ function renderAll() {
   renderRecentTrades();
 }
 
-async function loadTrades() {
-  const rounds = Array.from({length:CONFIG.roundsToCheck},(_,i)=>i+1);
-  const batches = await limitedMap(rounds, 6, async round => {
-    const items = await getJSON(`${CONFIG.api}/league/${CONFIG.leagueId}/transactions/${round}`, true);
-    return (items || [])
-      .filter(t => t.type === "trade" && (!t.status || t.status === "complete"))
-      .map(t => ({...t,_round:round}));
+function seasonLabel(league, fallbackId) {
+  if (league?.season) return `${league.season} season`;
+  return fallbackId;
+}
+
+async function loadSeasonBundle(leagueId) {
+  const [league, users, rosters] = await Promise.all([
+    getJSON(`${CONFIG.api}/league/${leagueId}`, true),
+    getJSON(`${CONFIG.api}/league/${leagueId}/users`, true),
+    getJSON(`${CONFIG.api}/league/${leagueId}/rosters`, true)
+  ]);
+
+  if (!league || !users || !rosters) return null;
+
+  const ownerByRoster = {};
+  rosters.forEach(roster => {
+    if (roster.owner_id != null) {
+      ownerByRoster[String(roster.roster_id)] = String(roster.owner_id);
+    }
   });
 
-  const unique = new Map();
-  batches.flat().forEach(t => {
-    const key = t.transaction_id || `${t.created}-${JSON.stringify(t.roster_ids || [])}`;
-    unique.set(key,t);
+  const rounds = Array.from({length:CONFIG.roundsToCheck},(_,i)=>i+1);
+  const batches = await limitedMap(rounds, 6, async round => {
+    const items = await getJSON(
+      `${CONFIG.api}/league/${leagueId}/transactions/${round}`,
+      true
+    );
+
+    return (items || [])
+      .filter(t => t.type === "trade" && (!t.status || t.status === "complete"))
+      .map(t => {
+        const rosterIds = new Set((t.roster_ids || []).map(String));
+
+        Object.values(t.adds || {}).forEach(id => rosterIds.add(String(id)));
+        Object.values(t.drops || {}).forEach(id => rosterIds.add(String(id)));
+
+        (t.draft_picks || []).forEach(pick => {
+          if (pick.owner_id != null) rosterIds.add(String(pick.owner_id));
+          if (pick.previous_owner_id != null) rosterIds.add(String(pick.previous_owner_id));
+        });
+
+        const managerIds = [...rosterIds]
+          .map(rosterId => ownerByRoster[rosterId])
+          .filter(Boolean);
+
+        return {
+          ...t,
+          manager_ids: [...new Set(managerIds)],
+          season_label: seasonLabel(league, leagueId),
+          league_id: leagueId,
+          _round: round
+        };
+      });
   });
-  return [...unique.values()].sort((a,b)=>(b.created||0)-(a.created||0));
+
+  return {
+    league,
+    users,
+    rosters,
+    trades: batches.flat()
+  };
 }
 
 async function loadData() {
@@ -342,27 +413,53 @@ async function loadData() {
   $("refreshBtn").disabled = true;
 
   try {
-    const [league,users,rosters] = await Promise.all([
-      getJSON(`${CONFIG.api}/league/${CONFIG.leagueId}`),
-      getJSON(`${CONFIG.api}/league/${CONFIG.leagueId}/users`),
-      getJSON(`${CONFIG.api}/league/${CONFIG.leagueId}/rosters`)
-    ]);
+    const bundles = await Promise.all(
+      CONFIG.leagueIds.map(loadSeasonBundle)
+    );
 
-    state.league = league;
-    state.users = users || [];
-    state.rosters = rosters || [];
-    buildTeams();
-    state.trades = await loadTrades();
+    const validBundles = bundles.filter(Boolean);
+    if (!validBundles.length) {
+      throw new Error("No league seasons could be loaded");
+    }
+
+    const current = validBundles.find(
+      bundle => String(bundle.league.league_id) === CONFIG.currentLeagueId
+    ) || validBundles[0];
+
+    state.league = current.league;
+    state.currentUsers = current.users;
+    state.currentRosters = current.rosters;
+    buildCurrentManagers();
+
+    const unique = new Map();
+
+    validBundles.flatMap(bundle => bundle.trades).forEach(trade => {
+      const key = trade.transaction_id ||
+        `${trade.league_id}-${trade.created}-${JSON.stringify(trade.roster_ids || [])}`;
+      unique.set(key, trade);
+    });
+
+    state.trades = [...unique.values()]
+      .sort((a,b)=>(b.created||0)-(a.created||0));
 
     renderAll();
-    $("statusText").textContent = `Live data loaded · ${formatDate(Date.now())}`;
+
+    $("statusText").textContent =
+      `Live data loaded · ${validBundles.length} IMO seasons · ${formatDate(Date.now())}`;
     $("statusDot").className = "status-dot ok";
+
   } catch (error) {
     console.error(error);
-    $("statusText").textContent = `Could not load Sleeper data: ${error.message}`;
+    $("statusText").textContent =
+      `Could not load Sleeper data: ${error.message}`;
     $("statusDot").className = "status-dot bad";
-    $("leaderboard").innerHTML = `<div class="empty">The league could not be loaded. Confirm it is accessible and refresh.</div>`;
-    $("recentTrades").innerHTML = `<div class="empty">No data available.</div>`;
+
+    $("leaderboard").innerHTML =
+      `<div class="empty">The league could not be loaded. Confirm the season IDs and refresh.</div>`;
+
+    $("recentTrades").innerHTML =
+      `<div class="empty">No data available.</div>`;
+
   } finally {
     $("refreshBtn").disabled = false;
   }
@@ -371,7 +468,11 @@ async function loadData() {
 document.querySelectorAll(".window-btn").forEach(button => {
   button.addEventListener("click", () => {
     state.selectedWindow = button.dataset.window;
-    document.querySelectorAll(".window-btn").forEach(b => b.classList.toggle("active", b === button));
+
+    document.querySelectorAll(".window-btn").forEach(b =>
+      b.classList.toggle("active", b === button)
+    );
+
     renderSummary();
     renderLeaderboard();
     renderDonut();
