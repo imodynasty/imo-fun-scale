@@ -2,35 +2,39 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#080a10"><link rel="icon" href="data:,"><title>IMO DYNASTY</title>
-<link rel="preconnect" href="https://cdn.jsdelivr.net"><link rel="stylesheet" href="styles.css?v=2.5.2-fixed">
+<link rel="preconnect" href="https://cdn.jsdelivr.net"><link rel="stylesheet" href="styles.css?v=2.6.0">
 </head><body><div class="noise"></div>
-<header class="site-header v22-header">
-  <div class="brand v22-brand">
-    <div class="logo">IMO</div>
-    <div class="v22-brand-copy"><span class="eyebrow">LIVE LEAGUE HQ</span><h1>IMO DYNASTY</h1><p>Your home for all things IMO Dynasty</p></div>
+<header class="site-header v26-header">
+  <div class="brand v26-brand">
+    <div class="logo v26-logo">IMO</div>
+    <div class="v26-brand-copy"><span class="eyebrow">LIVE LEAGUE HQ</span><h1>IMO DYNASTY</h1><p>Your home for all things IMO Dynasty</p></div>
   </div>
-  <div class="header-actions v22-header-actions">
+  <div class="header-actions v26-header-actions">
     <span id="statusText">Connecting…</span>
-    <button id="managerDirectoryBtn" class="v2-manager-btn" type="button">Manager Profiles</button>
+    <button id="managerDirectoryBtn" class="v26-manager-btn" type="button">Manager Profiles</button>
     <button id="refreshBtn" class="refresh-btn">Refresh</button>
   </div>
 </header>
 <main>
-<section class="topbar v22-hero"><div><span class="hero-tag">YOUR LEAGUE. YOUR HISTORY.</span><h2>IMO <em>DYNASTY</em></h2><p>Power rankings, championship odds, trades and league history — updated live from Sleeper.</p></div><article class="mini-winner"><span>MOST ACTIVE GM</span><strong id="leaderName">Loading…</strong><small><b id="leaderTrades">—</b> trades · <span id="leaderWindow">14 days</span></small></article></section>
 
 <section class="window-nav"><button class="window-btn active" data-window="14">14 DAYS</button><button class="window-btn" data-window="28">28 DAYS</button><button class="window-btn" data-window="season">2026 SEASON</button><button class="window-btn" data-window="all">ALL TIME</button></section>
 
-<section class="summary-grid summary-grid-three"><article class="metric"><span>League trades</span><strong id="leagueTrades">—</strong><small id="leagueTradesLabel">Last 14 days</small></article><article class="metric"><span>Average trades per week</span><strong id="averageTrades">—</strong><small>League-wide completed trades</small></article><article class="metric latest-trade-metric"><span>Latest trade</span><strong id="latestTradeShort">—</strong><small id="latestTradeDate">Loading…</small></article></section>
+<section class="summary-grid v26-summary-grid">
+<article class="metric"><span>League trades</span><strong id="leagueTrades">—</strong><small id="leagueTradesLabel">Last 14 days</small></article>
+<article class="metric"><span>Average trades per week</span><strong id="averageTrades">—</strong><small>League-wide completed trades</small></article>
+<article class="metric latest-trade-metric"><span>Latest trade</span><strong id="latestTradeShort">—</strong><small id="latestTradeDate">Loading…</small></article>
+<article class="metric most-active-metric"><span>Most Active GM</span><button id="leaderName" class="inline-manager-link" type="button">Loading…</button><small><b id="leaderTrades">—</b> trades · <span id="leaderWindow">14 days</span></small></article>
+</section>
 
 <div class="content-shell"><div class="main-column">
-<section class="rankings-duo"><section class="panel power-rankings-hero"><div class="panel-heading"><div><span class="eyebrow">🏛️ THE HOLY GRAIL</span><h3>Power Rankings</h3><p class="power-rankings-intro">Click any manager to open their complete franchise profile.</p></div><span class="period-pill">Live estimate</span></div><div id="powerRankings" class="rank-list power-rankings-grid loading">Calculating…</div></section><section class="panel odds-panel odds-panel-full"><div class="panel-heading"><div><span class="eyebrow">🏆 IMO PREDICTOR</span><h3>Championship Odds</h3></div><span class="period-pill">Live estimate</span></div><p class="disclaimer">Priced from five-game form, recent scoring and ladder position. Analytical estimates only.</p><div id="championshipOdds" class="odds-list loading">Calculating odds…</div></section></section>
+<section class="panel power-rankings-hero v26-power-panel"><div class="panel-heading"><div><span class="eyebrow">🏛️ THE HOLY GRAIL</span><h3>Power Rankings</h3><p class="power-rankings-intro">Ranked by power score. Championship odds and form details are built into each row.</p></div><span class="period-pill">Live estimate</span></div><div id="powerRankings" class="rank-list power-rankings-grid loading">Calculating…</div></section>
 <section class="panel trade-week"><div class="panel-heading"><div><span class="eyebrow">🔥 FEATURED MOVE</span><h3>Trade of the Week</h3></div><span class="period-pill">Weekly standout</span></div><div id="tradeOfWeek" class="loading">Analysing this week's trades…</div></section>
 
 
 
 <section class="panel leaderboard-panel"><div class="panel-heading active-heading"><div><span class="eyebrow">🥇 THE RANKING</span><h3>Most Active GM</h3></div></div><div class="active-window-nav" aria-label="Most Active GM timeframe"><button class="active-window-btn active" data-active-window="14">14 days</button><button class="active-window-btn" data-active-window="28">28 days</button><button class="active-window-btn" data-active-window="season">2026 season</button><button class="active-window-btn" data-active-window="all">All time</button></div><div id="leaderboard" class="leaderboard loading">Loading teams…</div></section>
 
-<section class="panel heatmap-panel"><div class="panel-heading"><div><span class="eyebrow">🤝 CONNECTIONS</span><h3>Trade Partner Heatmap</h3></div><button id="heatmapToggle" class="small-button" type="button">Show top 30</button></div><div id="tradeHeatmap" class="heatmap-wrap loading">Building heatmap…</div></section>
+<section class="panel heatmap-panel"><div class="panel-heading"><div><span class="eyebrow">🤝 CONNECTIONS</span><h3>Favourite Trade Partners</h3></div><span class="period-pill">Top 8</span></div><div id="tradeHeatmap" class="heatmap-wrap loading">Building heatmap…</div></section>
 
 
 <section class="dashboard-grid">
@@ -106,5 +110,5 @@
     <div id="playerHistoryContent" class="player-history-content"></div>
   </section>
 </div>
-<footer><strong>IMO DYNASTY</strong><span>Independent league dashboard · V2.5.2 FIXED · Not affiliated with Sleeper</span></footer>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script><script src="app.js?v=2.5.2-fixed"></script></body></html>
+<footer><strong>IMO DYNASTY</strong><span>Independent league dashboard · V2.6.0 · Not affiliated with Sleeper</span></footer>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script><script src="app.js?v=2.6.0"></script></body></html>
