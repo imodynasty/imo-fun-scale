@@ -292,11 +292,27 @@ footer span{display:flex;align-items:center;gap:6px}
 @media(max-width:780px){.v24-partner-grid{grid-template-columns:1fr}.player-history-sheet{inset:0;border-radius:0}.player-history-content{padding:20px 13px 30px}.player-history-hero{align-items:flex-start}.player-history-avatar{width:58px;height:58px;flex-basis:58px}.player-history-trade>summary{grid-template-columns:28px minmax(0,1fr)}.player-history-view{display:none}}
 
 
-/* ===== IMO DYNASTY V2.5 ===== */
-.league-power-hero{padding:20px;background:linear-gradient(145deg,rgba(140,114,255,.11),rgba(16,21,31,.98) 35%)}
-.league-power-hero .panel-heading{margin-bottom:12px}.league-power-hero .power-rankings-intro{margin:6px 0 0;color:var(--muted);font-size:10px;line-height:1.45}
-.mega-power-list{display:flex;flex-direction:column;gap:8px}.mega-power-row{display:grid;grid-template-columns:minmax(0,1fr) 48px;border:1px solid rgba(38,48,66,.82);border-radius:14px;background:#0a0e15;overflow:hidden;transition:border-color .18s ease,transform .18s ease}.mega-power-row:hover{border-color:rgba(140,114,255,.55);transform:translateY(-1px)}
-.mega-power-main{appearance:none;border:0;background:transparent;color:inherit;display:grid;grid-template-columns:42px 40px minmax(0,1fr) auto;align-items:center;gap:11px;width:100%;padding:11px 14px;cursor:pointer;text-align:left}.mega-power-rank{font-size:23px;color:var(--rank-colour,var(--green));text-align:center}.mega-power-team{min-width:0}.mega-power-team strong{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mega-power-team small{display:block;color:var(--muted);font-size:8px;margin-top:3px}.mega-power-odds{text-align:right;min-width:105px}.mega-power-odds small{display:block;color:var(--muted);font-size:8px;text-transform:uppercase;letter-spacing:.06em}.mega-power-odds strong{display:block;color:var(--green);font-size:20px;margin-top:2px}
-.mega-power-notes{border-left:1px solid var(--line);position:relative}.mega-power-notes>summary{height:100%;min-height:62px;display:grid;place-items:center;cursor:pointer;list-style:none;color:var(--muted);font-size:21px}.mega-power-notes>summary::-webkit-details-marker{display:none}.mega-power-notes[open]>summary{background:rgba(140,114,255,.09);color:var(--text)}.mega-power-notes[open]>summary span{transform:rotate(180deg)}.mega-power-notes>summary span{display:block;transition:transform .18s ease}.mega-power-detail{grid-column:1/-1;position:absolute;right:0;top:100%;z-index:5;width:min(420px,calc(100vw - 40px));padding:12px 14px;background:#111823;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);font-size:10px;line-height:1.65;color:var(--muted)}.mega-power-detail .up{color:var(--green)}.mega-power-detail .down{color:var(--pink)}
-.profile-partner-list{max-height:none}.profile-partner-row{grid-template-columns:24px minmax(0,1fr) auto!important}.profile-partner-row span{white-space:nowrap}
-@media(max-width:650px){.league-power-hero{padding:14px}.mega-power-main{grid-template-columns:30px 34px minmax(0,1fr) auto;padding:9px 10px;gap:8px}.mega-power-rank{font-size:18px}.mega-power-odds{min-width:77px}.mega-power-odds small{display:none}.mega-power-odds strong{font-size:16px}.mega-power-row{grid-template-columns:minmax(0,1fr) 40px}.mega-power-team small{display:none}.mega-power-notes>summary{min-height:54px}}
+/* ===== IMO DYNASTY V2.5.1: merged rankings hero ===== */
+.merged-rankings-hero{border-color:rgba(140,114,255,.42);background:linear-gradient(145deg,rgba(140,114,255,.09),rgba(16,21,31,.97) 42%,rgba(56,224,126,.035))}
+.merged-power-list{display:grid;gap:9px}
+.merged-power-row{border:1px solid var(--line);border-left:5px solid var(--rank-colour,var(--green));border-radius:14px;background:rgba(7,10,16,.62);overflow:hidden;transition:border-color .18s ease,transform .18s ease,background .18s ease}
+.merged-power-row:hover{border-color:rgba(140,114,255,.52);transform:translateY(-1px);background:rgba(12,16,25,.9)}
+.merged-power-row>summary{list-style:none;display:grid;grid-template-columns:minmax(0,1fr) 44px;align-items:stretch;cursor:default}
+.merged-power-row>summary::-webkit-details-marker{display:none}
+.merged-manager-hitarea{appearance:none;border:0;background:transparent;color:inherit;display:grid;grid-template-columns:34px 42px minmax(0,1fr) 58px 130px;align-items:center;gap:11px;text-align:left;padding:13px 8px 13px 13px;cursor:pointer;font:inherit;min-width:0}
+.merged-manager-hitarea:hover .merged-team-copy strong{color:var(--green)}
+.merged-rank{font-size:18px;color:var(--muted);text-align:center}
+.merged-team-copy{min-width:0}
+.merged-team-copy strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px;transition:color .18s ease}
+.merged-team-copy small,.merged-odds small{display:block;color:var(--muted);font-size:8px;margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
+.merged-odds{text-align:right}
+.merged-odds strong{display:block;color:var(--green);font-size:19px;line-height:1.1}
+.merged-odds-toggle{appearance:none;border:0;border-left:1px solid var(--line);background:rgba(140,114,255,.045);color:var(--muted);font-size:21px;cursor:pointer;transition:background .18s ease,color .18s ease,transform .18s ease}
+.merged-odds-toggle:hover{background:rgba(140,114,255,.16);color:var(--text)}
+.merged-power-row[open] .merged-odds-toggle{color:var(--green);transform:rotate(180deg)}
+.merged-odds-notes{border-top:1px solid var(--line);padding:12px 58px 13px 102px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;color:var(--muted);font-size:10px;line-height:1.35;background:rgba(3,6,10,.38)}
+.merged-odds-notes>div{padding:8px 10px;border:1px solid rgba(38,48,66,.65);border-radius:9px;background:rgba(10,14,21,.72)}
+.merged-odds-notes strong{color:var(--text)}
+.profile-partner-row{grid-template-columns:24px minmax(0,1fr) auto!important}
+@media(max-width:720px){.merged-manager-hitarea{grid-template-columns:28px 36px minmax(0,1fr) 78px}.merged-manager-hitarea .movement{display:none}.merged-odds{grid-column:auto}.merged-odds strong{font-size:16px}.merged-odds-notes{padding:10px;grid-template-columns:1fr 1fr}.merged-team-copy small{display:none}}
+@media(max-width:470px){.merged-manager-hitarea{grid-template-columns:24px 34px minmax(0,1fr) 68px;gap:7px;padding-left:8px}.merged-odds small{display:none}.merged-odds-notes{grid-template-columns:1fr}}
