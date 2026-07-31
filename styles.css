@@ -474,7 +474,7 @@ footer span{display:flex;align-items:center;gap:6px}
 .player-current-average{flex:0 0 150px;text-align:right;border-left:1px solid var(--line);padding-left:20px}.player-current-average span,.player-current-average small{display:block;color:var(--muted)}.player-current-average strong{display:block;font-size:42px;font-weight:1000;letter-spacing:-.06em;line-height:1;margin:7px 0 5px}.player-current-average small{font-size:9px}
 @media(max-width:780px){.player-history-hero{flex-wrap:wrap}.player-current-average{flex:1 0 100%;border-left:0;border-top:1px solid var(--line);padding:14px 0 0;text-align:left}.player-current-average strong{font-size:34px}.power-rank-number{font-size:24px}.featured-trade-grade{min-width:58px;min-height:44px;font-size:22px}}
 
-/* V2.7.4 — cleaner power ranking rows */
+/* V2.7.5 — cleaner power ranking rows */
 .power-odds-row>summary{column-gap:16px}
 .power-avatar{margin-right:2px}
 .power-copy{padding-left:2px}

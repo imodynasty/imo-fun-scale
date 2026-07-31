@@ -1,4 +1,4 @@
-/* IMO DYNASTY V2.7.4 — top-10 player premium and power-rank spacing polish */
+/* IMO DYNASTY V2.7.5 — corrected superstar grade floors and top-10 premium fallback */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[]};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
@@ -52,8 +52,36 @@ function playerAgeAt(playerId,timestamp){const p=state.players[playerId]||{},at=
 function ageMultiplier(age){if(age<=19)return 1.18;if(age===20)return 1.20;if(age===21)return 1.22;if(age===22)return 1.23;if(age===23)return 1.24;if(age===24||age===25)return 1.25;if(age===26)return 1.24;if(age===27)return 1.22;if(age===28)return 1.18;if(age===29)return 1.12;if(age===30)return 1.05;if(age===31)return .98;if(age===32)return .92;if(age===33)return .88;if(age===34)return .84;if(age===35)return .80;return .76}
 function eliteMultiplier(avg){if(avg>=40)return 1.40;if(avg>=35)return 1.28;if(avg>=30)return 1.18;if(avg>=25)return 1.10;if(avg>=20)return 1.05;if(avg>=10)return 1.02;return 1}
 function playerDynastyValue(playerId,average,timestamp){const avg=Number(average)||0;return avg>0?avg*ageMultiplier(playerAgeAt(playerId,timestamp))*eliteMultiplier(avg):0}
-function topTenSeasonAverageIds(t){const bundle=bundleForTrade(t);if(!bundle)return new Set();const weeks=meaningfulWeeks(bundle);if(!weeks.length)return new Set();const averages=buildPlayerAverages(bundle,weeks.at(-1));return new Set(Object.entries(averages).filter(([,avg])=>Number(avg)>0).sort((a,b)=>Number(b[1])-Number(a[1])).slice(0,10).map(([id])=>String(id)))}
-function tradePlayerValue(playerId,average,t){const base=playerDynastyValue(playerId,average,t.created);return topTenSeasonAverageIds(t).has(String(playerId))?base*1.20:base}
+function topTenSeasonAverageIds(t){
+  // Use the trade season when actual games exist. During a preseason or when a
+  // historical bundle is incomplete, fall back to the latest loaded season
+  // with meaningful player averages so elite-player premiums never disappear.
+  const candidates=[];
+  const tradeBundle=bundleForTrade(t);
+  if(tradeBundle)candidates.push(tradeBundle);
+  [...state.bundles]
+    .sort((a,b)=>Number(b.league?.season)-Number(a.league?.season))
+    .forEach(bundle=>{if(!candidates.includes(bundle))candidates.push(bundle)});
+  for(const bundle of candidates){
+    const weeks=meaningfulWeeks(bundle);
+    if(!weeks.length)continue;
+    const averages=buildPlayerAverages(bundle,weeks.at(-1));
+    const ranked=Object.entries(averages)
+      .filter(([,avg])=>Number(avg)>0)
+      .sort((a,b)=>Number(b[1])-Number(a[1]));
+    if(ranked.length>=10)return new Set(ranked.slice(0,10).map(([id])=>String(id)));
+  }
+  const fallback=Object.entries(state.playerAverages||{})
+    .filter(([,avg])=>Number(avg)>0)
+    .sort((a,b)=>Number(b[1])-Number(a[1]))
+    .slice(0,10)
+    .map(([id])=>String(id));
+  return new Set(fallback)
+}
+function tradePlayerValue(playerId,average,t){
+  const base=playerDynastyValue(playerId,average,t.created);
+  return topTenSeasonAverageIds(t).has(String(playerId))?base*1.20:base
+}
 function tradeAssets(t){const by={};mids(t).forEach(id=>by[id]=[]);Object.entries(t.adds||{}).forEach(([pid,rid])=>{const mid=t.roster_owner_map?.[String(rid)];if(!mid||!by[mid])return;const average=tradeSeasonAverage(pid,t);by[mid].push({type:"player",id:pid,name:playerName(pid),value:tradePlayerValue(pid,average,t),average,topTenBonus:topTenSeasonAverageIds(t).has(String(pid))})});(t.draft_picks||[]).forEach(p=>{const mid=t.roster_owner_map?.[String(p.owner_id)];if(!mid||!by[mid])return;const round=Number(p.round),season=p.season||"Future",original=pickOriginalOwner(p,t),drafted=draftedPlayerForPick(p),pickLabel=`${season} ${roundWord(round)} Round Pick${original?` ${original}`:""}`;let value=fixedPickValue(round),average=0;if(drafted){average=playerSeasonAverage(drafted,season);if(average>0)value=playerDynastyValue(drafted,average,new Date(`${season}-12-31T12:00:00`).getTime())}by[mid].push({type:"pick",id:drafted||null,name:drafted?`${playerName(drafted)} (${pickLabel})`:`${season} Round ${round} Pick`,owner:drafted?null:original,value,average})});return by}
 function tradeValue(t){return Object.values(tradeAssets(t)).flat().reduce((sum,asset)=>sum+(Number(asset.value)||0),0)}
 
@@ -71,8 +99,11 @@ function tradeSideMetrics(t,managerId){
   const allPlayers=Object.values(tradeAssets(t)).flat().filter(a=>a.type==='player').sort((a,b)=>(Number(b.value)||0)-(Number(a.value)||0));
   const bestPlayer=allPlayers[0]||null,nextBest=allPlayers[1]||null;
   const bestReceived=Boolean(bestPlayer&&received.some(a=>a.type==='player'&&String(a.id)===String(bestPlayer.id)));
-  const bestRatio=bestPlayer&&nextBest&&Number(nextBest.value)>0?Number(bestPlayer.value)/Number(nextBest.value):bestPlayer?1.15:1;
-  const clearCentrepiece=Boolean(bestReceived&&bestRatio>=1.15&&Number(bestPlayer.value)>=25);
+  const bestRatio=bestPlayer&&nextBest&&Number(nextBest.value)>0?Number(bestPlayer.value)/Number(nextBest.value):bestPlayer?Infinity:1;
+  // The grade floor is determined strictly by relative player value. Do not
+  // require an arbitrary minimum value, as missing/partial historical feeds can
+  // otherwise disable the protection for an obvious superstar acquisition.
+  const clearCentrepiece=Boolean(bestReceived&&bestRatio>=1.15);
 
   // Star premium: the clear best player carries 10% extra effective value.
   const starBonus=clearCentrepiece?Number(bestPlayer.value)*0.10:0;
@@ -126,7 +157,18 @@ const TRADE_COMMENTS={
   'F':['A major overpay, with a sizeable gap between cost and return.','This one is difficult to defend — too much went out the door.','A significant value loss that places enormous pressure on the incoming assets.','They surrendered the stronger package by a considerable margin.'],
   'FLEECE ALERT 🚨':['FLEECE ALERT 🚨 Trade authorities have been notified after a landslide result.','FLEECE ALERT 🚨 A brutal gap makes this one almost impossible to defend.','FLEECE ALERT 🚨 One side walked away with the keys, the car and the registration.','FLEECE ALERT 🚨 This was less a negotiation and more a daylight robbery.']
 };
-function tradeGrade(t,managerId){const m=tradeSideMetrics(t,managerId),base=packageGradePoints(m.edge,m.net);let final=base,grade=gradeFromPoints(final,m);const isConsolidation=m.assetReduction>0;if(m.clearCentrepiece&&m.bestRatio>=1.30&&isConsolidation&&['C+','C','D+','D','F','FLEECE ALERT 🚨'].includes(grade))grade='B';else if(m.clearCentrepiece&&m.bestRatio>=1.15&&['D+','D','F','FLEECE ALERT 🚨'].includes(grade))grade='C';const comments=TRADE_COMMENTS[grade]||TRADE_COMMENTS.C;return{...m,base,final,grade,comment:comments[stableIndex(`${t.transaction_id||t.created}|${managerId}|${grade}`,comments.length)]}}
+function tradeGrade(t,managerId){
+  const m=tradeSideMetrics(t,managerId),base=packageGradePoints(m.edge,m.net);
+  let final=base,grade=gradeFromPoints(final,m);
+  const isConsolidation=m.assetReduction>0;
+  const gradeRank={'FLEECE ALERT 🚨':0,'F':1,'D':2,'D+':3,'C':4,'C+':5,'B':6,'B+':7,'A':8,'A+':9};
+  // Apply the superstar protections LAST, after every raw-value and contextual
+  // calculation. This guarantees the displayed grade can never bypass them.
+  if(m.bestReceived&&m.bestRatio>=1.30&&isConsolidation&&(gradeRank[grade]??0)<gradeRank.B)grade='B';
+  else if(m.bestReceived&&m.bestRatio>=1.15&&(gradeRank[grade]??0)<gradeRank.C)grade='C';
+  const comments=TRADE_COMMENTS[grade]||TRADE_COMMENTS.C;
+  return{...m,base,final,grade,comment:comments[stableIndex(`${t.transaction_id||t.created}|${managerId}|${grade}`,comments.length)]}
+}
 function tradeGrades(t){return mids(t).map(id=>tradeGrade(t,id))}
 function winWinTrade(t){const grades=tradeGrades(t),rank={'A+':10,'A':9,'B+':8,'B':7,'C+':6,'C':5,'D+':4,'D':3,'F':2,'FLEECE ALERT 🚨':0};return grades.length>=2&&grades.every(g=>(rank[g.grade]||0)>=7)}
 function gradeClass(grade){return grade.startsWith('A')?'grade-a':grade.startsWith('B')?'grade-b':grade.startsWith('C')?'grade-c':grade.startsWith('D')?'grade-d':'grade-f'}
