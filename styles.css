@@ -438,3 +438,8 @@ footer span{display:flex;align-items:center;gap:6px}
 .trade-feature-v2>.trade-editorial .trade-grade-badge{display:none}
 .trade-feature-v2>.trade-editorial .trade-grade-row{grid-template-columns:minmax(150px,.7fr) minmax(0,2fr)}
 @media(max-width:700px){.featured-trade-grade{min-width:48px;min-height:35px;font-size:15px;top:8px;right:8px}.trade-side-v2{padding-top:20px}.trade-feature-v2>.trade-editorial .trade-grade-row{grid-template-columns:1fr}.trade-feature-v2>.trade-editorial .trade-grade-comment{grid-column:1}}
+
+/* V2.7.1 — league-history dividers */
+.league-history-heading{margin:28px 2px 12px;padding:20px 22px;border-top:1px solid rgba(54,235,142,.42);border-bottom:1px solid rgba(38,48,66,.78);background:linear-gradient(90deg,rgba(54,235,142,.08),rgba(54,235,142,0));border-radius:14px}
+.league-history-heading h2{margin:4px 0 3px;font-size:24px;letter-spacing:.05em}.league-history-heading p{margin:0;color:var(--muted);font-size:10px}
+.profile-history-divider{grid-column:1/-1;margin:14px 0 0;padding:15px 4px 8px;border-top:1px solid rgba(54,235,142,.42);color:var(--green);font-size:11px;font-weight:950;letter-spacing:.22em}
