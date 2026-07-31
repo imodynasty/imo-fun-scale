@@ -1,8 +1,9 @@
-/* IMO DYNASTY V2.7.6 — late-pick values and low-value A+ safeguard */
+/* IMO DYNASTY V2.7.8 — performance optimisation */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
-const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false};
+const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,statsRequestCache:new Map(),seasonTotalsLoading:false};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
 async function getJSON(url,optional=false){try{const r=await fetch(url);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){if(optional)return null;throw e}}
+async function statsJSON(url){if(state.statsRequestCache.has(url))return state.statsRequestCache.get(url);const request=getJSON(url,true).finally(()=>{});state.statsRequestCache.set(url,request);return request}
 async function limitedMap(items,limit,fn){const out=new Array(items.length);let n=0;async function run(){while(n<items.length){const i=n++;try{out[i]=await fn(items[i])}catch{out[i]=null}}}await Promise.all(Array.from({length:limit},run));return out}
 function esc(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;")}
 function fmt(ts,short=false){return ts?new Intl.DateTimeFormat("en-AU",short?{day:"numeric",month:"short"}:{day:"numeric",month:"short",year:"numeric"}).format(new Date(ts)):"Unknown"}
@@ -644,22 +645,14 @@ function cachedManagerProfileHTML(managerId){
   state.profileHTMLCache.set(key,html);
   return html;
 }
-function prewarmManagerProfiles(){
-  if(state.profilePrewarmQueued||!state.managers.size)return;
-  state.profilePrewarmQueued=true;
-  const ids=[...state.managers.keys()];
-  let index=0;
-  const run=deadline=>{
-    while(index<ids.length&&(!deadline||deadline.timeRemaining()>4)){
-      cachedManagerProfileHTML(ids[index++]);
-    }
-    if(index<ids.length){
-      if('requestIdleCallback' in window)requestIdleCallback(run,{timeout:800});
-      else setTimeout(()=>run(null),24);
-    }else state.profilePrewarmQueued=false;
+function queueManagerProfilePrewarm(managerId){
+  const id=String(managerId||"");
+  if(!id||state.profileHTMLCache.has(managerProfileCacheKey(id)))return;
+  const run=()=>{
+    if(!state.profileHTMLCache.has(managerProfileCacheKey(id)))cachedManagerProfileHTML(id);
   };
-  if('requestIdleCallback' in window)requestIdleCallback(run,{timeout:800});
-  else setTimeout(()=>run(null),24);
+  if('requestIdleCallback' in window)requestIdleCallback(run,{timeout:1200});
+  else setTimeout(run,120);
 }
 function openManagerProfile(managerId,pushState=true){
   const modal=$("managerProfileModal"),content=$("managerProfileContent");
@@ -788,7 +781,7 @@ function rawFantasyPoints(row,scoring){
 }
 async function loadPlayerGameLogAverage(playerId,season,scoring){
   const url=`${CONFIG.statsApi}/${encodeURIComponent(playerId)}?season_type=regular&season=${encodeURIComponent(season)}&grouping=game`;
-  const payload=await getJSON(url,true);
+  const payload=await statsJSON(url);
   const rows=gameLogRows(payload);
   let points=0,games=0;
   rows.forEach(row=>{
@@ -855,7 +848,7 @@ function scoreSeasonStats(stats,scoring){
 }
 async function loadPlayerSeasonAverage(playerId,season,scoring){
   const url=`${CONFIG.statsApi}/${encodeURIComponent(playerId)}?season_type=regular&season=${encodeURIComponent(season)}`;
-  const payload=await getJSON(url,true);
+  const payload=await statsJSON(url);
   const stats=payload?.stats||{};
   const gp=Number(stats.gp);
   if(!Number.isFinite(gp)||gp<=0)return null;
@@ -909,8 +902,6 @@ async function load(){
     state.currentRosters=cur.rosters||[];
     state.players=players||{};
     state.draftPickMap=Object.assign({},...valid.map(b=>b.draftPickMap||{}));
-    if(status)status.textContent='Loading Sleeper season totals…';
-    try{await loadSeasonTotalAverages()}catch(error){console.error('Season totals failed; continuing with available data:',error)}
     buildManagers();
     const unique=new Map();
     valid.flatMap(x=>x.trades||[]).forEach(t=>unique.set(t.transaction_id||`${t.league_id}-${t.created}`,t));
@@ -919,10 +910,18 @@ async function load(){
     state.profileHTMLCache.clear();
     state.profilePrewarmQueued=false;
     renderAll();
-    prewarmManagerProfiles();
+    if(status)status.textContent=`Live · ${valid.length} seasons loaded`;
     loadTickerGameLogs().catch(error=>console.warn("Ticker game logs unavailable:",error));
-    const averageCount=Object.values(state.seasonTotalMeta||{}).reduce((sum,season)=>sum+Object.keys(season||{}).length,0);
-    if(status)status.textContent=`Live · ${valid.length} seasons loaded · ${averageCount} player season averages`;
+    if(!state.seasonTotalsLoading){
+      state.seasonTotalsLoading=true;
+      loadSeasonTotalAverages().then(()=>{
+        prepareModels();
+        state.profileHTMLCache.clear();
+        renderAll();
+        const averageCount=Object.values(state.seasonTotalMeta||{}).reduce((sum,season)=>sum+Object.keys(season||{}).length,0);
+        if(status)status.textContent=`Live · ${valid.length} seasons loaded · ${averageCount} player season averages`;
+      }).catch(error=>console.warn('Season totals unavailable; continuing with loaded data:',error)).finally(()=>{state.seasonTotalsLoading=false});
+    }
   }catch(e){
     console.error('IMO DYNASTY load failed:',e);
     if(status)status.textContent='Could not load Sleeper data';
@@ -942,6 +941,8 @@ document.addEventListener("click",e=>{
   if(e.target.closest("[data-close-manager-profile]")||e.target.closest("#managerProfileClose"))closeManagerProfile()
 });
 document.addEventListener("toggle",e=>{const detail=e.target;if(!(detail instanceof HTMLDetailsElement)||!detail.open)return;if(detail.matches(".profile-badge-pop")){detail.closest(".profile-badge-icons")?.querySelectorAll(".profile-badge-pop[open]").forEach(x=>{if(x!==detail)x.open=false})}if(detail.matches(".profile-form-result")){detail.closest(".profile-form-strip")?.querySelectorAll(".profile-form-result[open]").forEach(x=>{if(x!==detail)x.open=false})}if(detail.matches(".player-history-trade")){detail.closest(".player-history-timeline")?.querySelectorAll(".player-history-trade[open]").forEach(x=>{if(x!==detail)x.open=false})}},true);
+document.addEventListener("pointerover",e=>{const link=e.target.closest?.(".manager-profile-link");if(link)queueManagerProfilePrewarm(link.dataset.managerId)},{passive:true});
+document.addEventListener("focusin",e=>{const link=e.target.closest?.(".manager-profile-link");if(link)queueManagerProfilePrewarm(link.dataset.managerId)});
 document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("playerHistoryModal")?.classList.contains("open"))closePlayerHistory();else if($("managerProfileModal")?.classList.contains("open"))closeManagerProfile();else if($("managerDirectoryModal")?.classList.contains("open"))closeManagerDirectory()});
 window.addEventListener("popstate",openManagerFromHash);
 load().then?.(()=>openManagerFromHash());
