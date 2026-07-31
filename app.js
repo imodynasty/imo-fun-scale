@@ -34,9 +34,14 @@ function gameLogAverageMap(season){return state.gameLogAverages?.[String(season)
 function buildPlayerAverages(bundle,throughWeek=Infinity){
   const season=String(bundle?.league?.season||"");
   const calculated=calculatedPlayerAverages(bundle,throughWeek);
-  const exact=exactAverageMap(season);
   const totals=seasonTotalAverageMap(season);
-  return {...calculated,...exact,...totals};
+  const exact=exactAverageMap(season);
+  const gameLogs=gameLogAverageMap(season);
+  // Prefer averages rebuilt from individual game logs using this league's
+  // scoring settings. Sleeper's supplied fantasy_points field can reflect a
+  // different/default scoring format, which produced inflated results for
+  // players such as Zach Edey.
+  return {...calculated,...totals,...exact,...gameLogs};
 }
 function prepareModels(){state.modelBundle=selectModelBundle();const weeks=meaningfulWeeks(state.modelBundle),last=weeks.at(-1)||Infinity,prior=weeks.length>1?weeks.at(-2):last;state.previousPowerRanks=Object.fromEntries(modelRows(state.modelBundle,prior,"power").map(x=>[x.id,x.rank]));state.playerAverages=buildPlayerAverages(state.modelBundle,last)}
 function playerName(id){const p=state.players[id]||{};return p.full_name||[p.first_name,p.last_name].filter(Boolean).join(" ")||`Player ${id}`}
@@ -777,7 +782,7 @@ function tickerRankingOrRecord(){const weeks=meaningfulWeeks(state.modelBundle);
 function tickerPlayerRumours(){const templates=[x=>`SHAMS: Unnamed sources indicate growing trade chatter surrounding ${playerName(x.playerId)}.`,x=>`SOURCES: Rival GMs believe ${x.managerId?managerName(x.managerId):'a mystery team'} is exploring trade packages involving ${playerName(x.playerId)}.`,x=>`REPORTS: ${playerName(x.playerId)} has featured heavily in recent trade inquiries.`];return playerInterestRows().slice(-3).reverse().map(x=>(templates[Number(x.template)%templates.length]||templates[0])(x))}
 function shortTradeHeadline(t){if(!t)return null;const names=mids(t).map(id=>managerName(id,t));return names.length?`${names.join(' and ')} complete a deal involving ${tradeSummary(t)}`:null}
 function renderTicker(){const root=$('leagueTicker');if(!root)return;const good=recentPlayerForm().good.slice(0,2),stories=[...tickerPlayerRumours(),tickerTopPerformer(),...good.map(x=>`${x.name} is in good form, averaging ${x.recentAvg.toFixed(1)} FPTS over the last 5`),...state.trades.slice(0,2).map(t=>shortTradeHeadline(t)),tickerMatchup(),tickerStreak(),'IMO Awards voting opens 23 February · closes 28 February',tickerRankingOrRecord(),tickerDrought()].filter(Boolean);const unique=[...new Set(stories)].slice(0,10);if(!unique.length){root.hidden=true;return}root.hidden=false;const group=unique.map((text,i)=>`<span class="ticker-item">${esc(text)}</span>${i<unique.length-1?'<span class="ticker-dot">•</span>':''}`).join('');root.innerHTML=`<span class="ticker-live">LIVE</span><div class="ticker-window"><div class="ticker-track"><div class="ticker-group">${group}</div><div class="ticker-group" aria-hidden="true">${group}</div></div></div>`}
-async function loadTickerGameLogs(){const season=String(state.modelBundle?.league?.season||'2025'),ids=[...new Set((state.currentRosters||[]).flatMap(r=>(r.players||[]).map(String)))],scoring=state.modelBundle?.league?.scoring_settings||{};if(!ids.length)return;const rows=await limitedMap(ids,8,async id=>{const result=await loadPlayerGameLogAverage(id,season,scoring);return result?{id,...result}:null});state.gameLogs[season]??={};rows.filter(Boolean).forEach(row=>state.gameLogs[season][row.id]=row.rows||[]);renderPlayerForm();renderTicker()}
+async function loadTickerGameLogs(){const season=String(state.modelBundle?.league?.season||'2025'),ids=[...new Set((state.currentRosters||[]).flatMap(r=>(r.players||[]).map(String)))],scoring=state.modelBundle?.league?.scoring_settings||{};if(!ids.length)return;const rows=await limitedMap(ids,8,async id=>{const result=await loadPlayerGameLogAverage(id,season,scoring);return result?{id,...result}:null});state.gameLogs[season]??={};state.gameLogAverages[season]??={};state.gameLogMeta[season]??={};rows.filter(Boolean).forEach(row=>{state.gameLogs[season][row.id]=row.rows||[];state.gameLogAverages[season][row.id]=row.average;state.gameLogMeta[season][row.id]={gamesPlayed:row.games,totalFantasyPoints:row.points,average:row.average,source:'league-scored game logs'}});prepareModels();resetComputedCaches();renderPlayerForm();renderTicker();const modal=$("managerProfileModal"),id=modal?.dataset.managerId;if(id&&modal.classList.contains("open")){const content=$("managerProfileContent");content.innerHTML=cachedManagerProfileHTML(id);bindSparklineTooltips(content)}}
 
 
 function insiderEventKey(){
@@ -888,8 +893,9 @@ function gameWasPlayed(row){
   return !(status.includes("dnp")||status.includes("inactive")||status.includes("did not play"));
 }
 function rawFantasyPoints(row,scoring){
-  const direct=numericValue(row,["fantasy_points","fantasy_pts","fpts","fp"]);
-  if(direct!==null)return direct;
+  // Rebuild fantasy points from the raw box score and the league's own
+  // scoring settings. Do not trust the API's precomputed fantasy_points value
+  // first, because it may use Sleeper's default scoring rather than this league.
   let total=0,matched=false;
   Object.entries(scoring||{}).forEach(([key,multiplier])=>{
     if(key.startsWith("bonus_"))return;
@@ -905,7 +911,8 @@ function rawFantasyPoints(row,scoring){
   const doubles=[pts,reb,ast,stl,blk].filter(v=>v!==null&&v>=10).length;
   if(Number(scoring?.bonus_double_double)&&doubles>=2)total+=Number(scoring.bonus_double_double);
   if(Number(scoring?.bonus_triple_double)&&doubles>=3)total+=Number(scoring.bonus_triple_double);
-  return matched?total:null;
+  if(matched)return total;
+  return numericValue(row,["fantasy_points","fantasy_pts","fpts","fp"]);
 }
 async function loadPlayerGameLogAverage(playerId,season,scoring){
   const url=`${CONFIG.statsApi}/${encodeURIComponent(playerId)}?season_type=regular&season=${encodeURIComponent(season)}&grouping=game`;
