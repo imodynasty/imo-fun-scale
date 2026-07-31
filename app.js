@@ -708,7 +708,8 @@ function managerDraftResume(managerId){
   const busts=picks.filter(p=>Number(p.draftScore)<0).sort((a,b)=>a.draftScore-b.draftScore||a.overallPick-b.overallPick);
   const totalScore=picks.reduce((sum,p)=>sum+Number(p.draftScore||0),0),averageScore=picks.length?totalScore/picks.length:0;
   const hitRate=picks.length?picks.filter(p=>Number(p.draftScore)>0).length/picks.length:0,missRate=picks.length?picks.filter(p=>Number(p.draftScore)<0).length/picks.length:0;
-  return{managerId:id,picks,count:picks.length,totalScore,averageScore,hitRate,missRate,biggestSteal:steals[0]||null,biggestBust:busts[0]||null}
+  const draftStar=picks.slice().sort((a,b)=>(Number(b.average||b.fantasyAverage||0)-Number(a.average||a.fantasyAverage||0)))[0]||null;
+  return{managerId:id,picks,count:picks.length,totalScore,averageScore,hitRate,missRate,draftStar,biggestSteal:steals[0]||null,biggestBust:busts[0]||null}
 }
 function managerTradeRecordScore(managerId){
   const id=String(managerId),trades=managerTrades(id);let score=0,wins=0,losses=0,ties=0;
@@ -754,7 +755,7 @@ function managerGradePlayerHTML(label,pick){
 }
 function managerGradesHTML(managerId){
   const league=managerGradesLeague(),id=String(managerId),grades=league.grades[id]||{},resume=league.draftResumes[id]||managerDraftResume(id),items=[['Trading',grades.trading],['Drafting',grades.drafting],['Player Development',grades.development],['Team Building',grades.building]];
-  return`<section class="manager-grades-row" aria-label="Manager grades"><div class="manager-grades-title"><span class="eyebrow">MANAGER GRADES</span></div><div class="manager-grade-items">${items.map(([label,grade])=>`<div class="manager-grade-item"><span>${esc(label)}</span><strong class="manager-grade-badge ${gradeClass(grade||'F')}">${esc(grade||'—')}</strong></div>`).join('')}</div><div class="manager-draft-highlights">${managerGradePlayerHTML('Draft Steal',resume.biggestSteal)}${managerGradePlayerHTML('Draft Bust',resume.biggestBust)}</div></section>`
+  return`<section class="manager-grades-row" aria-label="Manager grades"><div class="manager-grades-title"><span class="eyebrow">MANAGER GRADES</span></div><div class="manager-grade-items">${items.map(([label,grade])=>`<div class="manager-grade-item"><span>${esc(label)}</span><strong class="manager-grade-badge ${gradeClass(grade||'F')}">${esc(grade||'—')}</strong></div>`).join('')}</div><div class="manager-draft-highlights">${managerGradePlayerHTML('Draft Star',resume.draftStar)}${managerGradePlayerHTML('Draft Steal',resume.biggestSteal)}${managerGradePlayerHTML('Draft Bust',resume.biggestBust)}</div></section>`
 }
 function ensureManagerGradeStyles(){
   if(document.getElementById('managerGradeStyles'))return;
