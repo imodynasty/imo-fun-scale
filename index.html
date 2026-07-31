@@ -1,18 +1,18 @@
 <!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#080a10"><link rel="icon" href="data:,"><title>IMO DYNASTY</title>
-<link rel="stylesheet" href="styles.css?v=3.0.0">
+<meta name="theme-color" content="#080a10"><link rel="icon" href="assets/imo-dynasty-mark.svg"><title>IMO DYNASTY</title>
+<link rel="stylesheet" href="styles.css?v=3.1.0">
 </head><body><div class="noise"></div>
 <header class="site-header v26-header">
   <div class="brand v26-brand">
-    <div class="logo v26-logo">IMO</div>
+    <div class="logo v26-logo brand-mark"><img src="assets/imo-dynasty-mark.svg" alt="IMO Dynasty"></div>
     <div class="v26-brand-copy"><span class="eyebrow">LIVE LEAGUE HQ</span><h1>IMO DYNASTY</h1><p>Your home for all things IMO Dynasty</p></div>
   </div>
   <div class="header-actions v26-header-actions">
     <span id="statusText">Connecting…</span>
-    <button id="headlinesBtn" class="headlines-btn" type="button">Today's Headlines</button>
-    <button id="managerDirectoryBtn" class="v26-manager-btn" type="button">Manager Profiles</button>
+    <button id="headlinesBtn" class="headlines-btn branded-action" type="button"><img src="assets/imo-insider.svg" alt="">Today's Headlines</button>
+    <button id="managerDirectoryBtn" class="v26-manager-btn branded-action" type="button"><img src="assets/manager-profiles.svg" alt="">Manager Profiles</button>
     <button id="refreshBtn" class="refresh-btn">Refresh</button>
   </div>
 </header>
@@ -27,8 +27,8 @@
 </section>
 
 <div class="content-shell"><div class="main-column">
-<section class="panel power-rankings-hero v26-power-panel"><div class="panel-heading"><div><span class="eyebrow">🏛️ THE HOLY GRAIL</span><h3>Power Rankings</h3><p class="power-rankings-intro">Ranked by power score. Championship odds and form details are built into each row.</p></div><span class="period-pill">Live estimate</span></div><div id="powerRankings" class="rank-list power-rankings-grid loading">Calculating…</div></section>
-<section class="panel trade-week"><div class="panel-heading"><div><span class="eyebrow">🔥 FEATURED MOVE</span><h3>Trade of the Week</h3></div><span class="period-pill">Weekly standout</span></div><div id="tradeOfWeek" class="loading">Analysing this week's trades…</div></section>
+<section class="panel power-rankings-hero v26-power-panel"><div class="panel-heading"><div><span class="section-brand"><img src="assets/power-rankings.svg" alt=""><span><b>POWER RANKINGS</b><small>THE HOLY GRAIL</small></span></span><h3>Power Rankings</h3><p class="power-rankings-intro">Ranked by power score. Championship odds and form details are built into each row.</p></div><span class="period-pill">Live estimate</span></div><div id="powerRankings" class="rank-list power-rankings-grid loading">Calculating…</div></section>
+<section class="panel trade-week"><div class="panel-heading"><div><span class="section-brand"><img src="assets/trade-centre.svg" alt=""><span><b>TRADE CENTRE</b><small>FEATURED MOVE</small></span></span><h3>Trade of the Week</h3></div><span class="period-pill">Weekly standout</span></div><div id="tradeOfWeek" class="loading">Analysing this week's trades…</div></section>
 
 
 
@@ -40,7 +40,7 @@
 </section>
 <section class="panel recent-panel"><div class="panel-heading"><div><span class="eyebrow">LATEST MOVES</span><h3>RECENT TRADES</h3></div></div><div id="recentTrades" class="recent-trades loading">Loading trade history…</div></section>
 <section class="panel voting-panel" id="allNbaVoting">
-<div class="panel-heading"><div><span class="eyebrow">🗳️ LEAGUE BALLOT</span><h3>IMO AWARDS VOTING</h3></div><span class="period-pill">Winners announced 1 March</span></div>
+<div class="panel-heading"><div><span class="section-brand"><img src="assets/awards.svg" alt=""><span><b>IMO AWARDS</b><small>LEAGUE BALLOT</small></span></span><h3>IMO AWARDS VOTING</h3></div><span class="period-pill">Winners announced 1 March</span></div>
 <div id="votingCountdown" class="voting-countdown">Voting opens 23 February 2027</div>
 <p class="voting-intro">All-NBA, MIP and ROY voting opens 23 February, closes 28 February, and winners are announced 1 March. One submission is allowed per ballot on each device.</p>
 <div class="award-voting-grid">
@@ -75,7 +75,7 @@
 </div>
 </section>
 
-<div class="league-history-heading"><span class="eyebrow">THE ARCHIVES</span><h2>LEAGUE HISTORY</h2><p>All-time trades, relationships and records from across IMO Dynasty.</p></div>
+<div class="league-history-heading"><span class="section-brand"><img src="assets/league-history.svg" alt=""><span><b>LEAGUE HISTORY</b><small>THE ARCHIVES</small></span></span><h2>LEAGUE HISTORY</h2><p>All-time trades, relationships and records from across IMO Dynasty.</p></div>
 <section class="panel biggest-trades-panel"><div class="panel-heading"><div><span class="eyebrow">💥 BLOCKBUSTERS</span><h3>Biggest Ever Trades</h3></div><button id="biggestTradesToggle" class="small-button" type="button">Show top 10</button></div><p class="method-note">Ranked using the league’s private dynasty-value model.</p><div id="biggestTrades" class="biggest-trades-list loading">Calculating the largest trades…</div></section>
 
 <section class="panel heatmap-panel"><div class="panel-heading"><div><span class="eyebrow">🤝 CONNECTIONS</span><h3>Favourite Trade Partners</h3></div><span class="period-pill">Top 5</span></div><div id="tradeHeatmap" class="heatmap-wrap loading">Building heatmap…</div></section>
@@ -84,7 +84,7 @@
 
 
 
-<section class="panel"><div class="panel-heading"><div><span class="eyebrow">📜 HISTORY BOOK</span><h3>League Records</h3></div></div><div id="leagueRecords" class="records-grid records-grid-eight loading">Calculating records…</div><details class="history-dropdown"><summary>Most traded players ever</summary><div id="tradeBlock" class="rank-list loading">Analysing player movement…</div></details></section>
+<section class="panel"><div class="panel-heading"><div><span class="section-brand"><img src="assets/league-history.svg" alt=""><span><b>HISTORY BOOK</b><small>LEAGUE RECORDS</small></span></span><h3>League Records</h3></div></div><div id="leagueRecords" class="records-grid records-grid-eight loading">Calculating records…</div><details class="history-dropdown"><summary>Most traded players ever</summary><div id="tradeBlock" class="rank-list loading">Analysing player movement…</div></details></section>
 
 
 </div></div>
@@ -103,7 +103,7 @@
   <section class="manager-directory-sheet" role="dialog" aria-modal="true" aria-labelledby="managerDirectoryTitle">
     <button id="managerDirectoryClose" class="manager-directory-close" type="button" aria-label="Close manager directory">×</button>
     <div class="manager-directory-heading">
-      <span class="eyebrow">FRANCHISE DIRECTORY</span>
+      <span class="section-brand compact"><img src="assets/manager-profiles.svg" alt=""><span><b>FRANCHISE DIRECTORY</b><small>MANAGER PROFILES</small></span></span>
       <h2 id="managerDirectoryTitle">Manager Profiles</h2>
       <p>Select any team to open its manager profile.</p>
     </div>
@@ -124,5 +124,5 @@
     <div id="playerHistoryContent" class="player-history-content"></div>
   </section>
 </div>
-<footer><strong>IMO DYNASTY</strong><span>Independent league dashboard · V3.0.4 · Not affiliated with Sleeper</span></footer>
-<script src="app.js?v=3.0.0"></script></body></html>
+<footer><strong>IMO DYNASTY</strong><span>Independent league dashboard · V3.1.0 · Not affiliated with Sleeper</span></footer>
+<script src="app.js?v=3.1.0"></script></body></html>
