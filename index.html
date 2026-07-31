@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#080a10"><link rel="icon" href="assets/imo-dynasty-mark.svg"><title>IMO DYNASTY</title>
-<link rel="stylesheet" href="styles.css?v=3.2.2">
+<link rel="stylesheet" href="styles.css?v=3.2.7">
 </head><body><div class="noise"></div>
 <header class="site-header v26-header">
   <div class="brand v26-brand">
@@ -13,6 +13,7 @@
     <span id="statusText">Connecting…</span>
     <button id="headlinesBtn" class="headlines-btn branded-action" type="button"><img src="assets/imo-insider.svg" alt="">Today's Headlines</button>
     <button id="managerDirectoryBtn" class="v26-manager-btn branded-action" type="button"><img src="assets/manager-profiles.svg" alt="">Manager Profiles</button>
+    <button id="mockDraftBtn" class="v26-manager-btn branded-action mock-draft-launch" type="button">2027 Mock Draft</button>
     <button id="refreshBtn" class="refresh-btn">Refresh</button>
   </div>
 </header>
@@ -125,6 +126,13 @@
     <div id="archetypeGuideList" class="archetype-guide-list"></div>
   </section>
 </div>
+<div id="mockDraftModal" class="mock-draft-modal" aria-hidden="true">
+  <div class="mock-draft-backdrop" data-close-mock-draft></div>
+  <section class="mock-draft-sheet" role="dialog" aria-modal="true" aria-labelledby="mockDraftTitle">
+    <button id="mockDraftClose" class="mock-draft-close" type="button" aria-label="Close 2027 mock draft">×</button>
+    <div id="mockDraftContent" class="mock-draft-content"></div>
+  </section>
+</div>
 <div id="playerHistoryModal" class="player-history-modal" aria-hidden="true">
   <div class="player-history-backdrop" data-close-player-history></div>
   <section class="player-history-sheet" role="dialog" aria-modal="true" aria-labelledby="playerHistoryTitle">
@@ -132,5 +140,5 @@
     <div id="playerHistoryContent" class="player-history-content"></div>
   </section>
 </div>
-<footer><strong>IMO DYNASTY</strong><span>Independent league dashboard · V3.2.2 · Not affiliated with Sleeper</span></footer>
-<script src="app.js?v=3.2.2"></script></body></html>
+<footer><strong>IMO DYNASTY</strong><span>Independent league dashboard · V3.2.7 · Not affiliated with Sleeper</span></footer>
+<script src="app.js?v=3.2.7"></script></body></html>

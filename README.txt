@@ -1,3 +1,12 @@
+IMO DYNASTY V3.2.8
+
+2027 mock draft weekly movement update:
+- Prospects 1-20 can change via non-overlapping adjacent swaps only.
+- No top-20 prospect can move more than one position up or down per weekly board.
+- Three to five adjacent swaps are applied each week using a deterministic weekly seed.
+- Picks 21-24 continue to rotate from prospects 21-30.
+- The same weekly board is shown to every visitor and remains stable on refresh.
+
 IMO DYNASTY V3.1.8
 
 IMO DYNASTY V3.1.6 — Manager Switcher + Mobile Profile Fix

@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.2.6 — Activity, Odds Indicators & Trade Grade Recalibration */
+/* IMO DYNASTY V3.2.8 — Weekly 2027 Mock Draft Movement */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -1010,6 +1010,94 @@ function renderHeadlines(){const root=$('headlinesContent');if(!root)return;cons
 function openHeadlines(){renderHeadlines();const modal=$('headlinesModal');modal?.classList.add('open');modal?.setAttribute('aria-hidden','false');document.body.classList.add('headlines-open')}
 function closeHeadlines(){const modal=$('headlinesModal');modal?.classList.remove('open');modal?.setAttribute('aria-hidden','true');document.body.classList.remove('headlines-open')}
 
+
+const MOCK_DRAFT_2027_PROSPECTS=[
+  {rank:1,name:"Tyran Stokes",position:"SF",team:"Kansas",height:"6'7\"",weight:"230 lbs",age:"19.7 yrs"},
+  {rank:2,name:"Caleb Holt",position:"SG",team:"Arizona",height:"6'5\"",weight:"200 lbs",age:"19.6 yrs"},
+  {rank:3,name:"Jordan Smith Jr.",position:"SG/PG",team:"Arkansas",height:"6'2\"",weight:"200 lbs",age:"19.8 yrs"},
+  {rank:4,name:"Cameron Williams",position:"PF",team:"Duke",height:"6'11\"",weight:"200 lbs",age:"19.7 yrs"},
+  {rank:5,name:"Anthony Thompson",position:"SF",team:"Ohio State",height:"6'9\"",weight:"215 lbs",age:"18.9 yrs"},
+  {rank:6,name:"Bruce Branch III",position:"SF",team:"BYU",height:"6'7\"",weight:"190 lbs",age:"18.7 yrs"},
+  {rank:7,name:"Braylon Mullins",position:"SG",team:"UConn",height:"6'6\"",weight:"196 lbs",age:"21.2 yrs"},
+  {rank:8,name:"Stefan Joksimović",position:"PG/SG",team:"Baskonia",height:"6'7\"",weight:"205 lbs",age:"18.6 yrs"},
+  {rank:9,name:"Baba Oladotun",position:"SF/PF",team:"Maryland",height:"6'10\"",weight:"195 lbs",age:"18.5 yrs"},
+  {rank:10,name:"Brandon McCoy Jr.",position:"PG/SG",team:"Michigan",height:"6'5\"",weight:"190 lbs",age:"19.6 yrs"},
+  {rank:11,name:"Sayon Keita",position:"C",team:"North Carolina",height:"7'0\"",weight:"215 lbs",age:"19.3 yrs"},
+  {rank:12,name:"Dylan Mingo",position:"PG",team:"Baylor",height:"6'5\"",weight:"185 lbs",age:"18.7 yrs"},
+  {rank:13,name:"Amari Allen",position:"SF",team:"Alabama",height:"6'6.5\"",weight:"205 lbs",age:"21.4 yrs"},
+  {rank:14,name:"Hugo Yimga-Moukouri",position:"SF",team:"Nanterre 92",height:"6'9\"",weight:"218 lbs",age:"18.9 yrs"},
+  {rank:15,name:"Thomas Haugh",position:"PF",team:"Florida",height:"6'9\"",weight:"215 lbs",age:"23.9 yrs"},
+  {rank:16,name:"Patrick Ngongba II",position:"C",team:"Duke",height:"6'11\"",weight:"250 lbs",age:"21.3 yrs"},
+  {rank:17,name:"Ivan Kharchenkov",position:"SF",team:"Arizona",height:"6'7\"",weight:"230 lbs",age:"20.7 yrs"},
+  {rank:18,name:"Tounde Yessoufou",position:"SG/SF",team:"St. John's",height:"6'5.5\"",weight:"220 lbs",age:"21.1 yrs"},
+  {rank:19,name:"Miikka Muurinen",position:"PF",team:"Arkansas",height:"6'11\"",weight:"200 lbs",age:"20.3 yrs"},
+  {rank:20,name:"Luigi Suigo",position:"C",team:"Villanova",height:"7'4\"",weight:"289 lbs",age:"20.4 yrs"},
+  {rank:21,name:"JJ Andrews",position:"SF",team:"Arkansas",height:"6'6\"",weight:"220 lbs",age:"19.3 yrs"},
+  {rank:22,name:"Motiejus Krivas",position:"C",team:"Arizona",height:"7'2\"",weight:"260 lbs",age:"22.6 yrs"},
+  {rank:23,name:"Christian Collins",position:"SF/PF",team:"USC",height:"6'9\"",weight:"200 lbs",age:"19.8 yrs"},
+  {rank:24,name:"Davis Fogle",position:"SG",team:"Gonzaga",height:"6'7\"",weight:"200 lbs",age:"21.0 yrs"},
+  {rank:25,name:"Billy Richmond III",position:"SG/SF",team:"Arkansas",height:"6'7\"",weight:"195 lbs",age:"21.2 yrs"},
+  {rank:26,name:"Jason Crowe Jr.",position:"PG",team:"Missouri",height:"6'3\"",weight:"170 lbs",age:"18.9 yrs"},
+  {rank:27,name:"Milan Momcilovic",position:"SF/PF",team:"Kentucky",height:"6'9.25\"",weight:"218 lbs",age:"22.7 yrs"},
+  {rank:28,name:"Alijah Arenas",position:"SG",team:"USC",height:"6'6\"",weight:"197 lbs",age:"20.3 yrs"},
+  {rank:29,name:"Malachi Moreno",position:"C",team:"Kentucky",height:"7'0.5\"",weight:"243 lbs",age:"20.7 yrs"},
+  {rank:30,name:"David Mirkovic",position:"PF",team:"Illinois",height:"6'9\"",weight:"250 lbs",age:"21.5 yrs"}
+];
+function mockDraftWeekKey(date=new Date()){
+  const d=new Date(Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()));
+  const day=d.getUTCDay()||7;d.setUTCDate(d.getUTCDate()+4-day);
+  const yearStart=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  return `${d.getUTCFullYear()}-${Math.ceil((((d-yearStart)/86400000)+1)/7)}`;
+}
+function seededNumber(seed){let h=2166136261;for(const ch of String(seed)){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return ()=>{h+=0x6D2B79F5;let t=h;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
+function weeklyMockProspects(){
+  const week=mockDraftWeekKey(),rand=seededNumber(`imo-2027-${week}`);
+  const topTwenty=MOCK_DRAFT_2027_PROSPECTS.slice(0,20);
+
+  // Keep the leading board credible while allowing controlled weekly movement.
+  // Only non-overlapping adjacent pairs can swap, so every top-20 prospect
+  // moves by no more than one position in either direction during a week.
+  const candidatePairs=[];
+  for(let i=0;i<topTwenty.length-1;i++)candidatePairs.push(i);
+  for(let i=candidatePairs.length-1;i>0;i--){const j=Math.floor(rand()*(i+1));[candidatePairs[i],candidatePairs[j]]=[candidatePairs[j],candidatePairs[i]]}
+  const used=new Set(),swapCount=3+Math.floor(rand()*3);
+  let completed=0;
+  for(const i of candidatePairs){
+    if(completed>=swapCount)break;
+    if(used.has(i)||used.has(i+1))continue;
+    [topTwenty[i],topTwenty[i+1]]=[topTwenty[i+1],topTwenty[i]];
+    used.add(i);used.add(i+1);completed++;
+  }
+
+  // Picks 21-24 continue to rotate from the wider 21-30 prospect pool.
+  const pool=MOCK_DRAFT_2027_PROSPECTS.slice(20),shuffled=[...pool];
+  for(let i=shuffled.length-1;i>0;i--){const j=Math.floor(rand()*(i+1));[shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]]}
+  return [...topTwenty,...shuffled.slice(0,4)];
+}
+function currentLeagueBundle(){return state.bundles.find(b=>String(b.league?.league_id)===String(CONFIG.currentLeagueId))||state.modelBundle||state.bundles[0]}
+function projected2027DraftSlots(){
+  const bundle=currentLeagueBundle();if(!bundle)return[];
+  const weeks=meaningfulWeeks(bundle),through=weeks.at(-1)||Infinity;
+  const worstToBest=[...priceRowsForBundle(bundle,through)].sort((a,b)=>Number(b.odds)-Number(a.odds)||Number(a.rank)-Number(b.rank));
+  return worstToBest.map((row,index)=>{const manager=state.managers.get(String(row.id)),rosterId=String(manager?.roster?.roster_id||'');return{slot:index+1,originalRosterId:rosterId,originalManagerId:String(row.id)}}).filter(x=>x.originalRosterId);
+}
+function ownerManagerFor2027Pick(originalRosterId,round){
+  const bundle=currentLeagueBundle(),traded=(bundle?.tradedPicks||[]).find(p=>String(p.season)==='2027'&&Number(p.round)===Number(round)&&String(p.roster_id??p.original_roster_id)===String(originalRosterId));
+  const ownerRosterId=String(traded?.owner_id??originalRosterId),managerId=String(bundle?.ownerByRoster?.[ownerRosterId]||'');
+  return state.managers.get(managerId)||[...state.managers.values()].find(m=>String(m.roster?.roster_id)===ownerRosterId)||null;
+}
+function mockDraftRows(){
+  const slots=projected2027DraftSlots(),prospects=weeklyMockProspects(),rows=[];
+  for(let round=1;round<=3;round++)for(const slot of slots){const overall=(round-1)*8+slot.slot,prospect=prospects[overall-1],owner=ownerManagerFor2027Pick(slot.originalRosterId,round);rows.push({round,slot:slot.slot,pick:`${round}.${String(slot.slot).padStart(2,'0')}`,overall,prospect,owner})}
+  return rows;
+}
+function renderMockDraft(){
+  const root=$("mockDraftContent");if(!root)return;const rows=mockDraftRows(),updated=new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'long',year:'numeric'}).format(new Date());
+  root.innerHTML=`<header class="mock-draft-header"><div><span class="eyebrow">IMO DYNASTY DRAFT ROOM</span><h2 id="mockDraftTitle">2027 Rookie Mock Draft</h2><p>Projected order uses reverse championship odds and live Sleeper pick ownership.</p></div><div class="mock-draft-update"><span>Weekly board</span><strong>${esc(updated)}</strong></div></header><div class="mock-draft-round-nav"><button type="button" data-mock-round="1" class="active">Round 1</button><button type="button" data-mock-round="2">Round 2</button><button type="button" data-mock-round="3">Round 3</button></div><div class="mock-draft-board">${rows.map(row=>{const p=row.prospect,m=row.owner,avatar=m?.avatar?`<img src="${esc(m.avatar)}" alt="" loading="lazy">`:`<span>${esc(m?.initials||'—')}</span>`;return `<article class="mock-pick-card" data-mock-round-card="${row.round}"><div class="mock-pick-number">${row.pick}</div><div class="mock-owner">${avatar}<b>${esc(m?.name||'Unassigned')}</b></div><div class="mock-player"><strong>${esc(p?.name||'TBD')}</strong><span>${esc(p?.position||'')} ${p?.team?`| ${esc(p.team)}`:''}</span><small>${esc(p?.height||'')} ${p?.weight?`| ${esc(p.weight)}`:''} ${p?.age?`| ${esc(p.age)}`:''}</small></div></article>`}).join('')}</div>`;
+}
+function openMockDraft(){renderMockDraft();const modal=$("mockDraftModal");modal?.classList.add('open');modal?.setAttribute('aria-hidden','false');document.body.classList.add('mock-draft-open')}
+function closeMockDraft(){const modal=$("mockDraftModal");modal?.classList.remove('open');modal?.setAttribute('aria-hidden','true');document.body.classList.remove('mock-draft-open')}
+
 function safeRender(name,fn){try{fn()}catch(error){console.error(`Failed to render ${name}:`,error)}}
 function renderAll(){
   ensureManagerGradeStyles();
@@ -1486,6 +1574,9 @@ document.addEventListener("click",e=>{
   if(window.matchMedia('(max-width: 620px)').matches){const badgeSummary=e.target.closest('.profile-badge-pop > summary');if(badgeSummary){e.preventDefault();const details=badgeSummary.parentElement,body=details?.querySelector(':scope > div');openMobileProfileInfo(body?.querySelector('strong')?.textContent||'Badge',body?.innerHTML||'');details.open=false;return}const formSummary=e.target.closest('.profile-form-result > summary');if(formSummary){e.preventDefault();const details=formSummary.parentElement,body=details?.querySelector(':scope > div');openMobileProfileInfo('Match result',body?.innerHTML||'');details.open=false;return}}
   const archetypeButton=e.target.closest('[data-open-archetype-guide]');if(archetypeButton){e.preventDefault();if(Date.now()-lastArchetypePointerAction<700)return;openArchetypeGuide(archetypeButton.dataset.currentArchetype||'',archetypeButton.dataset.secondaryArchetype||'');return}
   if(e.target.closest('[data-close-archetype-guide]')||e.target.closest('#archetypeGuideClose')){closeArchetypeGuide();return}
+  if(e.target.closest("#mockDraftBtn")){openMockDraft();return}
+  if(e.target.closest("[data-close-mock-draft]")||e.target.closest("#mockDraftClose")){closeMockDraft();return}
+  const mockRoundBtn=e.target.closest("[data-mock-round]");if(mockRoundBtn){const round=mockRoundBtn.dataset.mockRound;document.querySelectorAll("[data-mock-round]").forEach(b=>b.classList.toggle("active",b===mockRoundBtn));document.querySelectorAll("[data-mock-round-card]").forEach(card=>card.classList.toggle("round-focus",card.dataset.mockRoundCard===round));document.querySelector(`[data-mock-round-card="${round}"]`)?.scrollIntoView({behavior:"smooth",block:"start"});return}
   if(e.target.closest("#headlinesBtn")){openHeadlines();return}
   if(e.target.closest("[data-close-headlines]")||e.target.closest("#headlinesClose")){closeHeadlines();return}
   const starEl=e.target.closest("[data-star-player]");if(starEl){togglePlayerInterest(starEl.dataset.starPlayer);return}
@@ -1510,6 +1601,6 @@ document.addEventListener('change',e=>{
 document.addEventListener('pointerdown',e=>{if(!e.target.closest('[data-manager-switcher]')&&!e.target.closest('#mobileManagerSwitcherSheet'))closeManagerSwitchers()},{passive:true});
 document.addEventListener("pointerover",e=>{const link=e.target.closest?.(".manager-profile-link");if(link)queueManagerProfilePrewarm(link.dataset.managerId)},{passive:true});
 document.addEventListener("focusin",e=>{const link=e.target.closest?.(".manager-profile-link");if(link)queueManagerProfilePrewarm(link.dataset.managerId)});
-document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("archetypeGuideModal")?.classList.contains("open"))closeArchetypeGuide();else if(document.getElementById('mobileManagerSwitcherSheet'))closeMobileManagerSwitcher();else if(document.getElementById('mobileProfileInfoSheet')?.classList.contains('open'))closeMobileProfileInfo();else if(document.querySelector('[data-manager-switcher].open'))closeManagerSwitchers();else if($("headlinesModal")?.classList.contains("open"))closeHeadlines();else if($("playerHistoryModal")?.classList.contains("open"))closePlayerHistory();else if($("managerProfileModal")?.classList.contains("open"))closeManagerProfile();else if($("managerDirectoryModal")?.classList.contains("open"))closeManagerDirectory()});
+document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("mockDraftModal")?.classList.contains("open"))closeMockDraft();else if($("archetypeGuideModal")?.classList.contains("open"))closeArchetypeGuide();else if(document.getElementById('mobileManagerSwitcherSheet'))closeMobileManagerSwitcher();else if(document.getElementById('mobileProfileInfoSheet')?.classList.contains('open'))closeMobileProfileInfo();else if(document.querySelector('[data-manager-switcher].open'))closeManagerSwitchers();else if($("headlinesModal")?.classList.contains("open"))closeHeadlines();else if($("playerHistoryModal")?.classList.contains("open"))closePlayerHistory();else if($("managerProfileModal")?.classList.contains("open"))closeManagerProfile();else if($("managerDirectoryModal")?.classList.contains("open"))closeManagerDirectory()});
 window.addEventListener("popstate",openManagerFromHash);
 load().then?.(()=>openManagerFromHash());
