@@ -328,3 +328,9 @@ V3.1.14
 - Corrected historical rookie-pick attribution by mapping each final rookie draft slot back to the original roster_id via Sleeper slot_to_roster_id.
 - Applies through the shared trade formatter used by manager Recent Trades, Biggest Ever Trades and trade details.
 - Trade grading and valuation logic unchanged.
+
+V3.1.15 — Historical rookie-pick attribution
+- Uses the verified completed 2026 rookie-draft column order as the canonical original-pick ownership map.
+- Historical 2026 traded picks now resolve original franchise + round to the player selected in that franchise column.
+- 2025 and other seasons continue to use Sleeper's completed-draft slot mapping as the generic fallback.
+- Attribution is display-only: converting a past pick to a player name does not alter the original pick value used by trade grades.

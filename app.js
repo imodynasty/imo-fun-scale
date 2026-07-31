@@ -1,5 +1,24 @@
-/* IMO DYNASTY V3.1.13 — League HQ */
+/* IMO DYNASTY V3.1.15 — League HQ */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
+
+// Completed-draft column ownership is the source of truth for converting a
+// traded historical pick into the player it became. Sleeper's drafter/current
+// owner fields are deliberately ignored for these overrides.
+const CANONICAL_DRAFT_COLUMNS={
+  "2026":{
+    "thehouseofpatience":1,
+    "marajuana":2,
+    "chetanyahu":3,
+    "flintlovesmesexy":4,
+    "sengooning":5,
+    "muzandmuzptyltd":6,
+    "melbournelongnecks":7,
+    "thanos":8
+  }
+};
+function normaliseTeamKey(name){return String(name||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
+function canonicalDraftSlot(season,teamName){return CANONICAL_DRAFT_COLUMNS[String(season)]?.[normaliseTeamKey(teamName)]??null}
+
 const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null}};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
 function resetComputedCaches(){state.computedCache.seasonAverages.clear();state.computedCache.managerTrades.clear();state.computedCache.tradeSide.clear();state.computedCache.completedMatchups.clear();state.computedCache.tendencyLeague=null;state.profileHTMLCache.clear()}
@@ -95,13 +114,13 @@ function tradePlayerValue(playerId,average,t){
   const base=playerDynastyValue(playerId,average,t.created);
   return topTenSeasonAverageIds(t).has(String(playerId))?base*1.20:base
 }
-function tradeAssets(t){const by={};mids(t).forEach(id=>by[id]=[]);Object.entries(t.adds||{}).forEach(([pid,rid])=>{const mid=t.roster_owner_map?.[String(rid)];if(!mid||!by[mid])return;const average=tradeSeasonAverage(pid,t);by[mid].push({type:"player",id:pid,name:playerName(pid),value:tradePlayerValue(pid,average,t),average,topTenBonus:topTenSeasonAverageIds(t).has(String(pid))})});(t.draft_picks||[]).forEach(p=>{const mid=t.roster_owner_map?.[String(p.owner_id)];if(!mid||!by[mid])return;const round=Number(p.round),season=p.season||"Future",original=pickOriginalOwner(p,t),drafted=draftedPlayerForPick(p),pickLabel=`${season} ${roundWord(round)} Round Pick${original?` ${original}`:""}`;let value=fixedPickValue(round),average=0;if(drafted){average=playerSeasonAverage(drafted,season);if(average>0)value=playerDynastyValue(drafted,average,new Date(`${season}-12-31T12:00:00`).getTime())}by[mid].push({type:"pick",id:drafted||null,name:drafted?`${playerName(drafted)} (${pickLabel})`:`${season} Round ${round} Pick`,owner:drafted?null:original,value,average})});return by}
+function tradeAssets(t){const by={};mids(t).forEach(id=>by[id]=[]);Object.entries(t.adds||{}).forEach(([pid,rid])=>{const mid=t.roster_owner_map?.[String(rid)];if(!mid||!by[mid])return;const average=tradeSeasonAverage(pid,t);by[mid].push({type:"player",id:pid,name:playerName(pid),value:tradePlayerValue(pid,average,t),average,topTenBonus:topTenSeasonAverageIds(t).has(String(pid))})});(t.draft_picks||[]).forEach(p=>{const mid=t.roster_owner_map?.[String(p.owner_id)];if(!mid||!by[mid])return;const round=Number(p.round),season=p.season||"Future",original=pickOriginalOwner(p,t),drafted=draftedPlayerForPick(p),pickLabel=`${season} ${roundWord(round)} Round Pick${original?` ${original}`:""}`;const value=fixedPickValue(round),average=0;by[mid].push({type:"pick",id:drafted||null,name:drafted?`${playerName(drafted)} (${pickLabel})`:`${season} Round ${round} Pick`,owner:drafted?null:original,value,average})});return by}
 function tradeValue(t){return Object.values(tradeAssets(t)).flat().reduce((sum,asset)=>sum+(Number(asset.value)||0),0)}
 
 function tradeOutgoingAssets(t){
   const by={};mids(t).forEach(id=>by[id]=[]);
   Object.entries(t.drops||{}).forEach(([pid,rid])=>{const mid=t.roster_owner_map?.[String(rid)];if(!mid||!by[mid])return;const average=tradeSeasonAverage(pid,t);by[mid].push({type:"player",id:pid,name:playerName(pid),value:tradePlayerValue(pid,average,t),average,age:playerAgeAt(pid,t.created),topTenBonus:topTenSeasonAverageIds(t).has(String(pid))})});
-  (t.draft_picks||[]).forEach(p=>{const mid=t.roster_owner_map?.[String(p.previous_owner_id)];if(!mid||!by[mid])return;const round=Number(p.round),season=p.season||"Future",drafted=draftedPlayerForPick(p);let value=fixedPickValue(round),average=0;if(drafted){average=playerSeasonAverage(drafted,season);if(average>0)value=playerDynastyValue(drafted,average,new Date(`${season}-12-31T12:00:00`).getTime())}by[mid].push({type:"pick",id:drafted||null,name:drafted?playerName(drafted):`${season} Round ${round} Pick`,value,average,age:drafted?playerAgeAt(drafted,t.created):20})});
+  (t.draft_picks||[]).forEach(p=>{const mid=t.roster_owner_map?.[String(p.previous_owner_id)];if(!mid||!by[mid])return;const round=Number(p.round),season=p.season||"Future",drafted=draftedPlayerForPick(p),value=fixedPickValue(round),average=0;by[mid].push({type:"pick",id:drafted||null,name:drafted?playerName(drafted):`${season} Round ${round} Pick`,value,average,age:drafted?playerAgeAt(drafted,t.created):20})});
   return by
 }
 function tradeSideMetrics(t,managerId){
@@ -1056,6 +1075,16 @@ async function loadSeason(id){
   ]);
   if(!league||!users||!rosters)return null;
 
+  // Resolve each roster to its franchise name before building the draft map.
+  // For seasons with a verified board, the manager column determines the
+  // original pick slot regardless of who ultimately made the selection.
+  const earlyUserById=Object.fromEntries(users.map(u=>[String(u.user_id),u]));
+  const rosterNameById={};
+  rosters.forEach(r=>{
+    const u=earlyUserById[String(r.owner_id)]||{};
+    rosterNameById[String(r.roster_id)]=u.metadata?.team_name||u.display_name||`Team ${r.roster_id}`;
+  });
+
   const draftResults=await Promise.all((drafts||[]).map(async draft=>({
     draft,picks:(await getJSON(`${CONFIG.api}/draft/${draft.draft_id}/picks`,true))||[]
   })));
@@ -1101,12 +1130,27 @@ async function loadSeason(id){
       // This keeps traded selections correct everywhere the shared trade
       // formatter is used (Trade Centre, manager Recent Trades and Biggest
       // Ever Trades).
-      const originalRosterId=slotToRoster[String(originalSlot)]??slotToRoster[originalSlot]??null;
+      let originalRosterId=null;
+
+      // Verified completed-draft board: the column is the original franchise
+      // pick. Find the roster whose team name owns this column. This is what
+      // makes, for example, Chetanyahu R1 -> 1.03 -> AJ Dybantsa and Thanos
+      // R1 -> 1.08 -> Mikel Brown, even when another team made the selection.
+      if(CANONICAL_DRAFT_COLUMNS[season]){
+        originalRosterId=Object.keys(rosterNameById).find(rid=>
+          Number(canonicalDraftSlot(season,rosterNameById[rid]))===Number(originalSlot)
+        )||null;
+      }
+
+      // Generic fallback for other completed rookie drafts, including 2025.
+      if(originalRosterId==null){
+        originalRosterId=slotToRoster[String(originalSlot)]??slotToRoster[originalSlot]??null;
+      }
+
       if(originalRosterId!=null){
         draftPickMap[`${season}|${String(originalRosterId)}|${String(round)}`]=String(p.player_id);
       }else{
-        // Older draft payload fallback: retain a slot key only when Sleeper
-        // does not expose slot_to_roster_id.
+        // Final fallback for older payloads that expose only a numerical slot.
         draftPickMap[`${season}|${String(originalSlot)}|${String(round)}`]=String(p.player_id);
       }
     });
