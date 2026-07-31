@@ -1273,3 +1273,20 @@ body.mobile-profile-info-open{overflow:hidden}
   /* Native details popovers are replaced with the viewport-safe sheet above. */
   .profile-badge-pop>div,.profile-form-result>div{display:none!important}
 }
+
+
+/* V3.1.5 — Mobile manager-switch reliability */
+@media(max-width:620px){
+  .manager-switcher-trigger{
+    position:relative;z-index:2;touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+    min-height:44px;padding:2px 0!important;
+  }
+  .manager-switcher-menu{
+    position:fixed!important;left:10px!important;right:10px!important;top:auto!important;
+    bottom:calc(10px + env(safe-area-inset-bottom,0px))!important;width:auto!important;
+    max-height:min(68vh,560px)!important;overflow-y:auto!important;overscroll-behavior:contain;
+    z-index:5000!important;transform:none!important;isolation:isolate;
+  }
+  .manager-switcher-option{min-height:54px;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  .manager-profile-sheet{overscroll-behavior:contain}
+}

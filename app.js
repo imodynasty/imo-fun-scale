@@ -1062,24 +1062,32 @@ async function load(){
   }
 }
 document.querySelectorAll('.active-window-btn').forEach(b=>b.addEventListener('click',()=>{state.activeWindow=b.dataset.activeWindow;document.querySelectorAll('.active-window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary();renderLeaderboard()}));$("refreshBtn").addEventListener('click',load);$("biggestTradesToggle").addEventListener('click',()=>{state.biggestTradesExpanded=!state.biggestTradesExpanded;renderBiggestTrades()});
-document.addEventListener("pointerdown",e=>{
-  const link=e.target.closest?.(".manager-profile-link");
-  if(!link||e.button!==0)return;
-  const modal=$("managerProfileModal"),content=$("managerProfileContent"),id=String(link.dataset.managerId||"");
-  if(!modal||!content||!id)return;
-  modal.classList.add("open");
-  modal.setAttribute("aria-hidden","false");
-  document.body.classList.add("manager-profile-open");
-  modal.dataset.managerId=id;
-  const key=managerProfileCacheKey(id);
-  if(state.profileHTMLCache.has(key)){content.innerHTML=state.profileHTMLCache.get(key);bindSparklineTooltips(content)}
-  else content.innerHTML='<div class="manager-profile-loading"><span></span><strong>Loading manager profile…</strong><small>The profile is open — live data is being prepared.</small></div>';
-},{passive:true});
+let lastManagerPointerAction=0;
+function toggleManagerSwitcher(trigger){
+  const sw=trigger?.closest('[data-manager-switcher]'),menu=sw?.querySelector('.manager-switcher-menu');
+  if(!sw||!menu)return;
+  const opening=!sw.classList.contains('open');
+  closeManagerSwitchers(sw);
+  sw.classList.toggle('open',opening);
+  menu.hidden=!opening;
+  trigger.setAttribute('aria-expanded',String(opening));
+}
+
+// Use one pointer-up path on touch devices so a single tap always opens the profile or switcher.
+document.addEventListener("pointerup",e=>{
+  if(e.pointerType==='mouse'&&e.button!==0)return;
+  const switchTrigger=e.target.closest?.('[data-manager-switcher-trigger]');
+  if(switchTrigger){e.preventDefault();e.stopPropagation();lastManagerPointerAction=Date.now();toggleManagerSwitcher(switchTrigger);return}
+  const switchOption=e.target.closest?.('[data-switch-manager]');
+  if(switchOption){e.preventDefault();e.stopPropagation();lastManagerPointerAction=Date.now();closeManagerSwitchers();openManagerProfile(switchOption.dataset.switchManager);return}
+  const link=e.target.closest?.('.manager-profile-link');
+  if(link){e.preventDefault();e.stopPropagation();lastManagerPointerAction=Date.now();closeManagerDirectory();openManagerProfile(link.dataset.managerId);return}
+});
 
 document.addEventListener("click",e=>{
   if(e.target.closest('[data-close-mobile-profile-info]')){closeMobileProfileInfo();return}
-  const switchTrigger=e.target.closest('[data-manager-switcher-trigger]');if(switchTrigger){const sw=switchTrigger.closest('[data-manager-switcher]'),menu=sw?.querySelector('.manager-switcher-menu'),opening=!sw?.classList.contains('open');closeManagerSwitchers(sw);if(sw&&menu){sw.classList.toggle('open',opening);menu.hidden=!opening;switchTrigger.setAttribute('aria-expanded',String(opening))}return}
-  const switchOption=e.target.closest('[data-switch-manager]');if(switchOption){closeManagerSwitchers();openManagerProfile(switchOption.dataset.switchManager);return}
+  const switchTrigger=e.target.closest('[data-manager-switcher-trigger]');if(switchTrigger){if(Date.now()-lastManagerPointerAction<700)return;toggleManagerSwitcher(switchTrigger);return}
+  const switchOption=e.target.closest('[data-switch-manager]');if(switchOption){if(Date.now()-lastManagerPointerAction<700)return;closeManagerSwitchers();openManagerProfile(switchOption.dataset.switchManager);return}
   if(window.matchMedia('(max-width: 620px)').matches){const badgeSummary=e.target.closest('.profile-badge-pop > summary');if(badgeSummary){e.preventDefault();const details=badgeSummary.parentElement,body=details?.querySelector(':scope > div');openMobileProfileInfo(body?.querySelector('strong')?.textContent||'Badge',body?.innerHTML||'');details.open=false;return}const formSummary=e.target.closest('.profile-form-result > summary');if(formSummary){e.preventDefault();const details=formSummary.parentElement,body=details?.querySelector(':scope > div');openMobileProfileInfo('Match result',body?.innerHTML||'');details.open=false;return}}
   if(e.target.closest("#headlinesBtn")){openHeadlines();return}
   if(e.target.closest("[data-close-headlines]")||e.target.closest("#headlinesClose")){closeHeadlines();return}
@@ -1089,7 +1097,7 @@ document.addEventListener("click",e=>{
   if(e.target.closest("#managerDirectoryBtn")){openManagerDirectory();return}
   if(e.target.closest("[data-close-manager-directory]")||e.target.closest("#managerDirectoryClose")){closeManagerDirectory();return}
   const seasonBtn=e.target.closest("[data-profile-season]");if(seasonBtn){state.profileAverageSeason=seasonBtn.dataset.profileSeason;const id=$("managerProfileModal")?.dataset.managerId;if(id){const content=$("managerProfileContent");content.innerHTML=cachedManagerProfileHTML(id);bindSparklineTooltips(content)}return}
-  const link=e.target.closest(".manager-profile-link");if(link){closeManagerDirectory();openManagerProfile(link.dataset.managerId);return}
+  const link=e.target.closest(".manager-profile-link");if(link){if(Date.now()-lastManagerPointerAction<700)return;closeManagerDirectory();openManagerProfile(link.dataset.managerId);return}
   if(e.target.closest("[data-close-manager-profile]")||e.target.closest("#managerProfileClose"))closeManagerProfile()
 });
 document.addEventListener("toggle",e=>{const detail=e.target;if(!(detail instanceof HTMLDetailsElement)||!detail.open)return;if(detail.matches(".profile-badge-pop")){detail.closest(".profile-badge-icons")?.querySelectorAll(".profile-badge-pop[open]").forEach(x=>{if(x!==detail)x.open=false})}if(detail.matches(".profile-form-result")){detail.closest(".profile-form-strip")?.querySelectorAll(".profile-form-result[open]").forEach(x=>{if(x!==detail)x.open=false})}if(detail.matches(".player-history-trade")){detail.closest(".player-history-timeline")?.querySelectorAll(".player-history-trade[open]").forEach(x=>{if(x!==detail)x.open=false})}},true);

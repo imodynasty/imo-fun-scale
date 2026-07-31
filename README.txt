@@ -1,6 +1,6 @@
-IMO DYNASTY V3.1.4 — Manager Switcher + Mobile Profile Fix
+IMO DYNASTY V3.1.5 — Manager Switcher + Mobile Profile Fix
 
-V3.1.4 UPDATES
+V3.1.5 UPDATES
 - Clicking the current manager name inside a profile opens a manager switcher dropdown.
 - Selecting another manager swaps to that manager profile without closing the modal.
 - Mobile badge and recent W/L taps now open a viewport-safe information sheet.
