@@ -1401,5 +1401,3 @@ body.mobile-manager-switcher-open{overflow:hidden;touch-action:none}
 .top-active-row .inline-manager-link{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;font-size:12px}
 .top-active-row small{font-size:10px;white-space:nowrap;color:var(--muted,#94a3b8)}
 .latest-trade-for{display:inline-block;margin:0 5px;color:var(--muted,#94a3b8);font-size:.78em;font-weight:700}
-.odds-recent-arrow{display:inline-block;margin-left:4px;font-style:normal;font-size:11px;font-weight:1000;line-height:1;vertical-align:1px}
-.odds-recent-arrow.up{color:#36d17c}.odds-recent-arrow.down{color:#ff5d69}
