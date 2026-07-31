@@ -311,8 +311,8 @@ V3.1.8 CHANGES
 - Added an Archetype Guide button to every manager profile with definitions for all nine manager archetypes.
 
 
-V3.1.11
-- Added automatic rookie-player value override for drafted rookies with 0 NBA games played.
-- Uses the exact rookie draft round/slot value (1.01–2.08); future pick values are unchanged.
-- Normal player valuation resumes after the player's first NBA game.
-- Corrected drafted-player attribution by separating original draft-slot mapping from manager/owner IDs.
+V3.1.12
+- Reverted rookie-value changes so historical trade grades use the original valuation model again.
+- Future draft-pick values remain unchanged.
+- Fixed drafted-player attribution by using Sleeper draft_slot only (the original pick slot), never the manager who made the selection.
+- Filters out startup/long drafts when identifying rookie selections, preventing cross-draft overwrites.

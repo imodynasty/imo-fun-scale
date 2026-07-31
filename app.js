@@ -1,6 +1,6 @@
-/* IMO DYNASTY V3.1.11 — League HQ */
+/* IMO DYNASTY V3.1.12 — League HQ */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
-const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},rookieDraftSlots:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null}};
+const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null}};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
 function resetComputedCaches(){state.computedCache.seasonAverages.clear();state.computedCache.managerTrades.clear();state.computedCache.tradeSide.clear();state.computedCache.completedMatchups.clear();state.computedCache.tendencyLeague=null;state.profileHTMLCache.clear()}
 async function getJSON(url,optional=false){try{const r=await fetch(url);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){if(optional)return null;throw e}}
@@ -45,34 +45,12 @@ function pickOriginalOwner(p,t){const owner=t.roster_owner_map?.[String(p.roster
 function roundWord(n){return ({1:"First",2:"Second",3:"Third",4:"Fourth",5:"Fifth"})[Number(n)]||`Round ${n}`}
 function draftedPlayerForPick(p){
   const season=String(p.season),round=String(p.round);
-  // Sleeper trade records identify a future pick by its ORIGINAL roster slot.
-  // Do not fall back to current/previous owners: those IDs can match another
-  // draft slot and incorrectly attribute the player selected with the pick.
+  // A traded pick belongs to its original roster slot. Current/previous owner
+  // IDs must never be used here, otherwise a manager who used a traded 1.02
+  // can make that player appear as their own 1.08 selection.
   const originalSlot=p.roster_id??p.original_roster_id;
   if(originalSlot==null)return null;
   return state.draftPickMap[`${season}|${String(originalSlot)}|${round}`]||null
-}
-const ROOKIE_PICK_VALUES={
-  '1.01':27.50,'1.02':26.00,'1.03':24.50,'1.04':23.00,
-  '1.05':21.50,'1.06':20.00,'1.07':18.50,'1.08':17.00,
-  '2.01':15.50,'2.02':14.00,'2.03':12.50,'2.04':11.00,
-  '2.05':9.50,'2.06':8.00,'2.07':6.50,'2.08':5.00
-};
-function rookiePickValue(round,slot){return ROOKIE_PICK_VALUES[`${Number(round)}.${String(Number(slot)).padStart(2,'0')}`]??null}
-function playerNBAGamesPlayed(playerId){
-  const id=String(playerId);
-  let games=0;
-  for(const source of [state.gameLogMeta,state.seasonTotalMeta]){
-    Object.values(source||{}).forEach(season=>{games=Math.max(games,Number(season?.[id]?.gamesPlayed)||0)});
-  }
-  return games
-}
-function rookieDraftValueOverride(playerId){
-  const entries=state.rookieDraftSlots?.[String(playerId)]||[];
-  if(!entries.length||playerNBAGamesPlayed(playerId)>0)return null;
-  // Prefer the newest rookie draft if the same player ID ever appears twice.
-  const latest=[...entries].sort((a,b)=>Number(b.season)-Number(a.season))[0];
-  return rookiePickValue(latest.round,latest.slot)
 }
 function fixedPickValue(round){
   round=Number(round);
@@ -114,11 +92,6 @@ function topTenSeasonAverageIds(t){
   return new Set(fallback)
 }
 function tradePlayerValue(playerId,average,t){
-  // Drafted rookies with zero NBA games retain the value of their actual
-  // rookie-draft selection. The normal model takes over immediately after
-  // their first NBA appearance.
-  const rookieOverride=rookieDraftValueOverride(playerId);
-  if(rookieOverride!=null)return rookieOverride;
   const base=playerDynastyValue(playerId,average,t.created);
   return topTenSeasonAverageIds(t).has(String(playerId))?base*1.20:base
 }
@@ -1082,26 +1055,31 @@ async function loadSeason(id){
     getJSON(`${CONFIG.api}/league/${id}/traded_picks`,true),getJSON(`${CONFIG.api}/league/${id}/winners_bracket`,true)
   ]);
   if(!league||!users||!rosters)return null;
-  const draftResults=await Promise.all((drafts||[]).map(async d=>({
-    draft:d,picks:(await getJSON(`${CONFIG.api}/draft/${d.draft_id}/picks`,true))||[]
+
+  const draftResults=await Promise.all((drafts||[]).map(async draft=>({
+    draft,picks:(await getJSON(`${CONFIG.api}/draft/${draft.draft_id}/picks`,true))||[]
   })));
-  const draftPickMap={},rookieDraftSlots={};
-  draftResults.forEach(({draft,picks})=>{
-    const teams=Number(draft?.settings?.teams||league.total_rosters||rosters.length||8);
-    picks.filter(Boolean).forEach(p=>{
-      if(p.player_id==null||p.round==null)return;
-      const round=Number(p.round);
-      const pickNo=Number(p.pick_no);
-      const slot=Number.isFinite(pickNo)&&pickNo>0?((pickNo-1)%teams)+1:Number(p.draft_slot);
-      if(!Number.isFinite(slot)||slot<1)return;
-      const playerId=String(p.player_id),season=String(league.season);
-      // A completed pick is keyed only by its original draft slot and round.
-      // Keeping owner IDs out of this namespace prevents 1.02 being confused
-      // with a player selected by the manager currently holding pick 1.08.
-      draftPickMap[`${season}|${slot}|${round}`]=playerId;
-      (rookieDraftSlots[playerId]??=[]).push({season,round,slot,pickNo:Number.isFinite(pickNo)?pickNo:null});
+  // Prefer true rookie drafts (short drafts or explicitly named rookie drafts).
+  // This prevents a startup/supplemental draft in the same league from
+  // overwriting the rookie-slot attribution.
+  const rookieDrafts=draftResults.filter(({draft,picks})=>{
+    const name=String(draft?.metadata?.name||draft?.name||'').toLowerCase();
+    const configuredRounds=Number(draft?.settings?.rounds)||0;
+    const observedRounds=Math.max(0,...picks.map(p=>Number(p.round)||0));
+    return name.includes('rookie')||((configuredRounds||observedRounds)>0&&(configuredRounds||observedRounds)<=5);
+  });
+  const relevantDrafts=rookieDrafts.length?rookieDrafts:draftResults;
+  const draftPickMap={};
+  relevantDrafts.forEach(({draft,picks})=>{
+    const season=String(draft?.season||league.season);
+    picks.forEach(p=>{
+      if(p.player_id==null||p.round==null||p.draft_slot==null)return;
+      // Sleeper's draft_slot is the ORIGINAL pick slot. It remains correct
+      // even when another manager makes the selection after a pick trade.
+      draftPickMap[`${season}|${String(p.draft_slot)}|${String(p.round)}`]=String(p.player_id);
     });
   });
+
   const ownerByRoster={},userById=Object.fromEntries(users.map(u=>[String(u.user_id),u])),managerNameMap={};
   rosters.forEach(r=>{if(r.owner_id!=null){ownerByRoster[String(r.roster_id)]=String(r.owner_id);const u=userById[String(r.owner_id)]||{};managerNameMap[String(r.owner_id)]=u.metadata?.team_name||u.display_name||`Team ${r.roster_id}`}});
   const rounds=Array.from({length:CONFIG.roundsToCheck},(_,i)=>i+1),weeks=await limitedMap(rounds,8,async wk=>{
@@ -1114,7 +1092,7 @@ async function loadSeason(id){
     });
     return{trades,transactions:completedTransactions.map(t=>({...t,week:wk})),matchups:(match||[]).map(x=>({...x,week:wk}))}
   });
-  return{league,users,rosters,ownerByRoster,draftPickMap,rookieDraftSlots,tradedPicks:tradedPicks||[],winnersBracket:winnersBracket||[],trades:weeks.flatMap(x=>x?.trades||[]),transactions:weeks.flatMap(x=>x?.transactions||[]),matchups:weeks.flatMap(x=>x?.matchups||[])}
+  return{league,users,rosters,ownerByRoster,draftPickMap,tradedPicks:tradedPicks||[],winnersBracket:winnersBracket||[],trades:weeks.flatMap(x=>x?.trades||[]),transactions:weeks.flatMap(x=>x?.transactions||[]),matchups:weeks.flatMap(x=>x?.matchups||[])}
 }
 async function load(){
   const refresh=$("refreshBtn"),status=$("statusText");
@@ -1136,10 +1114,6 @@ async function load(){
     state.currentRosters=cur.rosters||[];
     state.players=players||{};
     state.draftPickMap=Object.assign({},...valid.map(b=>b.draftPickMap||{}));
-    state.rookieDraftSlots={};
-    valid.forEach(bundle=>Object.entries(bundle.rookieDraftSlots||{}).forEach(([playerId,entries])=>{
-      (state.rookieDraftSlots[playerId]??=[]).push(...entries);
-    }));
     buildManagers();
     const unique=new Map();
     valid.flatMap(x=>x.trades||[]).forEach(t=>unique.set(t.transaction_id||`${t.league_id}-${t.created}`,t));
