@@ -1,3 +1,8 @@
+IMO DYNASTY V3.2.10 — Refresh Button Removal
+
+- Removed the manual Refresh button from the site header.
+- Live league data continues to load automatically when the page opens.
+
 IMO DYNASTY V3.2.8
 
 2027 mock draft weekly movement update:

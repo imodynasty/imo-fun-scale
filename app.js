@@ -1473,8 +1473,7 @@ async function loadSeason(id){
   return{league,users,rosters,ownerByRoster,draftPickMap,draftSelections,tradedPicks:tradedPicks||[],winnersBracket:winnersBracket||[],trades:weeks.flatMap(x=>x?.trades||[]),transactions:weeks.flatMap(x=>x?.transactions||[]),matchups:weeks.flatMap(x=>x?.matchups||[])}
 }
 async function load(){
-  const refresh=$("refreshBtn"),status=$("statusText");
-  if(refresh)refresh.disabled=true;
+  const status=$("statusText");
   if(status)status.textContent='Connecting to Sleeper…';
   try{
     const [bundles,players]=await Promise.all([
@@ -1515,10 +1514,10 @@ async function load(){
     console.error('IMO DYNASTY load failed:',e);
     if(status)status.textContent='Could not load Sleeper data';
   }finally{
-    if(refresh)refresh.disabled=false;
+    // Automatic loading only; manual refresh control intentionally removed.
   }
 }
-document.querySelectorAll('.active-window-btn').forEach(b=>b.addEventListener('click',()=>{state.activeWindow=b.dataset.activeWindow;document.querySelectorAll('.active-window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary();renderLeaderboard()}));$("refreshBtn").addEventListener('click',load);$("biggestTradesToggle").addEventListener('click',()=>{state.biggestTradesExpanded=!state.biggestTradesExpanded;renderBiggestTrades()});
+document.querySelectorAll('.active-window-btn').forEach(b=>b.addEventListener('click',()=>{state.activeWindow=b.dataset.activeWindow;document.querySelectorAll('.active-window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary();renderLeaderboard()}));$("biggestTradesToggle").addEventListener('click',()=>{state.biggestTradesExpanded=!state.biggestTradesExpanded;renderBiggestTrades()});
 let lastManagerPointerAction=0;
 function closeMobileManagerSwitcher(){
   const sheet=document.getElementById('mobileManagerSwitcherSheet');
