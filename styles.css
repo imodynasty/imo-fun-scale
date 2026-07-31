@@ -1444,3 +1444,15 @@ body.mock-draft-open{overflow:hidden}
     padding:0 18px;
   }
 }
+
+/* V3.2.12 — desktop draft highlights + complete rookie pick history */
+.manager-picks-modal{position:fixed;inset:0;z-index:1550;display:none;align-items:center;justify-content:center;padding:24px}
+.manager-picks-modal.open{display:flex}
+.manager-picks-backdrop{position:absolute;inset:0;background:rgba(2,4,8,.84);backdrop-filter:blur(7px)}
+.manager-picks-sheet{position:relative;width:min(620px,100%);max-height:min(84vh,800px);overflow:auto;padding:30px;border:1px solid rgba(143,115,255,.34);border-radius:20px;background:linear-gradient(180deg,#111621,#080b11);box-shadow:0 28px 90px rgba(0,0,0,.58)}
+.manager-picks-close{position:absolute;right:16px;top:14px;width:38px;height:38px;border:1px solid rgba(255,255,255,.12);border-radius:50%;background:rgba(255,255,255,.06);color:#fff;font-size:25px;line-height:1;cursor:pointer}
+.manager-picks-heading{padding-right:50px;margin-bottom:20px}.manager-picks-heading h2{font-size:clamp(28px,5vw,42px);letter-spacing:-.04em;margin:5px 0 7px}.manager-picks-heading p{margin:0;color:var(--muted)}
+.manager-picks-list{display:grid;gap:7px}.manager-picks-row{display:grid;grid-template-columns:110px minmax(0,1fr);align-items:center;gap:14px;padding:11px 13px;border:1px solid rgba(255,255,255,.08);border-radius:11px;background:rgba(255,255,255,.035)}
+.manager-picks-pick{font-size:11px;font-weight:950;letter-spacing:.04em;color:#c9bbff}.manager-picks-player-link{padding:0;border:0;background:none;color:#fff;font:inherit;font-size:13px;font-weight:900;text-align:left;cursor:pointer}.manager-picks-player-link:hover{text-decoration:underline;text-decoration-color:#36eb8e;text-underline-offset:4px}
+body.manager-picks-open{overflow:hidden}
+@media(max-width:620px){.manager-picks-modal{padding:0;align-items:flex-end}.manager-picks-sheet{width:100%;max-width:none;max-height:90dvh;border-radius:20px 20px 0 0;padding:24px 14px calc(24px + env(safe-area-inset-bottom))}.manager-picks-row{grid-template-columns:96px minmax(0,1fr);gap:10px;padding:11px}.manager-picks-heading h2{font-size:30px}}
