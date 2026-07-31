@@ -1,4 +1,4 @@
-/* IMO DYNASTY V2.6.8 — balanced trade grades and live league ticker */
+/* IMO DYNASTY V2.6.9 — balanced trade grades and live league ticker */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-01-03T00:00:00+08:00"};
 const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{}};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
@@ -66,34 +66,41 @@ function tradeSideMetrics(t,managerId){
   let sent=outgoing;
   if(!sent.length&&mids(t).length===2){const other=mids(t).find(x=>String(x)!==id);sent=tradeAssets(t)[other]||[]}
   const rawReceivedValue=received.reduce((sum,a)=>sum+(Number(a.value)||0),0),rawSentValue=sent.reduce((sum,a)=>sum+(Number(a.value)||0),0);
-  const allAssets=Object.values(tradeAssets(t)).flat(),sortedPlayers=allAssets.filter(a=>a.type==='player').sort((a,b)=>(Number(b.value)||0)-(Number(a.value)||0));
-  const bestPlayer=sortedPlayers[0]||null,nextBest=sortedPlayers[1]||null,bestReceived=bestPlayer&&received.some(a=>a.type==='player'&&String(a.id)===String(bestPlayer.id));
-  const bestRatio=bestPlayer&&nextBest&&Number(nextBest.value)>0?Number(bestPlayer.value)/Number(nextBest.value):bestPlayer?1.35:1;
-  const eliteCentrepiece=Boolean(bestReceived&&bestRatio>=1.30&&Number(bestPlayer.value)>=35),clearCentrepiece=Boolean(bestReceived&&bestRatio>=1.15&&Number(bestPlayer.value)>=25);
-  const consolidating=received.length<sent.length&&(clearCentrepiece||eliteCentrepiece);
-  const allowance=eliteCentrepiece?.10:clearCentrepiece?.08:0;
-  const adjustedSentValue=consolidating?rawSentValue*(1-allowance):rawSentValue;
-  const average=(rawReceivedValue+adjustedSentValue)/2,edge=average>0?(rawReceivedValue-adjustedSentValue)/average*100:0,net=rawReceivedValue-adjustedSentValue;
-  const receivedPlayers=received.filter(a=>a.type==='player'),sentPlayers=sent.filter(a=>a.type==='player'),receivedPicks=received.filter(a=>a.type==='pick'),sentPicks=sent.filter(a=>a.type==='pick');
-  const bundle=bundleForTrade(t),standing=standingsTable(bundle).find(x=>String(x.id)===id),teamCount=Math.max(1,state.managers.size),contender=standing?standing.standingRank<=Math.ceil(teamCount/2):false,rebuilding=standing?standing.standingRank>Math.ceil(teamCount/2):false;
-  let strategic=0,reasons=[];
-  if(bestReceived){strategic+=eliteCentrepiece?2:clearCentrepiece?1:0;if(clearCentrepiece)reasons.push(eliteCentrepiece?'elite centrepiece':'best player')}
-  if(rebuilding&&receivedPicks.length>sentPicks.length&&rawReceivedValue>=rawSentValue*.88){strategic+=.5;reasons.push('future fit')}
-  else if(contender&&receivedPlayers.some(a=>Number(a.average)>=28)&&rawReceivedValue>=rawSentValue*.88){strategic+=.5;reasons.push('win-now fit')}
-  strategic=Math.min(2.5,strategic);
-  return{id,received,sent,receivedValue:rawReceivedValue,sentValue:rawSentValue,adjustedSentValue,edge,net,strategic,reasons,bestReceived,bestPlayer,eliteCentrepiece,clearCentrepiece,consolidating,allowance}
+  const allPlayers=Object.values(tradeAssets(t)).flat().filter(a=>a.type==='player').sort((a,b)=>(Number(b.value)||0)-(Number(a.value)||0));
+  const bestPlayer=allPlayers[0]||null,nextBest=allPlayers[1]||null;
+  const bestReceived=Boolean(bestPlayer&&received.some(a=>a.type==='player'&&String(a.id)===String(bestPlayer.id)));
+  const bestRatio=bestPlayer&&nextBest&&Number(nextBest.value)>0?Number(bestPlayer.value)/Number(nextBest.value):bestPlayer?1.15:1;
+  const clearCentrepiece=Boolean(bestReceived&&bestRatio>=1.15&&Number(bestPlayer.value)>=25);
+
+  // Star premium: the clear best player carries 10% extra effective value.
+  const starBonus=clearCentrepiece?Number(bestPlayer.value)*0.10:0;
+
+  // Consolidation premium: reward the side turning a larger outgoing package into fewer incoming assets.
+  // This stacks only when the side also secured the clear best player in the deal.
+  const assetReduction=Math.max(0,sent.length-received.length);
+  const consolidationRate=clearCentrepiece?(assetReduction>=3?0.10:assetReduction===2?0.08:assetReduction===1?0.05:0):0;
+  const consolidationBonus=rawReceivedValue*consolidationRate;
+
+  // Keep the combined contextual lift meaningful but controlled.
+  const contextualBonus=Math.min(rawReceivedValue*0.18,starBonus+consolidationBonus);
+  const adjustedReceivedValue=rawReceivedValue+contextualBonus;
+  const average=(adjustedReceivedValue+rawSentValue)/2;
+  const edge=average>0?(adjustedReceivedValue-rawSentValue)/average*100:0;
+  const net=adjustedReceivedValue-rawSentValue;
+
+  return{id,received,sent,receivedValue:rawReceivedValue,sentValue:rawSentValue,adjustedReceivedValue,edge,net,bestReceived,bestPlayer,clearCentrepiece,bestRatio,starBonus,consolidationRate,consolidationBonus,contextualBonus,assetReduction}
 }
 function packageGradePoints(edge,net){
-  let points=edge>=30?9:edge>=20?8:edge>=10?7:edge>=3?6:edge>=-10?5:edge>=-20?4:edge>=-30?3:2;
-  if(points>=9&&net<14)points=net>=9?8:net>=5?7:6;
-  if(points===8&&net<9)points=net>=5?7:net>=2?6:5;
-  if(points===7&&net<5)points=net>=2?6:5;
-  if(points===3&&net>-12)points=4;
-  if(points===2&&net>-18)points=3;
+  let points=edge>=45?10:edge>=32?9:edge>=20?8:edge>=9?7:edge>=2?6:edge>=-9?5:edge>=-19?4:edge>=-31?3:2;
+  // Small-value trades cannot produce sensational grades solely from percentage swings.
+  if(points>=9&&net<12)points=net>=8?8:net>=4?7:6;
+  if(points===8&&net<7)points=net>=4?7:net>=2?6:5;
+  if(points===7&&net<3)points=6;
+  if(points<=2&&net>-18)points=3;
   return points
 }
 function gradeFromPoints(points,m){
-  if(points>=10&&(m.edge>=18||m.eliteCentrepiece))return'A+';
+  if(points>=10&&(m.edge>=40&&m.net>=18||m.clearCentrepiece&&m.edge>=24))return'A+';
   if(points>=9)return'A';
   if(points>=8)return'B+';
   if(points>=7)return'B';
@@ -101,8 +108,8 @@ function gradeFromPoints(points,m){
   if(points>=5)return'C';
   if(points>=4)return'D+';
   if(points>=3)return'D';
-  if(m.edge<=-35&&m.net<=-18&&!m.clearCentrepiece)return'FLEECE ALERT 🚨';
-  return m.edge<=-20&&m.net<=-10&&!m.eliteCentrepiece?'F':'D';
+  if(m.edge<=-48&&m.net<=-25&&!m.clearCentrepiece)return'FLEECE ALERT 🚨';
+  return'F';
 }
 function stableIndex(key,length){let h=2166136261;for(const c of String(key)){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return Math.abs(h>>>0)%Math.max(1,length)}
 const TRADE_COMMENTS={
@@ -117,13 +124,25 @@ const TRADE_COMMENTS={
   'F':['A major overpay, with a sizeable gap between cost and return.','This one is difficult to defend — too much went out the door.','A significant value loss that places enormous pressure on the incoming assets.','They surrendered the stronger package by a considerable margin.'],
   'FLEECE ALERT 🚨':['FLEECE ALERT 🚨 Trade authorities have been notified after a landslide result.','FLEECE ALERT 🚨 A brutal gap makes this one almost impossible to defend.','FLEECE ALERT 🚨 One side walked away with the keys, the car and the registration.','FLEECE ALERT 🚨 This was less a negotiation and more a daylight robbery.']
 };
-function tradeGrade(t,managerId){const m=tradeSideMetrics(t,managerId),base=packageGradePoints(m.edge,m.net),final=Math.min(10,base+m.strategic),grade=gradeFromPoints(final,m),comments=TRADE_COMMENTS[grade]||TRADE_COMMENTS.C;return{...m,base,final,grade,comment:comments[stableIndex(`${t.transaction_id||t.created}|${managerId}|${grade}`,comments.length)]}}
+function tradeGrade(t,managerId){const m=tradeSideMetrics(t,managerId),base=packageGradePoints(m.edge,m.net),final=base,grade=gradeFromPoints(final,m),comments=TRADE_COMMENTS[grade]||TRADE_COMMENTS.C;return{...m,base,final,grade,comment:comments[stableIndex(`${t.transaction_id||t.created}|${managerId}|${grade}`,comments.length)]}}
 function tradeGrades(t){return mids(t).map(id=>tradeGrade(t,id))}
-function winWinTrade(t){const grades=tradeGrades(t),rank={'A+':10,'A':9,'B+':8,'B':7,'C+':6,'C':5,'D+':4,'D':3,'F':2,'FLEECE ALERT 🚨':0};return grades.length>=2&&grades.every(g=>(rank[g.grade]||0)>=7)&&grades.every(g=>g.strategic>0||g.edge>=3)}
+function winWinTrade(t){const grades=tradeGrades(t),rank={'A+':10,'A':9,'B+':8,'B':7,'C+':6,'C':5,'D+':4,'D':3,'F':2,'FLEECE ALERT 🚨':0};return grades.length>=2&&grades.every(g=>(rank[g.grade]||0)>=7)}
 function gradeClass(grade){return grade.startsWith('A')?'grade-a':grade.startsWith('B')?'grade-b':grade.startsWith('C')?'grade-c':grade.startsWith('D')?'grade-d':'grade-f'}
-function tradeEditorialHTML(t,compact=false){const grades=tradeGrades(t),winwin=winWinTrade(t);return `<div class="trade-editorial ${compact?'compact':''}">${winwin?'<div class="win-win-label">🤝 WIN-WIN TRADE</div>':''}${grades.map(g=>`<div class="trade-grade-row"><span class="trade-grade-team">${esc(managerName(g.id,t))}</span><span class="trade-grade-badge ${gradeClass(g.grade)}">${esc(g.grade)}</span><span class="trade-grade-comment">${esc(g.comment)}</span></div>`).join('')}</div>`}
+function tradeEditorialHTML(t,compact=false){const grades=tradeGrades(t),winwin=winWinTrade(t);return `<div class="trade-editorial ${compact?'compact':''}">${winwin?'<div class="win-win-label">🤝 WIN-WIN TRADE</div>':''}${grades.map(g=>{const badge=compact&&g.grade==='FLEECE ALERT 🚨'?'FLEECE':g.grade;const comment=compact&&g.grade==='FLEECE ALERT 🚨'?g.comment.replace(/^FLEECE ALERT 🚨\s*/,''):g.comment;return `<div class="trade-grade-row"><span class="trade-grade-team">${esc(managerName(g.id,t))}</span><span class="trade-grade-badge ${gradeClass(g.grade)}">${esc(badge)}</span><span class="trade-grade-comment">${esc(comment)}</span></div>`}).join('')}</div>`}
 function tradeSummary(t){const assets=Object.values(tradeAssets(t)).flat().filter(a=>a.type==='player').map(a=>a.name);const core=assets.slice(0,3).join(' / ')||'Draft-pick trade';return core}
-function renderSummary(){const w=state.selectedWindow,ts=tradesFor(w),latest=state.trades[0],active=activeRanked(state.activeWindow),lead=active[0];$("leagueTrades").textContent=ts.length;$("leagueTradesLabel").textContent=w==="all"?`${CONFIG.leagueIds.length} seasons combined`:w==="season"?"2026 season":`Last ${w} days`;let weeks;if(w==="all"){const oldest=state.trades.at(-1)?.created||Date.now();weeks=Math.max(1,(Date.now()-oldest)/6048e5)}else if(w==="season"){weeks=Math.max(1,Math.ceil((Date.now()-new Date("2026-07-01").getTime())/6048e5))}else weeks=Math.max(1,Number(w)/7);$("averageTrades").textContent=(ts.length/weeks).toFixed(1);const leaderEl=$("leaderName");leaderEl.textContent=lead?.name||"—";leaderEl.dataset.managerId=lead?.id||"";leaderEl.classList.toggle("manager-profile-link",Boolean(lead?.id));$("leaderTrades").textContent=lead?.count||0;$("leaderWindow").textContent=activeWindowLabel(state.activeWindow);$("latestTradeShort").textContent=latest?tradeSummary(latest):"—";$("latestTradeDate").textContent=latest?`${mids(latest).map(id=>managerName(id,latest)).join(" ↔ ")} · ${fmt(latest.created)}`:"No trade"}
+function renderSummary(){
+  const last7=tradesFor("7"),latest=state.trades[0],active=activeRanked(state.activeWindow),lead=active[0];
+  const current=state.bundles.find(b=>String(b.league.league_id)===CONFIG.currentLeagueId)||state.modelBundle;
+  const seasonTrades=current?.trades||[];
+  const seasonStart=Number(current?.league?.season_start_date?new Date(current.league.season_start_date).getTime():0)||Math.min(...seasonTrades.map(t=>Number(t.created)||Date.now()),Date.now());
+  const seasonWeeks=Math.max(1,(Date.now()-seasonStart)/6048e5);
+  $("leagueTrades").textContent=last7.length;
+  $("leagueTradesLabel").textContent="Last 7 days";
+  $("averageTrades").textContent=(seasonTrades.length/seasonWeeks).toFixed(1);
+  const leaderEl=$("leaderName");leaderEl.textContent=lead?.name||"—";leaderEl.dataset.managerId=lead?.id||"";leaderEl.classList.toggle("manager-profile-link",Boolean(lead?.id));
+  $("leaderTrades").textContent=lead?.count||0;$("leaderWindow").textContent=activeWindowLabel(state.activeWindow);
+  $("latestTradeShort").textContent=latest?tradeSummary(latest):"—";$("latestTradeDate").textContent=latest?`${mids(latest).map(id=>managerName(id,latest)).join(" ↔ ")} · ${fmt(latest.created)}`:"No trade"
+}
 function renderLeaderboard(){const r=activeRanked(state.activeWindow),max=Math.max(...r.map(x=>x.count),1);$("leaderboard").classList.remove("loading");$("leaderboard").innerHTML=r.map((x,i)=>`<div class="leader-row manager-row-hover"><span class="rank">${i+1}</span><button class="team-name manager-profile-link" type="button" data-manager-id="${esc(x.id)}">${esc(x.name)}</button><div class="bar-track"><div class="bar-fill" style="width:${x.count/max*100}%"></div></div><span class="trade-count">${x.count}</span></div>`).join("")}
 function leagueLuckRatings(bundle=state.modelBundle,throughWeek=Infinity){
   const ratings=Object.fromEntries([...state.managers.keys()].map(id=>[String(id),0]));
@@ -725,7 +744,7 @@ async function load(){
     if(refresh)refresh.disabled=false;
   }
 }
-document.querySelectorAll('.window-btn').forEach(b=>b.addEventListener('click',()=>{state.selectedWindow=b.dataset.window;document.querySelectorAll('.window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary()}));document.querySelectorAll('.active-window-btn').forEach(b=>b.addEventListener('click',()=>{state.activeWindow=b.dataset.activeWindow;document.querySelectorAll('.active-window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary();renderLeaderboard()}));$("refreshBtn").addEventListener('click',load);$("biggestTradesToggle").addEventListener('click',()=>{state.biggestTradesExpanded=!state.biggestTradesExpanded;renderBiggestTrades()});
+document.querySelectorAll('.active-window-btn').forEach(b=>b.addEventListener('click',()=>{state.activeWindow=b.dataset.activeWindow;document.querySelectorAll('.active-window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary();renderLeaderboard()}));$("refreshBtn").addEventListener('click',load);$("biggestTradesToggle").addEventListener('click',()=>{state.biggestTradesExpanded=!state.biggestTradesExpanded;renderBiggestTrades()});
 document.addEventListener("click",e=>{
   const playerLinkEl=e.target.closest(".player-history-link");if(playerLinkEl){openPlayerHistory(playerLinkEl.dataset.playerId);return}
   if(e.target.closest("[data-close-player-history]")||e.target.closest("#playerHistoryClose")){closePlayerHistory();return}
