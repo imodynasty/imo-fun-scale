@@ -309,3 +309,10 @@ V3.1.7 — Mobile manager switching now uses a native select input on screens 62
 V3.1.8 CHANGES
 - Player season averages are now rebuilt from individual regular-season game logs using the league's exact scoring settings. This fixes the incorrect Zach Edey average and prevents default-provider fantasy scoring from overriding league scoring.
 - Added an Archetype Guide button to every manager profile with definitions for all nine manager archetypes.
+
+
+V3.1.11
+- Added automatic rookie-player value override for drafted rookies with 0 NBA games played.
+- Uses the exact rookie draft round/slot value (1.01–2.08); future pick values are unchanged.
+- Normal player valuation resumes after the player's first NBA game.
+- Corrected drafted-player attribution by separating original draft-slot mapping from manager/owner IDs.

@@ -1,6 +1,6 @@
-/* IMO DYNASTY V3.1.8 — League HQ */
+/* IMO DYNASTY V3.1.11 — League HQ */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
-const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null}};
+const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},rookieDraftSlots:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null}};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
 function resetComputedCaches(){state.computedCache.seasonAverages.clear();state.computedCache.managerTrades.clear();state.computedCache.tradeSide.clear();state.computedCache.completedMatchups.clear();state.computedCache.tendencyLeague=null;state.profileHTMLCache.clear()}
 async function getJSON(url,optional=false){try{const r=await fetch(url);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){if(optional)return null;throw e}}
@@ -43,7 +43,37 @@ function playerName(id){const p=state.players[id]||{};return p.full_name||[p.fir
 function playerLink(id,name=playerName(id),className=""){return `<button type="button" class="player-history-link ${className}" data-player-id="${esc(String(id))}">${esc(name)}</button>`}
 function pickOriginalOwner(p,t){const owner=t.roster_owner_map?.[String(p.roster_id)];return owner?managerName(owner,t):null}
 function roundWord(n){return ({1:"First",2:"Second",3:"Third",4:"Fourth",5:"Fifth"})[Number(n)]||`Round ${n}`}
-function draftedPlayerForPick(p){const season=String(p.season),round=String(p.round),candidates=[p.roster_id,p.original_roster_id,p.previous_owner_id,p.owner_id].filter(x=>x!=null).map(String);for(const key of candidates){const found=state.draftPickMap[`${season}|${key}|${round}`];if(found)return found}return null}
+function draftedPlayerForPick(p){
+  const season=String(p.season),round=String(p.round);
+  // Sleeper trade records identify a future pick by its ORIGINAL roster slot.
+  // Do not fall back to current/previous owners: those IDs can match another
+  // draft slot and incorrectly attribute the player selected with the pick.
+  const originalSlot=p.roster_id??p.original_roster_id;
+  if(originalSlot==null)return null;
+  return state.draftPickMap[`${season}|${String(originalSlot)}|${round}`]||null
+}
+const ROOKIE_PICK_VALUES={
+  '1.01':27.50,'1.02':26.00,'1.03':24.50,'1.04':23.00,
+  '1.05':21.50,'1.06':20.00,'1.07':18.50,'1.08':17.00,
+  '2.01':15.50,'2.02':14.00,'2.03':12.50,'2.04':11.00,
+  '2.05':9.50,'2.06':8.00,'2.07':6.50,'2.08':5.00
+};
+function rookiePickValue(round,slot){return ROOKIE_PICK_VALUES[`${Number(round)}.${String(Number(slot)).padStart(2,'0')}`]??null}
+function playerNBAGamesPlayed(playerId){
+  const id=String(playerId);
+  let games=0;
+  for(const source of [state.gameLogMeta,state.seasonTotalMeta]){
+    Object.values(source||{}).forEach(season=>{games=Math.max(games,Number(season?.[id]?.gamesPlayed)||0)});
+  }
+  return games
+}
+function rookieDraftValueOverride(playerId){
+  const entries=state.rookieDraftSlots?.[String(playerId)]||[];
+  if(!entries.length||playerNBAGamesPlayed(playerId)>0)return null;
+  // Prefer the newest rookie draft if the same player ID ever appears twice.
+  const latest=[...entries].sort((a,b)=>Number(b.season)-Number(a.season))[0];
+  return rookiePickValue(latest.round,latest.slot)
+}
 function fixedPickValue(round){
   round=Number(round);
   return round===1?17.5:round===2?2.5:round===3?2:round===4?1:round===5?.5:0
@@ -84,6 +114,11 @@ function topTenSeasonAverageIds(t){
   return new Set(fallback)
 }
 function tradePlayerValue(playerId,average,t){
+  // Drafted rookies with zero NBA games retain the value of their actual
+  // rookie-draft selection. The normal model takes over immediately after
+  // their first NBA appearance.
+  const rookieOverride=rookieDraftValueOverride(playerId);
+  if(rookieOverride!=null)return rookieOverride;
   const base=playerDynastyValue(playerId,average,t.created);
   return topTenSeasonAverageIds(t).has(String(playerId))?base*1.20:base
 }
@@ -681,7 +716,7 @@ function managerProfileHTML(managerId){
   const partnerRows=partners.map((p,i)=>`<div class="profile-partner-row"><b>${i+1}</b><button class="manager-profile-link" type="button" data-manager-id="${esc(p.partner)}">${esc(managerName(p.partner))}</button><span>${p.count} trades · ${p.percent.toFixed(0)}%</span></div>`).join("")||'<div class="profile-empty">No trade partners yet.</div>';
   const h2hRows=headToHead.map(r=>{const recordClass=r.wins>r.losses?"winning":r.wins<r.losses?"losing":"even",drawText=r.draws?` <span>(${r.draws} ${r.draws===1?"draw":"draws"})</span>`:"";return `<div class="profile-h2h-row ${recordClass}"><button class="manager-profile-link" type="button" data-manager-id="${esc(r.oppId)}">vs ${esc(managerName(r.oppId))}</button><strong>${r.wins}-${r.losses}${drawText}</strong><small>${r.games} games · includes finals</small></div>`}).join("")||'<div class="profile-empty">No completed head-to-head matchups.</div>';
   const eligibleRows=eligible.map(p=>`<div class="eligible-player">${playerLink(p.id,p.name)}<span>${p.avg.toFixed(2)}</span></div>`).join("")||'<div class="profile-empty">No current top-50 players.</div>';
-  return `<header class="manager-profile-hero"><div class="manager-profile-avatar">${managerAvatar}</div><div class="manager-profile-hero-copy"><div class="manager-profile-kicker"><span class="eyebrow">TEAM PROFILE</span><button type="button" class="archetype-guide-btn" data-open-archetype-guide data-current-archetype="${esc(gm.primary.name)}"><span aria-hidden="true">📖</span> Archetype Guide</button></div><div class="profile-name-line">${managerSwitcherHTML(id)}<div class="profile-badge-icons">${badgeIconsHTML(badges)}</div></div><p>Current franchise overview and league history</p></div></header>
+  return `<header class="manager-profile-hero"><div class="manager-profile-avatar">${managerAvatar}</div><div class="manager-profile-hero-copy"><div class="manager-profile-kicker"><span class="eyebrow">TEAM PROFILE</span><button type="button" class="archetype-guide-btn archetype-guide-btn-desktop" data-open-archetype-guide data-current-archetype="${esc(gm.primary.name)}"><span aria-hidden="true">📖</span> Archetype Guide</button></div><div class="profile-name-line">${managerSwitcherHTML(id)}<div class="profile-badge-icons">${badgeIconsHTML(badges)}</div></div><p>Current franchise overview and league history</p><button type="button" class="archetype-guide-btn archetype-guide-btn-mobile" data-open-archetype-guide data-current-archetype="${esc(gm.primary.name)}"><span aria-hidden="true">📖</span> Archetype Guide</button></div></header>
   <div class="manager-profile-stat-grid"><div><span>Power rank</span><strong class="power-rank-with-move">${power?`#${power.rank}`:"—"}${power&&powerMovement.move?` <em class="rank-move ${powerMovement.move>0?'up':'down'}">${powerMovement.move>0?'↑':'↓'}${Math.abs(powerMovement.move)}</em>`:""}</strong></div><div><span>Ladder</span><strong>${power?`#${power.standingRank}`:"—"}</strong></div><div><span>Record</span><strong>${form.games?`${form.wins}-${form.games-form.wins}`:"—"}</strong></div><div><span>Championship odds</span><strong>${odds?championshipOddsLabel(odds):"—"}</strong></div><div><span>Team average age</span><strong>${avgAge?avgAge.toFixed(1):"—"}</strong></div><div><span>Career trades</span><strong>${trades.length}</strong></div></div>
   <div class="manager-profile-grid">
     ${gmProfileHTML(gm)}
@@ -1040,7 +1075,47 @@ async function loadSeasonTotalAverages(){
   state.seasonTotalMeta=meta;
 }
 
-async function loadSeason(id){const [league,users,rosters,drafts,tradedPicks,winnersBracket]=await Promise.all([getJSON(`${CONFIG.api}/league/${id}`,true),getJSON(`${CONFIG.api}/league/${id}/users`,true),getJSON(`${CONFIG.api}/league/${id}/rosters`,true),getJSON(`${CONFIG.api}/league/${id}/drafts`,true),getJSON(`${CONFIG.api}/league/${id}/traded_picks`,true),getJSON(`${CONFIG.api}/league/${id}/winners_bracket`,true)]);if(!league||!users||!rosters)return null;const draftPicks=(await Promise.all((drafts||[]).map(d=>getJSON(`${CONFIG.api}/draft/${d.draft_id}/picks`,true)))).flat().filter(Boolean);const draftPickMap={};draftPicks.forEach(p=>{if(p.player_id==null||p.round==null)return;[p.roster_id,p.draft_slot,p.picked_by].filter(x=>x!=null).forEach(key=>draftPickMap[`${league.season}|${key}|${p.round}`]=String(p.player_id))});const ownerByRoster={},userById=Object.fromEntries(users.map(u=>[String(u.user_id),u])),managerNameMap={};rosters.forEach(r=>{if(r.owner_id!=null){ownerByRoster[String(r.roster_id)]=String(r.owner_id);const u=userById[String(r.owner_id)]||{};managerNameMap[String(r.owner_id)]=u.metadata?.team_name||u.display_name||`Team ${r.roster_id}`}});const rounds=Array.from({length:CONFIG.roundsToCheck},(_,i)=>i+1),weeks=await limitedMap(rounds,8,async wk=>{const [tx,match]=await Promise.all([getJSON(`${CONFIG.api}/league/${id}/transactions/${wk}`,true),getJSON(`${CONFIG.api}/league/${id}/matchups/${wk}`,true)]);const completedTransactions=(tx||[]).filter(t=>!t.status||t.status==='complete');const trades=completedTransactions.filter(t=>t.type==='trade').map(t=>{const participantRosters=new Set((t.roster_ids||[]).map(String));if(!participantRosters.size){Object.values(t.adds||{}).forEach(x=>participantRosters.add(String(x)));Object.values(t.drops||{}).forEach(x=>participantRosters.add(String(x)));(t.draft_picks||[]).forEach(p=>{if(p.owner_id!=null)participantRosters.add(String(p.owner_id));if(p.previous_owner_id!=null)participantRosters.add(String(p.previous_owner_id))})}return {...t,manager_ids:[...participantRosters].map(r=>ownerByRoster[r]).filter(Boolean),roster_owner_map:ownerByRoster,manager_name_map:managerNameMap,season_label:`${league.season} season`,league_id:id}});return{trades,transactions:completedTransactions.map(t=>({...t,week:wk})),matchups:(match||[]).map(x=>({...x,week:wk}))}});return{league,users,rosters,ownerByRoster,draftPickMap,tradedPicks:tradedPicks||[],winnersBracket:winnersBracket||[],trades:weeks.flatMap(x=>x?.trades||[]),transactions:weeks.flatMap(x=>x?.transactions||[]),matchups:weeks.flatMap(x=>x?.matchups||[])}}
+async function loadSeason(id){
+  const [league,users,rosters,drafts,tradedPicks,winnersBracket]=await Promise.all([
+    getJSON(`${CONFIG.api}/league/${id}`,true),getJSON(`${CONFIG.api}/league/${id}/users`,true),
+    getJSON(`${CONFIG.api}/league/${id}/rosters`,true),getJSON(`${CONFIG.api}/league/${id}/drafts`,true),
+    getJSON(`${CONFIG.api}/league/${id}/traded_picks`,true),getJSON(`${CONFIG.api}/league/${id}/winners_bracket`,true)
+  ]);
+  if(!league||!users||!rosters)return null;
+  const draftResults=await Promise.all((drafts||[]).map(async d=>({
+    draft:d,picks:(await getJSON(`${CONFIG.api}/draft/${d.draft_id}/picks`,true))||[]
+  })));
+  const draftPickMap={},rookieDraftSlots={};
+  draftResults.forEach(({draft,picks})=>{
+    const teams=Number(draft?.settings?.teams||league.total_rosters||rosters.length||8);
+    picks.filter(Boolean).forEach(p=>{
+      if(p.player_id==null||p.round==null)return;
+      const round=Number(p.round);
+      const pickNo=Number(p.pick_no);
+      const slot=Number.isFinite(pickNo)&&pickNo>0?((pickNo-1)%teams)+1:Number(p.draft_slot);
+      if(!Number.isFinite(slot)||slot<1)return;
+      const playerId=String(p.player_id),season=String(league.season);
+      // A completed pick is keyed only by its original draft slot and round.
+      // Keeping owner IDs out of this namespace prevents 1.02 being confused
+      // with a player selected by the manager currently holding pick 1.08.
+      draftPickMap[`${season}|${slot}|${round}`]=playerId;
+      (rookieDraftSlots[playerId]??=[]).push({season,round,slot,pickNo:Number.isFinite(pickNo)?pickNo:null});
+    });
+  });
+  const ownerByRoster={},userById=Object.fromEntries(users.map(u=>[String(u.user_id),u])),managerNameMap={};
+  rosters.forEach(r=>{if(r.owner_id!=null){ownerByRoster[String(r.roster_id)]=String(r.owner_id);const u=userById[String(r.owner_id)]||{};managerNameMap[String(r.owner_id)]=u.metadata?.team_name||u.display_name||`Team ${r.roster_id}`}});
+  const rounds=Array.from({length:CONFIG.roundsToCheck},(_,i)=>i+1),weeks=await limitedMap(rounds,8,async wk=>{
+    const [tx,match]=await Promise.all([getJSON(`${CONFIG.api}/league/${id}/transactions/${wk}`,true),getJSON(`${CONFIG.api}/league/${id}/matchups/${wk}`,true)]);
+    const completedTransactions=(tx||[]).filter(t=>!t.status||t.status==='complete');
+    const trades=completedTransactions.filter(t=>t.type==='trade').map(t=>{
+      const participantRosters=new Set((t.roster_ids||[]).map(String));
+      if(!participantRosters.size){Object.values(t.adds||{}).forEach(x=>participantRosters.add(String(x)));Object.values(t.drops||{}).forEach(x=>participantRosters.add(String(x)));(t.draft_picks||[]).forEach(p=>{if(p.owner_id!=null)participantRosters.add(String(p.owner_id));if(p.previous_owner_id!=null)participantRosters.add(String(p.previous_owner_id))})}
+      return {...t,manager_ids:[...participantRosters].map(r=>ownerByRoster[r]).filter(Boolean),roster_owner_map:ownerByRoster,manager_name_map:managerNameMap,season_label:`${league.season} season`,league_id:id}
+    });
+    return{trades,transactions:completedTransactions.map(t=>({...t,week:wk})),matchups:(match||[]).map(x=>({...x,week:wk}))}
+  });
+  return{league,users,rosters,ownerByRoster,draftPickMap,rookieDraftSlots,tradedPicks:tradedPicks||[],winnersBracket:winnersBracket||[],trades:weeks.flatMap(x=>x?.trades||[]),transactions:weeks.flatMap(x=>x?.transactions||[]),matchups:weeks.flatMap(x=>x?.matchups||[])}
+}
 async function load(){
   const refresh=$("refreshBtn"),status=$("statusText");
   if(refresh)refresh.disabled=true;
@@ -1061,6 +1136,10 @@ async function load(){
     state.currentRosters=cur.rosters||[];
     state.players=players||{};
     state.draftPickMap=Object.assign({},...valid.map(b=>b.draftPickMap||{}));
+    state.rookieDraftSlots={};
+    valid.forEach(bundle=>Object.entries(bundle.rookieDraftSlots||{}).forEach(([playerId,entries])=>{
+      (state.rookieDraftSlots[playerId]??=[]).push(...entries);
+    }));
     buildManagers();
     const unique=new Map();
     valid.flatMap(x=>x.trades||[]).forEach(t=>unique.set(t.transaction_id||`${t.league_id}-${t.created}`,t));
