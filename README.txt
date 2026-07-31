@@ -300,3 +300,5 @@ V2.7.2 updates:
 - Championship odds reverted to the prior in-season calculation; preseason 2026 projection uses 2025 standings and current player-only roster value.
 - Manager Profiles reordered with current-season information first and historical sections last.
 - Old Dogs badge now requires 8 or more players over age 30.
+
+V3.1.7 — Mobile manager switching now uses a native select input on screens 620px and below for reliable single-tap behaviour on iOS and Android. Desktop dropdown remains unchanged.
