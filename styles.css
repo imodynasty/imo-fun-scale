@@ -1432,3 +1432,15 @@ body.mock-draft-open{overflow:hidden}
 .mock-expand-indicator{font-size:20px;line-height:1;color:var(--muted,#94a3b8);text-align:center;transition:transform .2s ease}.mock-pick-card[open] .mock-expand-indicator{transform:rotate(45deg)}
 .mock-player-details{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:0 13px 12px 91px;border-top:1px solid rgba(255,255,255,.07)}.mock-player-details>div{padding-top:10px}.mock-player-details span{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted,#94a3b8);margin-bottom:3px}.mock-player-details strong{font-size:12px}
 @media(max-width:620px){.mock-draft-sheet{inset:0;border-radius:0;padding:14px}.mock-draft-header{padding-right:45px}.mock-draft-header h2{font-size:2.35rem}.mock-draft-close{position:fixed;right:16px;top:16px}.mock-draft-round-nav{top:0}.mock-pick-card summary{grid-template-columns:50px 36px minmax(0,1fr) 20px;gap:8px;padding:9px 10px}.mock-owner b{display:none}.mock-owner img,.mock-owner>span{width:28px;height:28px}.mock-player-compact{display:block}.mock-player-compact strong{display:block;font-size:13px}.mock-player-compact span{display:block;margin-top:2px;font-size:10px}.mock-player-details{grid-template-columns:1fr 1fr;padding:0 10px 10px 60px}}
+
+/* V3.2.11 equal desktop header buttons */
+@media (min-width: 900px){
+  .v26-header-actions{display:flex;align-items:center;gap:12px}
+  .v26-header-actions .branded-action{
+    flex:1 1 0;
+    justify-content:center;
+    min-width:0;
+    height:44px;
+    padding:0 18px;
+  }
+}
