@@ -1,6 +1,6 @@
 /* IMO DYNASTY V2.7.6 — late-pick values and low-value A+ safeguard */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
-const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[]};
+const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
 async function getJSON(url,optional=false){try{const r=await fetch(url);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){if(optional)return null;throw e}}
 async function limitedMap(items,limit,fn){const out=new Array(items.length);let n=0;async function run(){while(n<items.length){const i=n++;try{out[i]=await fn(items[i])}catch{out[i]=null}}}await Promise.all(Array.from({length:limit},run));return out}
@@ -636,15 +636,50 @@ function managerDirectoryHTML(){
 function openManagerDirectory(){const modal=$("managerDirectoryModal"),list=$("managerDirectoryList");if(!modal||!list)return;list.innerHTML=managerDirectoryHTML();modal.classList.add("open");modal.setAttribute("aria-hidden","false");document.body.classList.add("manager-directory-open");requestAnimationFrame(()=>$('managerDirectoryClose')?.focus())}
 function closeManagerDirectory(){const modal=$("managerDirectoryModal");if(!modal)return;modal.classList.remove("open");modal.setAttribute("aria-hidden","true");document.body.classList.remove("manager-directory-open")}
 
+function managerProfileCacheKey(managerId){return `${String(managerId)}|${String(state.profileAverageSeason||"")}`}
+function cachedManagerProfileHTML(managerId){
+  const key=managerProfileCacheKey(managerId);
+  if(state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
+  const html=managerProfileHTML(managerId);
+  state.profileHTMLCache.set(key,html);
+  return html;
+}
+function prewarmManagerProfiles(){
+  if(state.profilePrewarmQueued||!state.managers.size)return;
+  state.profilePrewarmQueued=true;
+  const ids=[...state.managers.keys()];
+  let index=0;
+  const run=deadline=>{
+    while(index<ids.length&&(!deadline||deadline.timeRemaining()>4)){
+      cachedManagerProfileHTML(ids[index++]);
+    }
+    if(index<ids.length){
+      if('requestIdleCallback' in window)requestIdleCallback(run,{timeout:800});
+      else setTimeout(()=>run(null),24);
+    }else state.profilePrewarmQueued=false;
+  };
+  if('requestIdleCallback' in window)requestIdleCallback(run,{timeout:800});
+  else setTimeout(()=>run(null),24);
+}
 function openManagerProfile(managerId,pushState=true){
   const modal=$("managerProfileModal"),content=$("managerProfileContent");
   if(!modal||!content)return;
-  content.innerHTML=managerProfileHTML(managerId);
-  bindSparklineTooltips(content);
   modal.classList.add("open");
   modal.setAttribute("aria-hidden","false");
   document.body.classList.add("manager-profile-open");
   modal.dataset.managerId=String(managerId);
+  const key=managerProfileCacheKey(managerId);
+  if(state.profileHTMLCache.has(key)){
+    content.innerHTML=state.profileHTMLCache.get(key);
+    bindSparklineTooltips(content);
+  }else{
+    content.innerHTML='<div class="manager-profile-loading"><span></span><strong>Loading manager profile…</strong></div>';
+    requestAnimationFrame(()=>{
+      if(modal.dataset.managerId!==String(managerId))return;
+      content.innerHTML=cachedManagerProfileHTML(managerId);
+      bindSparklineTooltips(content);
+    });
+  }
   if(pushState)history.pushState({managerProfile:String(managerId)},"",`#manager=${encodeURIComponent(managerId)}`);
   requestAnimationFrame(()=>$("managerProfileClose")?.focus());
 }
@@ -881,7 +916,10 @@ async function load(){
     valid.flatMap(x=>x.trades||[]).forEach(t=>unique.set(t.transaction_id||`${t.league_id}-${t.created}`,t));
     state.trades=[...unique.values()].sort((a,b)=>(b.created||0)-(a.created||0));
     prepareModels();
+    state.profileHTMLCache.clear();
+    state.profilePrewarmQueued=false;
     renderAll();
+    prewarmManagerProfiles();
     loadTickerGameLogs().catch(error=>console.warn("Ticker game logs unavailable:",error));
     const averageCount=Object.values(state.seasonTotalMeta||{}).reduce((sum,season)=>sum+Object.keys(season||{}).length,0);
     if(status)status.textContent=`Live · ${valid.length} seasons loaded · ${averageCount} player season averages`;
@@ -899,7 +937,7 @@ document.addEventListener("click",e=>{
   if(e.target.closest("[data-close-player-history]")||e.target.closest("#playerHistoryClose")){closePlayerHistory();return}
   if(e.target.closest("#managerDirectoryBtn")){openManagerDirectory();return}
   if(e.target.closest("[data-close-manager-directory]")||e.target.closest("#managerDirectoryClose")){closeManagerDirectory();return}
-  const seasonBtn=e.target.closest("[data-profile-season]");if(seasonBtn){state.profileAverageSeason=seasonBtn.dataset.profileSeason;const id=$("managerProfileModal")?.dataset.managerId;if(id)$("managerProfileContent").innerHTML=managerProfileHTML(id);return}
+  const seasonBtn=e.target.closest("[data-profile-season]");if(seasonBtn){state.profileAverageSeason=seasonBtn.dataset.profileSeason;const id=$("managerProfileModal")?.dataset.managerId;if(id){const content=$("managerProfileContent");content.innerHTML=cachedManagerProfileHTML(id);bindSparklineTooltips(content)}return}
   const link=e.target.closest(".manager-profile-link");if(link){closeManagerDirectory();openManagerProfile(link.dataset.managerId);return}
   if(e.target.closest("[data-close-manager-profile]")||e.target.closest("#managerProfileClose"))closeManagerProfile()
 });

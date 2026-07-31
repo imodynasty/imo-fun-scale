@@ -479,3 +479,19 @@ footer span{display:flex;align-items:center;gap:6px}
 .power-avatar{margin-right:2px}
 .power-copy{padding-left:2px}
 @media(max-width:650px){.power-odds-row>summary{column-gap:11px}.power-copy{padding-left:0}}
+
+/* ===== IMO DYNASTY V2.7.7: cleaner expanded trades + faster profile feedback ===== */
+#recentTrades details[open]{border-color:rgba(56,224,126,.32);box-shadow:0 12px 30px rgba(0,0,0,.18)}
+#recentTrades details[open] summary{padding-bottom:18px;border-bottom:1px solid rgba(38,48,66,.78)}
+#recentTrades .trade-detail-body{padding:18px 18px 22px;gap:18px;align-items:stretch}
+#recentTrades .trade-detail-side{margin:0;padding:16px 17px 18px;border:1px solid rgba(38,48,66,.92);border-top:3px solid rgba(56,224,126,.65);border-radius:13px;background:rgba(5,9,14,.62);min-width:0}
+#recentTrades .trade-detail-side strong{font-size:16px;line-height:1.2;margin-bottom:12px;padding-bottom:9px;border-bottom:1px solid rgba(38,48,66,.72)}
+#recentTrades .trade-detail-side>*:not(strong){line-height:1.35}
+#recentTrades .player-history-link,#recentTrades .trade-detail-side a{display:inline-block;margin:2px 0}
+#recentTrades .trade-editorial.compact{margin-top:14px;padding:13px 14px;gap:9px}
+#recentTrades .trade-grade-row{row-gap:7px}
+.manager-profile-loading{min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--muted)}
+.manager-profile-loading span{width:28px;height:28px;border:3px solid rgba(56,224,126,.18);border-top-color:var(--green);border-radius:50%;animation:profile-spin .7s linear infinite}
+.manager-profile-loading strong{font-size:10px;text-transform:uppercase;letter-spacing:.12em}
+@keyframes profile-spin{to{transform:rotate(360deg)}}
+@media(max-width:900px){#recentTrades .trade-detail-body{gap:12px;padding:14px}#recentTrades .trade-detail-side{padding:14px}}
