@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.1.15 — League HQ */
+/* IMO DYNASTY V3.2.0 — Sleeper FPTS Source of Truth */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -949,9 +949,14 @@ function gameWasPlayed(row){
   return !(status.includes("dnp")||status.includes("inactive")||status.includes("did not play"));
 }
 function rawFantasyPoints(row,scoring){
-  // Sleeper's generic fantasy_points field can use a default scoring format.
-  // Rebuild from this league's scoring settings first so player averages match the league.
-  const direct=numericValue(row,["fantasy_points","fantasy_pts","fpts","fp"]);
+  // Sleeper is the single source of truth for FPTS. The stats service returns
+  // Sleeper's own fantasy-points result on each game row; use it unchanged so
+  // averages match the Sleeper app rather than re-scoring box-score fields here.
+  const direct=numericValue(row,["fantasy_points","fantasy_pts","fpts","fp","pts_fantasy"]);
+  if(direct!==null)return direct;
+
+  // Defensive fallback only for an incomplete API row. This is deliberately
+  // secondary and is never allowed to override a Sleeper-provided FPTS value.
   let total=0,matched=false;
   Object.entries(scoring||{}).forEach(([key,multiplier])=>{
     if(key.startsWith("bonus_"))return;
@@ -967,7 +972,7 @@ function rawFantasyPoints(row,scoring){
   const doubles=[pts,reb,ast,stl,blk].filter(v=>v!==null&&v>=10).length;
   if(Number(scoring?.bonus_double_double)&&doubles>=2)total+=Number(scoring.bonus_double_double);
   if(Number(scoring?.bonus_triple_double)&&doubles>=3)total+=Number(scoring.bonus_triple_double);
-  return matched?total:direct;
+  return matched?total:null;
 }
 async function loadPlayerGameLogAverage(playerId,season,scoring){
   const url=`${CONFIG.statsApi}/${encodeURIComponent(playerId)}?season_type=regular&season=${encodeURIComponent(season)}&grouping=game`;
@@ -1005,8 +1010,6 @@ async function loadGameLogAverages(){
   state.gameLogAverages=bySeason;
   state.gameLogMeta=meta;
   state.gameLogs=logsBySeason;
-  const jokic=Object.entries(state.players).find(([,p])=>String(p.full_name||`${p.first_name||""} ${p.last_name||""}`).toLowerCase().replace(/[ćč]/g,"c").includes("nikola jokic"));
-  if(jokic){bySeason["2025"]??={};bySeason["2025"][jokic[0]]=41.55;meta["2025"]??={};meta["2025"][jokic[0]]={...(meta["2025"][jokic[0]]||{}),average:41.55,source:"verified Sleeper display"}}
 }
 
 
@@ -1037,8 +1040,8 @@ function scoreSeasonStats(stats,scoring){
   return total;
 }
 async function loadPlayerSeasonAverage(playerId,season,scoring){
-  // Calculate from individual games rather than the aggregate endpoint. This avoids
-  // mismatched games-played totals and ensures league-specific scoring is applied.
+  // Average Sleeper-provided per-game FPTS values. No local re-scoring is performed
+  // when Sleeper supplies its fantasy-points field.
   const result=await loadPlayerGameLogAverage(playerId,season,scoring);
   return result?{average:result.average,totalFantasyPoints:result.points,gamesPlayed:result.games}:null;
 }

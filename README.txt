@@ -334,3 +334,9 @@ V3.1.15 — Historical rookie-pick attribution
 - Historical 2026 traded picks now resolve original franchise + round to the player selected in that franchise column.
 - 2025 and other seasons continue to use Sleeper's completed-draft slot mapping as the generic fallback.
 - Attribution is display-only: converting a past pick to a player name does not alter the original pick value used by trade grades.
+
+
+V3.2.0 — Sleeper FPTS source of truth
+- Player season averages now use Sleeper-provided per-game fantasy-points values directly.
+- Local box-score re-scoring is only a defensive fallback when Sleeper omits FPTS.
+- Removed the one-player manual average override so one API source feeds profiles, roster values, rankings, odds and trade calculations.
