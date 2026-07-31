@@ -1,4 +1,4 @@
-/* IMO DYNASTY V2.7.10 — manager profile performance */
+/* IMO DYNASTY V2.7.11 — manager profile performance */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null}};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
@@ -648,25 +648,41 @@ function managerDirectoryHTML(){
     return `<button class="manager-directory-item manager-profile-link" type="button" data-manager-id="${esc(m.id)}"><span class="manager-directory-rank">${rank?`#${rank}`:"—"}</span><span class="manager-directory-avatar">${avatar}</span><span class="manager-directory-copy"><strong>${esc(m.name)}</strong><small>Open manager profile</small></span><span class="manager-directory-arrow">→</span></button>`
   }).join("")||'<div class="profile-empty">No managers available.</div>'
 }
-function openManagerDirectory(){const modal=$("managerDirectoryModal"),list=$("managerDirectoryList");if(!modal||!list)return;list.innerHTML=managerDirectoryHTML();modal.classList.add("open");modal.setAttribute("aria-hidden","false");document.body.classList.add("manager-directory-open");requestAnimationFrame(()=>$('managerDirectoryClose')?.focus())}
+function openManagerDirectory(){const modal=$("managerDirectoryModal"),list=$("managerDirectoryList");if(!modal||!list)return;list.innerHTML=managerDirectoryHTML();modal.classList.add("open");modal.setAttribute("aria-hidden","false");document.body.classList.add("manager-directory-open");requestAnimationFrame(()=>{observeManagerProfileLinks();$('managerDirectoryClose')?.focus()})}
 function closeManagerDirectory(){const modal=$("managerDirectoryModal");if(!modal)return;modal.classList.remove("open");modal.setAttribute("aria-hidden","true");document.body.classList.remove("manager-directory-open")}
 
 function managerProfileCacheKey(managerId){return `${String(managerId)}|${String(state.profileAverageSeason||"")}`}
+function managerProfileDataFingerprint(){const latest=state.trades?.[0]?.created||0,current=state.modelBundle?.league?.season||'';return `${CONFIG.currentLeagueId}|${current}|${latest}|${state.trades.length}|${state.managers.size}`}
+function managerProfileSessionKey(key){return `imo-profile-v2711|${managerProfileDataFingerprint()}|${key}`}
 function cachedManagerProfileHTML(managerId){
   const key=managerProfileCacheKey(managerId);
   if(state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
+  try{const saved=sessionStorage.getItem(managerProfileSessionKey(key));if(saved){state.profileHTMLCache.set(key,saved);return saved}}catch(_){ }
   const html=managerProfileHTML(managerId);
   state.profileHTMLCache.set(key,html);
+  try{sessionStorage.setItem(managerProfileSessionKey(key),html)}catch(_){ }
   return html;
+}
+const managerProfilePrewarmQueue=[];
+const managerProfilePrewarmIds=new Set();
+let managerProfilePrewarmBusy=false;
+let managerProfileObserver=null;
+function drainManagerProfilePrewarmQueue(){
+  if(managerProfilePrewarmBusy||!managerProfilePrewarmQueue.length)return;
+  managerProfilePrewarmBusy=true;
+  const id=managerProfilePrewarmQueue.shift();managerProfilePrewarmIds.delete(id);
+  const run=()=>{try{if(!state.computedCache.tendencyLeague)managerTendencyLeague();if(!state.profileHTMLCache.has(managerProfileCacheKey(id)))cachedManagerProfileHTML(id)}catch(error){console.warn('Profile prewarm failed:',error)}finally{managerProfilePrewarmBusy=false;setTimeout(drainManagerProfilePrewarmQueue,40)}};
+  if('requestIdleCallback' in window)requestIdleCallback(run,{timeout:700});else setTimeout(run,40);
 }
 function queueManagerProfilePrewarm(managerId){
   const id=String(managerId||"");
-  if(!id||state.profileHTMLCache.has(managerProfileCacheKey(id)))return;
-  const run=()=>{
-    if(!state.profileHTMLCache.has(managerProfileCacheKey(id)))cachedManagerProfileHTML(id);
-  };
-  if('requestIdleCallback' in window)requestIdleCallback(run,{timeout:1200});
-  else setTimeout(run,120);
+  if(!id||state.profileHTMLCache.has(managerProfileCacheKey(id))||managerProfilePrewarmIds.has(id))return;
+  managerProfilePrewarmIds.add(id);managerProfilePrewarmQueue.push(id);drainManagerProfilePrewarmQueue();
+}
+function observeManagerProfileLinks(){
+  if(!('IntersectionObserver' in window)){document.querySelectorAll('.manager-profile-link').forEach(link=>queueManagerProfilePrewarm(link.dataset.managerId));return}
+  if(!managerProfileObserver)managerProfileObserver=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting){queueManagerProfilePrewarm(entry.target.dataset.managerId);managerProfileObserver.unobserve(entry.target)}}),{rootMargin:'500px 0px'});
+  document.querySelectorAll('.manager-profile-link').forEach(link=>{if(!link.dataset.profileObserved){link.dataset.profileObserved='1';managerProfileObserver.observe(link)}})
 }
 function openManagerProfile(managerId,pushState=true){
   const modal=$("managerProfileModal"),content=$("managerProfileContent");
@@ -735,6 +751,7 @@ function renderAll(){
   safeRender("biggest trades",renderBiggestTrades);
   safeRender("voting",renderVoting);
   safeRender("ticker",renderTicker);
+  requestAnimationFrame(observeManagerProfileLinks);
 }
 
 function relevantPlayerIds(){
