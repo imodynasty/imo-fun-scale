@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.2.8 — Weekly 2027 Mock Draft Movement */
+/* IMO DYNASTY V3.2.9 — Draft Star + Compact Mock Draft */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -708,7 +708,10 @@ function managerDraftResume(managerId){
   const busts=picks.filter(p=>Number(p.draftScore)<0).sort((a,b)=>a.draftScore-b.draftScore||a.overallPick-b.overallPick);
   const totalScore=picks.reduce((sum,p)=>sum+Number(p.draftScore||0),0),averageScore=picks.length?totalScore/picks.length:0;
   const hitRate=picks.length?picks.filter(p=>Number(p.draftScore)>0).length/picks.length:0,missRate=picks.length?picks.filter(p=>Number(p.draftScore)<0).length/picks.length:0;
-  const draftStar=picks.slice().sort((a,b)=>(Number(b.average||b.fantasyAverage||0)-Number(a.average||a.fantasyAverage||0)))[0]||null;
+  // Draft Star is the highest-current-average rookie selection made by this manager.
+  // Use the currentAverage already calculated for each eligible class row; do not
+  // display the average in the profile card, only use it to select the player.
+  const draftStar=picks.slice().sort((a,b)=>Number(b.currentAverage||0)-Number(a.currentAverage||0)||Number(a.overallPick||999)-Number(b.overallPick||999))[0]||null;
   return{managerId:id,picks,count:picks.length,totalScore,averageScore,hitRate,missRate,draftStar,biggestSteal:steals[0]||null,biggestBust:busts[0]||null}
 }
 function managerTradeRecordScore(managerId){
@@ -1093,7 +1096,7 @@ function mockDraftRows(){
 }
 function renderMockDraft(){
   const root=$("mockDraftContent");if(!root)return;const rows=mockDraftRows(),updated=new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'long',year:'numeric'}).format(new Date());
-  root.innerHTML=`<header class="mock-draft-header"><div><span class="eyebrow">IMO DYNASTY DRAFT ROOM</span><h2 id="mockDraftTitle">2027 Rookie Mock Draft</h2><p>Projected order uses reverse championship odds and live Sleeper pick ownership.</p></div><div class="mock-draft-update"><span>Weekly board</span><strong>${esc(updated)}</strong></div></header><div class="mock-draft-round-nav"><button type="button" data-mock-round="1" class="active">Round 1</button><button type="button" data-mock-round="2">Round 2</button><button type="button" data-mock-round="3">Round 3</button></div><div class="mock-draft-board">${rows.map(row=>{const p=row.prospect,m=row.owner,avatar=m?.avatar?`<img src="${esc(m.avatar)}" alt="" loading="lazy">`:`<span>${esc(m?.initials||'—')}</span>`;return `<article class="mock-pick-card" data-mock-round-card="${row.round}"><div class="mock-pick-number">${row.pick}</div><div class="mock-owner">${avatar}<b>${esc(m?.name||'Unassigned')}</b></div><div class="mock-player"><strong>${esc(p?.name||'TBD')}</strong><span>${esc(p?.position||'')} ${p?.team?`| ${esc(p.team)}`:''}</span><small>${esc(p?.height||'')} ${p?.weight?`| ${esc(p.weight)}`:''} ${p?.age?`| ${esc(p.age)}`:''}</small></div></article>`}).join('')}</div>`;
+  root.innerHTML=`<header class="mock-draft-header"><div><span class="eyebrow">IMO DYNASTY DRAFT ROOM</span><h2 id="mockDraftTitle">2027 Rookie Mock Draft</h2><p>Projected order uses reverse championship odds and live Sleeper pick ownership.</p></div><div class="mock-draft-update"><span>Weekly board</span><strong>${esc(updated)}</strong></div></header><div class="mock-draft-round-nav"><button type="button" data-mock-round="1" class="active">Round 1</button><button type="button" data-mock-round="2">Round 2</button><button type="button" data-mock-round="3">Round 3</button></div><div class="mock-draft-board">${rows.map(row=>{const p=row.prospect,m=row.owner,avatar=m?.avatar?`<img src="${esc(m.avatar)}" alt="" loading="lazy">`:`<span>${esc(m?.initials||'—')}</span>`;return `<details class="mock-pick-card" data-mock-round-card="${row.round}"><summary><div class="mock-pick-number">${row.pick}</div><div class="mock-owner">${avatar}<b>${esc(m?.name||'Unassigned')}</b></div><div class="mock-player-compact"><strong>${esc(p?.name||'TBD')}</strong><span>${esc(p?.position||'')}</span></div><span class="mock-expand-indicator" aria-hidden="true">+</span></summary><div class="mock-player-details"><div><span>School / Team</span><strong>${esc(p?.team||'—')}</strong></div><div><span>Height</span><strong>${esc(p?.height||'—')}</strong></div><div><span>Weight</span><strong>${esc(p?.weight||'—')}</strong></div><div><span>Age</span><strong>${esc(p?.age||'—')}</strong></div></div></details>`}).join('')}</div>`;
 }
 function openMockDraft(){renderMockDraft();const modal=$("mockDraftModal");modal?.classList.add('open');modal?.setAttribute('aria-hidden','false');document.body.classList.add('mock-draft-open')}
 function closeMockDraft(){const modal=$("mockDraftModal");modal?.classList.remove('open');modal?.setAttribute('aria-hidden','true');document.body.classList.remove('mock-draft-open')}
