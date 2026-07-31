@@ -402,3 +402,19 @@ footer span{display:flex;align-items:center;gap:6px}
 .sparkline-tooltip.show{display:grid;gap:5px}.sparkline-tooltip>strong{color:var(--green);font-size:11px}.sparkline-tooltip span{display:flex;justify-content:space-between;gap:8px;color:var(--muted);font-size:8px}.sparkline-tooltip b{color:var(--text);font-size:8px}
 @media(max-width:800px){.trophy-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:520px){.profile-biggest-results,.trophy-grid{grid-template-columns:1fr}.compact-result-card{min-height:0}}
+
+/* V2.6.7 — trade grades and editorial commentary */
+.trade-editorial{grid-column:1/-1;display:grid;gap:8px;margin-top:2px;padding:13px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(7,10,16,.42)}
+.trade-editorial.compact{margin-top:11px;padding:10px;gap:6px}
+.win-win-label{width:max-content;max-width:100%;padding:5px 9px;border-radius:999px;background:rgba(56,224,126,.12);border:1px solid rgba(56,224,126,.28);color:var(--green);font-size:9px;font-weight:950;letter-spacing:.08em}
+.trade-grade-row{display:grid;grid-template-columns:minmax(110px,.7fr) auto minmax(0,2fr);align-items:center;gap:10px;min-width:0}
+.trade-grade-team{font-size:11px;font-weight:900;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trade-grade-badge{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:25px;padding:4px 8px;border-radius:8px;font-size:10px;font-weight:950;line-height:1;text-align:center;border:1px solid transparent;white-space:nowrap}
+.trade-grade-comment{font-size:10px;line-height:1.42;color:var(--muted)}
+.grade-a{color:#53f49a;background:rgba(56,224,126,.13);border-color:rgba(56,224,126,.32)}
+.grade-b{color:#8ee9ff;background:rgba(72,190,255,.12);border-color:rgba(72,190,255,.28)}
+.grade-c{color:#e8edf5;background:rgba(197,207,222,.09);border-color:rgba(197,207,222,.2)}
+.grade-d{color:#ffcb6b;background:rgba(255,181,57,.12);border-color:rgba(255,181,57,.28)}
+.grade-f{color:#ff747b;background:rgba(255,75,87,.12);border-color:rgba(255,75,87,.3)}
+.recent-trades summary .trade-editorial{clear:both;margin-right:28px}
+@media(max-width:700px){.trade-grade-row{grid-template-columns:minmax(0,1fr) auto}.trade-grade-comment{grid-column:1/-1}.trade-editorial.compact{margin-right:0}.trade-grade-team{white-space:normal}}
