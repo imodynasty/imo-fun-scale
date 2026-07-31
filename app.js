@@ -657,24 +657,25 @@ function queueManagerProfilePrewarm(managerId){
 function openManagerProfile(managerId,pushState=true){
   const modal=$("managerProfileModal"),content=$("managerProfileContent");
   if(!modal||!content)return;
+  const id=String(managerId);
   modal.classList.add("open");
   modal.setAttribute("aria-hidden","false");
   document.body.classList.add("manager-profile-open");
-  modal.dataset.managerId=String(managerId);
-  const key=managerProfileCacheKey(managerId);
+  modal.dataset.managerId=id;
+  const key=managerProfileCacheKey(id);
   if(state.profileHTMLCache.has(key)){
     content.innerHTML=state.profileHTMLCache.get(key);
     bindSparklineTooltips(content);
   }else{
-    content.innerHTML='<div class="manager-profile-loading"><span></span><strong>Loading manager profile…</strong></div>';
-    requestAnimationFrame(()=>{
-      if(modal.dataset.managerId!==String(managerId))return;
-      content.innerHTML=cachedManagerProfileHTML(managerId);
+    content.innerHTML='<div class="manager-profile-loading"><span></span><strong>Loading manager profile…</strong><small>The profile is open — live data is being prepared.</small></div>';
+    requestAnimationFrame(()=>requestAnimationFrame(()=>setTimeout(()=>{
+      if(modal.dataset.managerId!==id)return;
+      content.innerHTML=cachedManagerProfileHTML(id);
       bindSparklineTooltips(content);
-    });
+    },0)));
   }
-  if(pushState)history.pushState({managerProfile:String(managerId)},"",`#manager=${encodeURIComponent(managerId)}`);
-  requestAnimationFrame(()=>$("managerProfileClose")?.focus());
+  if(pushState)history.pushState({managerProfile:id},"",`#manager=${encodeURIComponent(id)}`);
+  requestAnimationFrame(()=>$('managerProfileClose')?.focus());
 }
 function closeManagerProfile(updateHistory=true){
   const modal=$("managerProfileModal");
@@ -864,7 +865,7 @@ async function loadSeasonTotalAverages(){
     bySeason[season]={};
     meta[season]={};
     const scoring=bundle.league.scoring_settings||{};
-    const rows=await limitedMap(playerIds,8,async id=>{
+    const rows=await limitedMap(playerIds,3,async id=>{
       const result=await loadPlayerSeasonAverage(id,season,scoring);
       return result?{id,...result}:null;
     });
@@ -911,16 +912,25 @@ async function load(){
     state.profilePrewarmQueued=false;
     renderAll();
     if(status)status.textContent=`Live · ${valid.length} seasons loaded`;
-    loadTickerGameLogs().catch(error=>console.warn("Ticker game logs unavailable:",error));
+    const runWhenIdle=(fn,timeout=2500)=>{
+      if('requestIdleCallback' in window)requestIdleCallback(fn,{timeout});
+      else setTimeout(fn,900);
+    };
+    runWhenIdle(()=>loadTickerGameLogs().catch(error=>console.warn("Ticker game logs unavailable:",error)),1800);
     if(!state.seasonTotalsLoading){
       state.seasonTotalsLoading=true;
-      loadSeasonTotalAverages().then(()=>{
+      runWhenIdle(()=>loadSeasonTotalAverages().then(()=>{
         prepareModels();
         state.profileHTMLCache.clear();
-        renderAll();
+        safeRender("power rankings",renderPower);
+        safeRender("odds",renderOdds);
+        safeRender("trade of the week",renderTradeWeek);
+        safeRender("recent trades",renderRecent);
+        safeRender("biggest trades",renderBiggestTrades);
+        safeRender("voting",renderVoting);
         const averageCount=Object.values(state.seasonTotalMeta||{}).reduce((sum,season)=>sum+Object.keys(season||{}).length,0);
         if(status)status.textContent=`Live · ${valid.length} seasons loaded · ${averageCount} player season averages`;
-      }).catch(error=>console.warn('Season totals unavailable; continuing with loaded data:',error)).finally(()=>{state.seasonTotalsLoading=false});
+      }).catch(error=>console.warn('Season totals unavailable; continuing with loaded data:',error)).finally(()=>{state.seasonTotalsLoading=false}),3200);
     }
   }catch(e){
     console.error('IMO DYNASTY load failed:',e);
@@ -930,6 +940,20 @@ async function load(){
   }
 }
 document.querySelectorAll('.active-window-btn').forEach(b=>b.addEventListener('click',()=>{state.activeWindow=b.dataset.activeWindow;document.querySelectorAll('.active-window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary();renderLeaderboard()}));$("refreshBtn").addEventListener('click',load);$("biggestTradesToggle").addEventListener('click',()=>{state.biggestTradesExpanded=!state.biggestTradesExpanded;renderBiggestTrades()});
+document.addEventListener("pointerdown",e=>{
+  const link=e.target.closest?.(".manager-profile-link");
+  if(!link||e.button!==0)return;
+  const modal=$("managerProfileModal"),content=$("managerProfileContent"),id=String(link.dataset.managerId||"");
+  if(!modal||!content||!id)return;
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden","false");
+  document.body.classList.add("manager-profile-open");
+  modal.dataset.managerId=id;
+  const key=managerProfileCacheKey(id);
+  if(state.profileHTMLCache.has(key)){content.innerHTML=state.profileHTMLCache.get(key);bindSparklineTooltips(content)}
+  else content.innerHTML='<div class="manager-profile-loading"><span></span><strong>Loading manager profile…</strong><small>The profile is open — live data is being prepared.</small></div>';
+},{passive:true});
+
 document.addEventListener("click",e=>{
   const starEl=e.target.closest("[data-star-player]");if(starEl){togglePlayerInterest(starEl.dataset.starPlayer);return}
   const playerLinkEl=e.target.closest(".player-history-link");if(playerLinkEl){openPlayerHistory(playerLinkEl.dataset.playerId);return}

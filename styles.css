@@ -495,3 +495,10 @@ footer span{display:flex;align-items:center;gap:6px}
 .manager-profile-loading strong{font-size:10px;text-transform:uppercase;letter-spacing:.12em}
 @keyframes profile-spin{to{transform:rotate(360deg)}}
 @media(max-width:900px){#recentTrades .trade-detail-body{gap:12px;padding:14px}#recentTrades .trade-detail-side{padding:14px}}
+
+/* V2.7.9 interaction-first performance */
+.manager-profile-loading small{font-size:10px;color:var(--muted);text-align:center;max-width:280px;line-height:1.5}
+.manager-profile-content{contain:layout paint style}
+.recent-trades details{contain:layout paint style}
+.recent-trades details:not([open]) .trade-detail-body{display:none}
+.panel,.metric{content-visibility:auto;contain-intrinsic-size:300px}
