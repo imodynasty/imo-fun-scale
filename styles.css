@@ -473,3 +473,9 @@ footer span{display:flex;align-items:center;gap:6px}
 .player-star-btn{flex:0 0 auto;width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,209,102,.4);background:rgba(255,209,102,.06);color:var(--yellow);font-size:27px;line-height:1;cursor:pointer;transition:.18s ease}.player-star-btn:hover{transform:scale(1.06);background:rgba(255,209,102,.13)}.player-star-btn.active{background:var(--yellow);color:#151005;box-shadow:0 0 25px rgba(255,209,102,.25)}
 .player-current-average{flex:0 0 150px;text-align:right;border-left:1px solid var(--line);padding-left:20px}.player-current-average span,.player-current-average small{display:block;color:var(--muted)}.player-current-average strong{display:block;font-size:42px;font-weight:1000;letter-spacing:-.06em;line-height:1;margin:7px 0 5px}.player-current-average small{font-size:9px}
 @media(max-width:780px){.player-history-hero{flex-wrap:wrap}.player-current-average{flex:1 0 100%;border-left:0;border-top:1px solid var(--line);padding:14px 0 0;text-align:left}.player-current-average strong{font-size:34px}.power-rank-number{font-size:24px}.featured-trade-grade{min-width:58px;min-height:44px;font-size:22px}}
+
+/* V2.7.4 — cleaner power ranking rows */
+.power-odds-row>summary{column-gap:16px}
+.power-avatar{margin-right:2px}
+.power-copy{padding-left:2px}
+@media(max-width:650px){.power-odds-row>summary{column-gap:11px}.power-copy{padding-left:0}}
