@@ -1456,3 +1456,12 @@ body.mock-draft-open{overflow:hidden}
 .manager-picks-pick{font-size:11px;font-weight:950;letter-spacing:.04em;color:#c9bbff}.manager-picks-player-link{padding:0;border:0;background:none;color:#fff;font:inherit;font-size:13px;font-weight:900;text-align:left;cursor:pointer}.manager-picks-player-link:hover{text-decoration:underline;text-decoration-color:#36eb8e;text-underline-offset:4px}
 body.manager-picks-open{overflow:hidden}
 @media(max-width:620px){.manager-picks-modal{padding:0;align-items:flex-end}.manager-picks-sheet{width:100%;max-width:none;max-height:90dvh;border-radius:20px 20px 0 0;padding:24px 14px calc(24px + env(safe-area-inset-bottom))}.manager-picks-row{grid-template-columns:96px minmax(0,1fr);gap:10px;padding:11px}.manager-picks-heading h2{font-size:30px}}
+
+
+/* V3.2.13 — force all four manager draft summary cards to render on every viewport */
+.manager-grades-row{height:auto!important;max-height:none!important;overflow:visible!important}
+.manager-draft-highlights{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;grid-auto-flow:row!important;grid-auto-rows:minmax(58px,auto)!important;width:100%!important;height:auto!important;max-height:none!important;overflow:visible!important}
+.manager-draft-highlights>.manager-draft-highlight{display:block!important;visibility:visible!important;opacity:1!important;position:relative!important;min-width:0!important;min-height:58px!important;height:auto!important;max-height:none!important;overflow:visible!important}
+.manager-draft-highlights>.manager-picks-made{display:flex!important;visibility:visible!important;opacity:1!important;flex-direction:column!important;justify-content:center!important}
+@media(max-width:900px){.manager-draft-highlights{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-rows:minmax(64px,auto)!important}}
+@media(max-width:620px){.manager-draft-highlights{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-flow:row!important;height:auto!important;max-height:none!important;overflow:visible!important}.manager-draft-highlights>.manager-draft-highlight{min-height:64px!important}}

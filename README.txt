@@ -1,3 +1,11 @@
+IMO DYNASTY V3.2.13 — Manager Draft Summary Visibility Fix
+
+- Fixed stale manager-profile session caches that could show different draft cards on desktop and mobile.
+- Draft Star, Draft Steal, Draft Bust and Picks Made now always render in the manager profile.
+- Desktop uses four equal columns. Mobile uses two columns across two rows.
+- Picks Made remains clickable and opens the complete rookie draft history modal.
+- Cache-busting updated to V3.2.13.
+
 IMO DYNASTY V3.2.10 — Refresh Button Removal
 
 - Removed the manual Refresh button from the site header.
