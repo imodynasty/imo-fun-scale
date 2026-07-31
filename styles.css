@@ -883,3 +883,150 @@ table,
     border-radius:6px!important;
   }
 }
+
+/* =========================================================
+   V3.1.2 — HEADER / MODAL POLISH FIXES
+   1) IMO basketball wordmark
+   2) Centred modal close controls
+   3) Mobile header actions remain fully visible
+   ========================================================= */
+
+/* Give the wider IMO mark enough room without changing header height. */
+.brand-mark,
+.v26-logo{
+  width:54px;
+  min-width:54px;
+  aspect-ratio:72 / 64;
+}
+.brand-mark img,
+.v26-logo img{
+  display:block;
+  width:100%;
+  height:100%;
+  object-fit:contain;
+}
+
+/* The global button polish must not add padding to icon-only close controls. */
+:where(.headlines-close,
+       .manager-directory-close,
+       .manager-profile-close,
+       .player-history-close,
+       .modal-close,
+       .close-btn,
+       [data-close-modal]){
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  flex:0 0 auto;
+  width:42px!important;
+  height:42px!important;
+  min-width:42px!important;
+  min-height:42px!important;
+  padding:0!important;
+  border-radius:50%!important;
+  line-height:1!important;
+  text-align:center!important;
+  font-family:var(--font-ui)!important;
+  font-size:28px!important;
+  font-weight:500!important;
+  letter-spacing:0!important;
+  text-indent:0!important;
+}
+
+/* Visually centre the multiplication glyph across Safari and Chromium. */
+:where(.headlines-close,
+       .manager-directory-close,
+       .manager-profile-close,
+       .player-history-close,
+       .modal-close,
+       .close-btn,
+       [data-close-modal]){
+  font-size:0!important;
+}
+:where(.headlines-close,
+       .manager-directory-close,
+       .manager-profile-close,
+       .player-history-close,
+       .modal-close,
+       .close-btn,
+       [data-close-modal])::before{
+  content:"";
+  width:17px;
+  height:17px;
+  background:
+    linear-gradient(45deg,transparent 43%,currentColor 44% 56%,transparent 57%),
+    linear-gradient(-45deg,transparent 43%,currentColor 44% 56%,transparent 57%);
+  background-repeat:no-repeat;
+  transform:translateZ(0);
+}
+
+@media(max-width:760px){
+  .site-header.v26-header{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+    gap:10px!important;
+    align-items:center!important;
+    padding:10px 12px!important;
+  }
+  .v26-brand{
+    width:100%;
+  }
+  .brand-mark,
+  .v26-logo{
+    width:48px;
+    min-width:48px;
+  }
+  .v26-header-actions{
+    display:grid!important;
+    width:100%!important;
+    max-width:none!important;
+    grid-template-columns:minmax(0,1.18fr) minmax(0,1fr) auto!important;
+    gap:6px!important;
+  }
+  .v26-header-actions #statusText{
+    display:none!important;
+  }
+  .v26-header-actions button{
+    min-width:0!important;
+    width:100%!important;
+    min-height:38px!important;
+    padding:7px 8px!important;
+    font-size:10px!important;
+    line-height:1.1!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  .v26-header-actions .refresh-btn{
+    width:auto!important;
+    min-width:62px!important;
+    padding-inline:10px!important;
+  }
+  .v26-header-actions .branded-action{
+    justify-content:center!important;
+    gap:5px!important;
+  }
+  .v26-header-actions .branded-action img{
+    width:16px!important;
+    height:16px!important;
+    flex:0 0 16px!important;
+  }
+}
+
+@media(max-width:390px){
+  .v26-header-actions{
+    grid-template-columns:minmax(0,1.12fr) minmax(0,.94fr) 56px!important;
+    gap:4px!important;
+  }
+  .v26-header-actions button{
+    padding-inline:5px!important;
+    font-size:9px!important;
+  }
+  .v26-header-actions .refresh-btn{
+    min-width:56px!important;
+    padding-inline:6px!important;
+  }
+  .v26-header-actions .branded-action img{
+    display:none!important;
+  }
+}

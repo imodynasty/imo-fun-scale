@@ -1,6 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="IMO Dynasty">
-<defs><linearGradient id="g" x1="6" y1="58" x2="58" y2="6" gradientUnits="userSpaceOnUse"><stop stop-color="#7c5cff"/><stop offset="1" stop-color="#b99cff"/></linearGradient></defs>
-<rect x="2" y="2" width="60" height="60" rx="17" fill="#0a0d14" stroke="#7c5cff" stroke-width="2"/>
-<path d="M15 43V21h6v22h-6Zm10 0V21h6l5 10 5-10h6v22h-6V31l-5 9-5-9v12h-6Z" fill="url(#g)"/>
-<path d="M16 15h32" stroke="#39e783" stroke-width="3" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 64" role="img" aria-label="IMO Dynasty">
+  <defs>
+    <linearGradient id="imoGradient" x1="7" y1="56" x2="65" y2="8" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7c5cff"/>
+      <stop offset="1" stop-color="#b99cff"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="68" height="60" rx="17" fill="#0a0d14" stroke="#7c5cff" stroke-width="2"/>
+  <path d="M10 44V20h6v24h-6Z" fill="url(#imoGradient)"/>
+  <path d="M20 44V20h6l6 11 6-11h6v24h-6V31l-6 10-6-10v13h-6Z" fill="url(#imoGradient)"/>
+  <circle cx="56" cy="32" r="10.5" fill="none" stroke="url(#imoGradient)" stroke-width="3"/>
+  <path d="M45.8 32h20.4M56 21.5v21M48.4 24.8c4.7 3.9 4.7 10.5 0 14.4M63.6 24.8c-4.7 3.9-4.7 10.5 0 14.4" fill="none" stroke="url(#imoGradient)" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M11 14h50" stroke="#39e783" stroke-width="3" stroke-linecap="round"/>
 </svg>
