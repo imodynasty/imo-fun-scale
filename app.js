@@ -627,6 +627,10 @@ function managerAvatarHTML(managerId,className='result-opponent-avatar'){
   const manager=state.managers.get(String(managerId));if(!manager)return'';
   return manager.avatar?`<span class="${className}"><img src="${esc(manager.avatar)}" alt="" loading="lazy"></span>`:`<span class="${className} fallback">${esc(manager.initials||manager.name.slice(0,2).toUpperCase())}</span>`
 }
+function managerSwitcherHTML(managerId){
+  const currentId=String(managerId),current=state.managers.get(currentId),options=[...state.managers.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  return `<div class="manager-switcher" data-manager-switcher><button type="button" class="manager-switcher-trigger" data-manager-switcher-trigger aria-expanded="false"><span>${esc(current?.name||'Manager')}</span><i>⌄</i></button><div class="manager-switcher-menu" hidden>${options.map(m=>{const avatar=m.avatar?`<img src="${esc(m.avatar)}" alt="" loading="lazy">`:`<span>${esc(m.initials||m.name.slice(0,2).toUpperCase())}</span>`;return `<button type="button" class="manager-switcher-option ${m.id===currentId?'active':''}" data-switch-manager="${esc(m.id)}">${avatar}<b>${esc(m.name)}</b>${m.id===currentId?'<small>Current</small>':''}</button>`}).join('')}</div></div>`
+}
 function managerProfileHTML(managerId){
   const id=String(managerId),manager=state.managers.get(id);if(!manager)return `<div class="profile-empty">Manager profile unavailable.</div>`;
   const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,power=modelRows(state.modelBundle,through,"power").find(x=>x.id===id),odds=priceRows(through).find(x=>x.id===id),form=managerFormData(id),roster=managerRosterPlayers(id,state.profileAverageSeason),trades=managerTrades(id),biggest=[...trades].map(t=>({t,value:tradeValue(t)})).sort((a,b)=>b.value-a.value||(b.t.created||0)-(a.t.created||0)).slice(0,5),recent=trades.slice(0,5),badges=managerBadges(id),avgAge=managerAverageAge(id),partners=favouriteTradePartners(id),teamForm=teamFormPlayers(id),allTimeHigh=teamHighestScore(id,state.bundles),seasonBundle=state.bundles.find(b=>String(b.league.league_id)===CONFIG.currentLeagueId),seasonHigh=teamHighestScore(id,seasonBundle?[seasonBundle]:[]),matchups=managerRecentMatchups(id),headToHead=managerHeadToHead(id),eligible=allNBAEligible(id),biggestResult=managerBiggestResult(id),gm=managerGMProfile(id),powerMovement=managerPowerMovement(id);
@@ -638,7 +642,7 @@ function managerProfileHTML(managerId){
   const partnerRows=partners.map((p,i)=>`<div class="profile-partner-row"><b>${i+1}</b><button class="manager-profile-link" type="button" data-manager-id="${esc(p.partner)}">${esc(managerName(p.partner))}</button><span>${p.count} trades · ${p.percent.toFixed(0)}%</span></div>`).join("")||'<div class="profile-empty">No trade partners yet.</div>';
   const h2hRows=headToHead.map(r=>{const recordClass=r.wins>r.losses?"winning":r.wins<r.losses?"losing":"even",drawText=r.draws?` <span>(${r.draws} ${r.draws===1?"draw":"draws"})</span>`:"";return `<div class="profile-h2h-row ${recordClass}"><button class="manager-profile-link" type="button" data-manager-id="${esc(r.oppId)}">vs ${esc(managerName(r.oppId))}</button><strong>${r.wins}-${r.losses}${drawText}</strong><small>${r.games} games · includes finals</small></div>`}).join("")||'<div class="profile-empty">No completed head-to-head matchups.</div>';
   const eligibleRows=eligible.map(p=>`<div class="eligible-player">${playerLink(p.id,p.name)}<span>${p.avg.toFixed(2)}</span></div>`).join("")||'<div class="profile-empty">No current top-50 players.</div>';
-  return `<header class="manager-profile-hero"><div class="manager-profile-avatar">${managerAvatar}</div><div><span class="eyebrow">TEAM PROFILE</span><div class="profile-name-line"><h2 id="managerProfileTitle">${esc(manager.name)}</h2><div class="profile-badge-icons">${badgeIconsHTML(badges)}</div></div><p>Current franchise overview and league history</p></div></header>
+  return `<header class="manager-profile-hero"><div class="manager-profile-avatar">${managerAvatar}</div><div><span class="eyebrow">TEAM PROFILE</span><div class="profile-name-line">${managerSwitcherHTML(id)}<div class="profile-badge-icons">${badgeIconsHTML(badges)}</div></div><p>Current franchise overview and league history</p></div></header>
   <div class="manager-profile-stat-grid"><div><span>Power rank</span><strong class="power-rank-with-move">${power?`#${power.rank}`:"—"}${power&&powerMovement.move?` <em class="rank-move ${powerMovement.move>0?'up':'down'}">${powerMovement.move>0?'↑':'↓'}${Math.abs(powerMovement.move)}</em>`:""}</strong></div><div><span>Ladder</span><strong>${power?`#${power.standingRank}`:"—"}</strong></div><div><span>Record</span><strong>${form.games?`${form.wins}-${form.games-form.wins}`:"—"}</strong></div><div><span>Championship odds</span><strong>${odds?championshipOddsLabel(odds):"—"}</strong></div><div><span>Team average age</span><strong>${avgAge?avgAge.toFixed(1):"—"}</strong></div><div><span>Career trades</span><strong>${trades.length}</strong></div></div>
   <div class="manager-profile-grid">
     ${gmProfileHTML(gm)}
@@ -680,7 +684,7 @@ function closeManagerDirectory(){const modal=$("managerDirectoryModal");if(!moda
 
 function managerProfileCacheKey(managerId){return `${String(managerId)}|${String(state.profileAverageSeason||"")}`}
 function managerProfileDataFingerprint(){const latest=state.trades?.[0]?.created||0,current=state.modelBundle?.league?.season||'';return `${CONFIG.currentLeagueId}|${current}|${latest}|${state.trades.length}|${state.managers.size}`}
-function managerProfileSessionKey(key){return `imo-profile-v2711|${managerProfileDataFingerprint()}|${key}`}
+function managerProfileSessionKey(key){return `imo-profile-v314|${managerProfileDataFingerprint()}|${key}`}
 function cachedManagerProfileHTML(managerId){
   const key=managerProfileCacheKey(managerId);
   if(state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
@@ -711,6 +715,13 @@ function observeManagerProfileLinks(){
   if(!managerProfileObserver)managerProfileObserver=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting){queueManagerProfilePrewarm(entry.target.dataset.managerId);managerProfileObserver.unobserve(entry.target)}}),{rootMargin:'500px 0px'});
   document.querySelectorAll('.manager-profile-link').forEach(link=>{if(!link.dataset.profileObserved){link.dataset.profileObserved='1';managerProfileObserver.observe(link)}})
 }
+function closeManagerSwitchers(except=null){document.querySelectorAll('[data-manager-switcher].open').forEach(sw=>{if(sw===except)return;sw.classList.remove('open');const trigger=sw.querySelector('[data-manager-switcher-trigger]');const menu=sw.querySelector('.manager-switcher-menu');if(trigger)trigger.setAttribute('aria-expanded','false');if(menu)menu.hidden=true})}
+function openMobileProfileInfo(title,html){
+  let sheet=document.getElementById('mobileProfileInfoSheet');
+  if(!sheet){sheet=document.createElement('div');sheet.id='mobileProfileInfoSheet';sheet.className='mobile-profile-info-sheet';sheet.innerHTML='<button type="button" class="mobile-profile-info-backdrop" data-close-mobile-profile-info aria-label="Close"></button><div class="mobile-profile-info-card" role="dialog" aria-modal="true"><button type="button" class="mobile-profile-info-close" data-close-mobile-profile-info aria-label="Close">×</button><strong class="mobile-profile-info-title"></strong><div class="mobile-profile-info-body"></div></div>';document.body.appendChild(sheet)}
+  sheet.querySelector('.mobile-profile-info-title').textContent=title||'Details';sheet.querySelector('.mobile-profile-info-body').innerHTML=html||'';sheet.classList.add('open');document.body.classList.add('mobile-profile-info-open')
+}
+function closeMobileProfileInfo(){const sheet=document.getElementById('mobileProfileInfoSheet');if(sheet)sheet.classList.remove('open');document.body.classList.remove('mobile-profile-info-open')}
 function openManagerProfile(managerId,pushState=true){
   const modal=$("managerProfileModal"),content=$("managerProfileContent");
   if(!modal||!content)return;
@@ -1066,6 +1077,10 @@ document.addEventListener("pointerdown",e=>{
 },{passive:true});
 
 document.addEventListener("click",e=>{
+  if(e.target.closest('[data-close-mobile-profile-info]')){closeMobileProfileInfo();return}
+  const switchTrigger=e.target.closest('[data-manager-switcher-trigger]');if(switchTrigger){const sw=switchTrigger.closest('[data-manager-switcher]'),menu=sw?.querySelector('.manager-switcher-menu'),opening=!sw?.classList.contains('open');closeManagerSwitchers(sw);if(sw&&menu){sw.classList.toggle('open',opening);menu.hidden=!opening;switchTrigger.setAttribute('aria-expanded',String(opening))}return}
+  const switchOption=e.target.closest('[data-switch-manager]');if(switchOption){closeManagerSwitchers();openManagerProfile(switchOption.dataset.switchManager);return}
+  if(window.matchMedia('(max-width: 620px)').matches){const badgeSummary=e.target.closest('.profile-badge-pop > summary');if(badgeSummary){e.preventDefault();const details=badgeSummary.parentElement,body=details?.querySelector(':scope > div');openMobileProfileInfo(body?.querySelector('strong')?.textContent||'Badge',body?.innerHTML||'');details.open=false;return}const formSummary=e.target.closest('.profile-form-result > summary');if(formSummary){e.preventDefault();const details=formSummary.parentElement,body=details?.querySelector(':scope > div');openMobileProfileInfo('Match result',body?.innerHTML||'');details.open=false;return}}
   if(e.target.closest("#headlinesBtn")){openHeadlines();return}
   if(e.target.closest("[data-close-headlines]")||e.target.closest("#headlinesClose")){closeHeadlines();return}
   const starEl=e.target.closest("[data-star-player]");if(starEl){togglePlayerInterest(starEl.dataset.starPlayer);return}
@@ -1078,8 +1093,9 @@ document.addEventListener("click",e=>{
   if(e.target.closest("[data-close-manager-profile]")||e.target.closest("#managerProfileClose"))closeManagerProfile()
 });
 document.addEventListener("toggle",e=>{const detail=e.target;if(!(detail instanceof HTMLDetailsElement)||!detail.open)return;if(detail.matches(".profile-badge-pop")){detail.closest(".profile-badge-icons")?.querySelectorAll(".profile-badge-pop[open]").forEach(x=>{if(x!==detail)x.open=false})}if(detail.matches(".profile-form-result")){detail.closest(".profile-form-strip")?.querySelectorAll(".profile-form-result[open]").forEach(x=>{if(x!==detail)x.open=false})}if(detail.matches(".player-history-trade")){detail.closest(".player-history-timeline")?.querySelectorAll(".player-history-trade[open]").forEach(x=>{if(x!==detail)x.open=false})}},true);
+document.addEventListener('pointerdown',e=>{if(!e.target.closest('[data-manager-switcher]'))closeManagerSwitchers()},{passive:true});
 document.addEventListener("pointerover",e=>{const link=e.target.closest?.(".manager-profile-link");if(link)queueManagerProfilePrewarm(link.dataset.managerId)},{passive:true});
 document.addEventListener("focusin",e=>{const link=e.target.closest?.(".manager-profile-link");if(link)queueManagerProfilePrewarm(link.dataset.managerId)});
-document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("headlinesModal")?.classList.contains("open"))closeHeadlines();else if($("playerHistoryModal")?.classList.contains("open"))closePlayerHistory();else if($("managerProfileModal")?.classList.contains("open"))closeManagerProfile();else if($("managerDirectoryModal")?.classList.contains("open"))closeManagerDirectory()});
+document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(document.getElementById('mobileProfileInfoSheet')?.classList.contains('open'))closeMobileProfileInfo();else if(document.querySelector('[data-manager-switcher].open'))closeManagerSwitchers();else if($("headlinesModal")?.classList.contains("open"))closeHeadlines();else if($("playerHistoryModal")?.classList.contains("open"))closePlayerHistory();else if($("managerProfileModal")?.classList.contains("open"))closeManagerProfile();else if($("managerDirectoryModal")?.classList.contains("open"))closeManagerDirectory()});
 window.addEventListener("popstate",openManagerFromHash);
 load().then?.(()=>openManagerFromHash());
