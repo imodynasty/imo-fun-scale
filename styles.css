@@ -502,3 +502,4 @@ footer span{display:flex;align-items:center;gap:6px}
 .recent-trades details{contain:layout paint style}
 .recent-trades details:not([open]) .trade-detail-body{display:none}
 .panel,.metric{content-visibility:auto;contain-intrinsic-size:300px}
+.manager-profile-loading-fast{gap:12px}.manager-loading-identity{display:flex;align-items:center;gap:14px;margin-bottom:18px}.manager-loading-identity img,.manager-loading-identity>span{width:52px;height:52px;border-radius:14px;object-fit:cover;display:grid;place-items:center;background:#111a24;border:1px solid #263647;font-weight:900}.manager-loading-identity div{display:flex;flex-direction:column;align-items:flex-start;gap:3px}.manager-loading-identity small{font-size:10px;letter-spacing:.16em;color:#39ef91;font-weight:900}.manager-loading-identity strong{font-size:19px;color:#f4f7fb}
