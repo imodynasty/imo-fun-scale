@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.2.2 — Bulk Sleeper Season Averages */
+/* IMO DYNASTY V3.2.5 — Draft Grade & Trade Grade Calibration */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -602,6 +602,13 @@ function managerTradeEfficiencyRaw(managerId){
 function leagueScale(rawById,invert=false){
   const vals=Object.values(rawById).filter(Number.isFinite),min=Math.min(...vals),max=Math.max(...vals);const out={};Object.entries(rawById).forEach(([id,v])=>{let n=max===min?.5:(v-min)/(max-min);if(invert)n=1-n;out[id]=Math.round(25+n*74)});return out
 }
+function calibratedLeagueScale(rawById,low=44,high=91){
+  const entries=Object.entries(rawById).filter(([,v])=>Number.isFinite(v)).sort((a,b)=>a[1]-b[1]),out={};
+  if(!entries.length)return out;
+  if(entries.length===1){out[entries[0][0]]=68;return out}
+  entries.forEach(([id],i)=>{const percentile=i/(entries.length-1),curved=.5+(percentile-.5)*.86;out[id]=Math.round(low+Math.max(0,Math.min(1,curved))*(high-low))});
+  return out
+}
 function managerTendencyLeague(){
   if(state.computedCache.tendencyLeague)return state.computedCache.tendencyLeague;
   const ids=[...state.managers.keys()],bundle=currentBundle(),weeks=meaningfulWeeks(bundle||{matchups:[]}),through=weeks.at(-1)||Infinity,powerRows=bundle?modelRows(bundle,through,'power'):[],oddsRows=bundle?priceRows(through):[],powerBy=Object.fromEntries(powerRows.map(x=>[String(x.id),x])),oddsBy=Object.fromEntries(oddsRows.map(x=>[String(x.id),x]));
@@ -676,6 +683,10 @@ function latestDraftAverage(playerId){
   }
   return Number(latestKnownAverage(String(playerId))||0)
 }
+function currentDraftValue(playerId){
+  const avg=latestDraftAverage(playerId);
+  return avg>0?playerDynastyValue(String(playerId),avg,Date.now()):0
+}
 function eligibleDraftClassRows(){
   const bySeason={};
   (state.draftSelections||[]).forEach(p=>{const season=String(p?.season||'');if((season==='2025'||season==='2026')&&p?.isRookieDraft===true&&p?.playerId&&p?.pickedBy)(bySeason[season]??=[]).push(p)});
@@ -684,26 +695,28 @@ function eligibleDraftClassRows(){
     // A class remains completely excluded until at least one player from that
     // class has appeared in three NBA games.
     if(!picks.some(p=>draftGamesPlayed(p.playerId,season)>=3))return;
-    const ranked=picks.map(p=>({...p,currentAverage:latestDraftAverage(p.playerId)})).sort((a,b)=>b.currentAverage-a.currentAverage||a.overallPick-b.overallPick||a.playerId.localeCompare(b.playerId));
+    const ranked=picks.map(p=>({...p,currentAverage:latestDraftAverage(p.playerId),currentValue:currentDraftValue(p.playerId)})).sort((a,b)=>b.currentValue-a.currentValue||b.currentAverage-a.currentAverage||a.overallPick-b.overallPick||a.playerId.localeCompare(b.playerId));
     ranked.forEach((p,index)=>rows.push({...p,redraftRank:index+1,draftScore:Number(p.overallPick)-(index+1)}))
   });
   return rows
 }
 function managerDraftResume(managerId){
-  const id=String(managerId),picks=eligibleDraftClassRows().filter(p=>String(p.pickedBy)===id),sortedSteals=[...picks].sort((a,b)=>b.draftScore-a.draftScore||a.overallPick-b.overallPick),sortedBusts=[...picks].sort((a,b)=>a.draftScore-b.draftScore||a.overallPick-b.overallPick);
-  return{managerId:id,picks,count:picks.length,totalScore:picks.reduce((sum,p)=>sum+Number(p.draftScore||0),0),biggestSteal:sortedSteals[0]||null,biggestBust:sortedBusts[0]||null}
+  const id=String(managerId),picks=eligibleDraftClassRows().filter(p=>String(p.pickedBy)===id);
+  const steals=picks.filter(p=>Number(p.draftScore)>0).sort((a,b)=>b.draftScore-a.draftScore||a.overallPick-b.overallPick);
+  const busts=picks.filter(p=>Number(p.draftScore)<0).sort((a,b)=>a.draftScore-b.draftScore||a.overallPick-b.overallPick);
+  const totalScore=picks.reduce((sum,p)=>sum+Number(p.draftScore||0),0),averageScore=picks.length?totalScore/picks.length:0;
+  const hitRate=picks.length?picks.filter(p=>Number(p.draftScore)>0).length/picks.length:0,missRate=picks.length?picks.filter(p=>Number(p.draftScore)<0).length/picks.length:0;
+  return{managerId:id,picks,count:picks.length,totalScore,averageScore,hitRate,missRate,biggestSteal:steals[0]||null,biggestBust:busts[0]||null}
 }
 function managerTradingRaw(managerId){
   const trades=managerTrades(managerId);if(!trades.length)return 0;
   const metrics=trades.map(t=>tradeSideMetrics(t,managerId));
-  const averageEdge=metrics.reduce((sum,m)=>sum+Math.max(-60,Math.min(60,Number(m.edge)||0)),0)/metrics.length;
-  const averageNet=metrics.reduce((sum,m)=>sum+Math.max(-30,Math.min(30,Number(m.net)||0)),0)/metrics.length;
-  const wins=metrics.filter(m=>Number(m.net)>1).length,losses=metrics.filter(m=>Number(m.net)<-1).length;
-  const resultRate=(wins-losses)/metrics.length;
-  const activityConfidence=Math.min(1,Math.log2(metrics.length+1)/3);
-  // Grade real value captured rather than averaging the already-generous
-  // individual trade badges. This creates meaningful league-wide variance.
-  return (averageEdge*.50+averageNet*1.25+resultRate*24)*(.65+.35*activityConfidence)
+  const weighted=metrics.map(m=>{const dealSize=Math.max(8,Number(m.receivedValue||0)+Number(m.sentValue||0)),confidence=Math.min(1,dealSize/65);return(Math.max(-45,Math.min(45,Number(m.edge)||0))*.34+Math.max(-24,Math.min(24,Number(m.net)||0))*.72)*(.55+.45*confidence)});
+  const averageOutcome=weighted.reduce((a,b)=>a+b,0)/weighted.length;
+  const wins=metrics.filter(m=>Number(m.net)>2).length,losses=metrics.filter(m=>Number(m.net)<-2).length,decisiveRate=(wins-losses)/metrics.length;
+  const sampleConfidence=Math.min(1,Math.sqrt(metrics.length/8));
+  // Shrink small samples toward league average and avoid one trade creating an A+ or F.
+  return (averageOutcome+decisiveRate*8)*(.45+.55*sampleConfidence)
 }
 function managerDepthRaw(managerId){
   const season=String(currentBundle()?.league?.season||'2026'),current=seasonAverageMap(season),fallback=seasonAverageMap('2025');
@@ -723,12 +736,13 @@ function managerGradesLeague(){
   ids.forEach(id=>{
     const r=tendency.ratings,resume=managerDraftResume(id);draftResumes[id]=resume;
     raw.trading[id]=managerTradingRaw(id);
-    raw.drafting[id]=resume.totalScore;
+    const sampleConfidence=Math.min(1,Math.sqrt(resume.count/4));
+    raw.drafting[id]=(resume.averageScore*2.2+(resume.hitRate-resume.missRate)*5)*(.55+.45*sampleConfidence);
     raw.development[id]=(r.youth[id]||25)*.55+(r.waiver[id]||25)*.25+(r.asset[id]||25)*.20;
     depthRaw[id]=managerDepthRaw(id);
     raw.building[id]=(r.asset[id]||25)*.28+(r.star[id]||25)*.18+(r.winNow[id]||25)*.20+(r.draft[id]||25)*.08
   });
-  const depthRatings=leagueScale(depthRaw),ratings={trading:leagueScale(raw.trading),drafting:leagueScale(raw.drafting),development:leagueScale(raw.development),building:{}},grades={};
+  const depthRatings=leagueScale(depthRaw),ratings={trading:calibratedLeagueScale(raw.trading,46,90),drafting:calibratedLeagueScale(raw.drafting,45,91),development:leagueScale(raw.development),building:{}},grades={};
   ids.forEach(id=>{ratings.building[id]=Math.round((leagueScale(raw.building)[id]||25)*.62+(depthRatings[id]||25)*.38)});
   ids.forEach(id=>grades[id]={trading:managerLetterGrade(ratings.trading[id]),drafting:managerLetterGrade(ratings.drafting[id]),development:managerLetterGrade(ratings.development[id]),building:managerLetterGrade(ratings.building[id])});
   return state.computedCache.managerGrades={raw,ratings,grades,draftResumes}
@@ -851,7 +865,7 @@ function closeManagerDirectory(){const modal=$("managerDirectoryModal");if(!moda
 
 function managerProfileCacheKey(managerId){return `${String(managerId)}|${String(state.profileAverageSeason||"")}`}
 function managerProfileDataFingerprint(){const latest=state.trades?.[0]?.created||0,current=state.modelBundle?.league?.season||'';return `${CONFIG.currentLeagueId}|${current}|${latest}|${state.trades.length}|${state.managers.size}|${state.draftSelections.length}`}
-function managerProfileSessionKey(key){return `imo-profile-v322-grades|${managerProfileDataFingerprint()}|${key}`}
+function managerProfileSessionKey(key){return `imo-profile-v325-grade-fix|${managerProfileDataFingerprint()}|${key}`}
 function cachedManagerProfileHTML(managerId){
   const key=managerProfileCacheKey(managerId);
   if(state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
