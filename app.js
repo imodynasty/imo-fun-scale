@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.1.12 — League HQ */
+/* IMO DYNASTY V3.1.13 — League HQ */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null}};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
@@ -1072,11 +1072,29 @@ async function loadSeason(id){
   const draftPickMap={};
   relevantDrafts.forEach(({draft,picks})=>{
     const season=String(draft?.season||league.season);
+    const teamCount=Number(draft?.settings?.teams)||Number(league?.total_rosters)||rosters.length||8;
+    const draftType=String(draft?.type||draft?.settings?.type||'linear').toLowerCase();
     picks.forEach(p=>{
-      if(p.player_id==null||p.round==null||p.draft_slot==null)return;
-      // Sleeper's draft_slot is the ORIGINAL pick slot. It remains correct
-      // even when another manager makes the selection after a pick trade.
-      draftPickMap[`${season}|${String(p.draft_slot)}|${String(p.round)}`]=String(p.player_id);
+      if(p.player_id==null||p.round==null)return;
+      const round=Number(p.round);
+      const pickNo=Number(p.pick_no);
+      let originalSlot=null;
+
+      // Sleeper's draft_slot can reflect the manager who made a traded pick,
+      // not the franchise whose pick asset it originally was. Reconstruct the
+      // true slot from the overall pick number instead.
+      if(Number.isFinite(pickNo)&&pickNo>0&&teamCount>0){
+        const positionInRound=((pickNo-1)%teamCount)+1;
+        originalSlot=(draftType==='snake'&&round%2===0)
+          ? teamCount-positionInRound+1
+          : positionInRound;
+      }else if(p.draft_slot!=null){
+        // Fallback only for older/incomplete draft payloads without pick_no.
+        originalSlot=Number(p.draft_slot);
+      }
+
+      if(!Number.isFinite(originalSlot)||originalSlot<1)return;
+      draftPickMap[`${season}|${String(originalSlot)}|${String(round)}`]=String(p.player_id);
     });
   });
 

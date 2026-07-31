@@ -311,8 +311,14 @@ V3.1.8 CHANGES
 - Added an Archetype Guide button to every manager profile with definitions for all nine manager archetypes.
 
 
-V3.1.12
+V3.1.13
 - Reverted rookie-value changes so historical trade grades use the original valuation model again.
 - Future draft-pick values remain unchanged.
 - Fixed drafted-player attribution by using Sleeper draft_slot only (the original pick slot), never the manager who made the selection.
 - Filters out startup/long drafts when identifying rookie selections, preventing cross-draft overwrites.
+
+
+V3.1.13
+- Corrected drafted-player attribution for traded rookie picks.
+- Rookie selections are now mapped from overall pick_no to the original franchise slot, rather than Sleeper draft_slot (which may identify the manager who made a traded selection).
+- Example: original 1.08 maps to the player taken eighth, while original 1.05 maps to the player taken fifth, regardless of which manager submitted the pick.
