@@ -1,4 +1,4 @@
-/* IMO DYNASTY V2.6.7 — editorial trade grades and win-win analysis */
+/* IMO DYNASTY V2.6.8 — balanced trade grades and live league ticker */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-01-03T00:00:00+08:00"};
 const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{}};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
@@ -65,48 +65,61 @@ function tradeSideMetrics(t,managerId){
   const id=String(managerId),received=tradeAssets(t)[id]||[],outgoing=tradeOutgoingAssets(t)[id]||[];
   let sent=outgoing;
   if(!sent.length&&mids(t).length===2){const other=mids(t).find(x=>String(x)!==id);sent=tradeAssets(t)[other]||[]}
-  const receivedValue=received.reduce((s,a)=>s+(Number(a.value)||0),0),sentValue=sent.reduce((s,a)=>s+(Number(a.value)||0),0),average=(receivedValue+sentValue)/2,edge=average>0?(receivedValue-sentValue)/average*100:0,net=receivedValue-sentValue;
+  const rawReceivedValue=received.reduce((sum,a)=>sum+(Number(a.value)||0),0),rawSentValue=sent.reduce((sum,a)=>sum+(Number(a.value)||0),0);
+  const allAssets=Object.values(tradeAssets(t)).flat(),sortedPlayers=allAssets.filter(a=>a.type==='player').sort((a,b)=>(Number(b.value)||0)-(Number(a.value)||0));
+  const bestPlayer=sortedPlayers[0]||null,nextBest=sortedPlayers[1]||null,bestReceived=bestPlayer&&received.some(a=>a.type==='player'&&String(a.id)===String(bestPlayer.id));
+  const bestRatio=bestPlayer&&nextBest&&Number(nextBest.value)>0?Number(bestPlayer.value)/Number(nextBest.value):bestPlayer?1.35:1;
+  const eliteCentrepiece=Boolean(bestReceived&&bestRatio>=1.30&&Number(bestPlayer.value)>=35),clearCentrepiece=Boolean(bestReceived&&bestRatio>=1.15&&Number(bestPlayer.value)>=25);
+  const consolidating=received.length<sent.length&&(clearCentrepiece||eliteCentrepiece);
+  const allowance=eliteCentrepiece?.10:clearCentrepiece?.08:0;
+  const adjustedSentValue=consolidating?rawSentValue*(1-allowance):rawSentValue;
+  const average=(rawReceivedValue+adjustedSentValue)/2,edge=average>0?(rawReceivedValue-adjustedSentValue)/average*100:0,net=rawReceivedValue-adjustedSentValue;
   const receivedPlayers=received.filter(a=>a.type==='player'),sentPlayers=sent.filter(a=>a.type==='player'),receivedPicks=received.filter(a=>a.type==='pick'),sentPicks=sent.filter(a=>a.type==='pick');
-  const strongestReceived=Math.max(0,...received.map(a=>Number(a.value)||0)),strongestSent=Math.max(0,...sent.map(a=>Number(a.value)||0));
-  const avgReceivedAge=receivedPlayers.length?receivedPlayers.reduce((s,a)=>s+playerAgeAt(a.id,t.created),0)/receivedPlayers.length:null;
   const bundle=bundleForTrade(t),standing=standingsTable(bundle).find(x=>String(x.id)===id),teamCount=Math.max(1,state.managers.size),contender=standing?standing.standingRank<=Math.ceil(teamCount/2):false,rebuilding=standing?standing.standingRank>Math.ceil(teamCount/2):false;
   let strategic=0,reasons=[];
-  if(received.length<sent.length&&strongestReceived>strongestSent*1.08){strategic+=1.5;reasons.push('consolidation')}
-  if(received.length>sent.length&&receivedValue>=sentValue*.88){strategic+=1;reasons.push('depth')}
-  if(receivedPicks.length>sentPicks.length){strategic+=1;reasons.push('draft capital')}
-  if(avgReceivedAge!=null&&avgReceivedAge<=24.5&&rebuilding){strategic+=1;reasons.push('timeline')}
-  if(contender&&receivedPlayers.some(a=>Number(a.average)>=28)){strategic+=1;reasons.push('win-now')}
-  if(strongestReceived>=Math.max(35,strongestSent*1.15)){strategic+=.5;reasons.push('centrepiece')}
-  strategic=Math.min(4,strategic);
-  return{id,received,sent,receivedValue,sentValue,edge,net,strategic,reasons,strongestReceived,strongestSent}
+  if(bestReceived){strategic+=eliteCentrepiece?2:clearCentrepiece?1:0;if(clearCentrepiece)reasons.push(eliteCentrepiece?'elite centrepiece':'best player')}
+  if(rebuilding&&receivedPicks.length>sentPicks.length&&rawReceivedValue>=rawSentValue*.88){strategic+=.5;reasons.push('future fit')}
+  else if(contender&&receivedPlayers.some(a=>Number(a.average)>=28)&&rawReceivedValue>=rawSentValue*.88){strategic+=.5;reasons.push('win-now fit')}
+  strategic=Math.min(2.5,strategic);
+  return{id,received,sent,receivedValue:rawReceivedValue,sentValue:rawSentValue,adjustedSentValue,edge,net,strategic,reasons,bestReceived,bestPlayer,eliteCentrepiece,clearCentrepiece,consolidating,allowance}
 }
 function packageGradePoints(edge,net){
-  let points=edge>=22?10:edge>=12?9:edge>=6?8:edge>=2?7:edge>=0?6:edge>=-3?5:edge>=-7?4:edge>=-12?3:edge>=-22?2:0;
-  if(points===10&&net<12)points=Math.min(points,net>=8?9:net>=4?8:net>=2?7:6);
-  if(points===9&&net<8)points=Math.min(points,net>=4?8:net>=2?7:6);
-  if(points===8&&net<4)points=Math.min(points,net>=2?7:6);
-  if(points===7&&net<2)points=6;
-  if(points===0&&net>-16)points=2;
-  if(points===2&&net>-10)points=3;
+  let points=edge>=30?9:edge>=20?8:edge>=10?7:edge>=3?6:edge>=-10?5:edge>=-20?4:edge>=-30?3:2;
+  if(points>=9&&net<14)points=net>=9?8:net>=5?7:6;
+  if(points===8&&net<9)points=net>=5?7:net>=2?6:5;
+  if(points===7&&net<5)points=net>=2?6:5;
+  if(points===3&&net>-12)points=4;
+  if(points===2&&net>-18)points=3;
   return points
 }
-function gradeFromPoints(points,edge,net){if(points>=10)return'A+';if(points>=9)return'A';if(points>=8)return'B+';if(points>=7)return'B';if(points>=6)return'C+';if(points>=5)return'C';if(points>=4)return'D+';if(points>=3)return'D';if(points>=1)return'F';return edge<=-22&&net<=-16?'FLEECE ALERT 🚨':'F'}
+function gradeFromPoints(points,m){
+  if(points>=10&&(m.edge>=18||m.eliteCentrepiece))return'A+';
+  if(points>=9)return'A';
+  if(points>=8)return'B+';
+  if(points>=7)return'B';
+  if(points>=6)return'C+';
+  if(points>=5)return'C';
+  if(points>=4)return'D+';
+  if(points>=3)return'D';
+  if(m.edge<=-35&&m.net<=-18&&!m.clearCentrepiece)return'FLEECE ALERT 🚨';
+  return m.edge<=-20&&m.net<=-10&&!m.eliteCentrepiece?'F':'D';
+}
 function stableIndex(key,length){let h=2166136261;for(const c of String(key)){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return Math.abs(h>>>0)%Math.max(1,length)}
 const TRADE_COMMENTS={
-  'A+':['Highway robbery — a premium outcome with both quality and value firmly on their side.','Sensational business. They landed exactly what they needed without paying full freight.','An elite return that strengthens both the present and the long-term outlook.','A near-perfect result, securing the centrepiece while preserving exceptional value.','Outstanding negotiating — this package delivers across every meaningful measure.'],
-  'A':['A clear win, with the incoming package fitting their direction beautifully.','Excellent business — the return comfortably outweighs the cost.','A high-quality move that leaves this roster in a much stronger position.','They secured the better outcome while keeping the price under control.','A decisive win built around a package that makes immediate sense.'],
+  'A+':['A premium result, combining a standout return with excellent deal structure.','Exceptional business — this side secured the headline asset and protected its overall position.','A rare top-tier outcome that delivers both quality and value.','Outstanding work, landing the centrepiece without losing control of the deal.'],
+  'A':['A strong result that meaningfully improves this roster.','Excellent business, with the return comfortably justifying the cost.','A high-quality move built around a clear advantage.','They leave the table in a notably stronger position.'],
   'B+':['A strong return that gives this side a clear advantage.','Smart business, with the better overall package coming back.','A tidy win that strengthens the roster without a major overpay.','They came away comfortably ahead while addressing a genuine need.','A quality deal that leaves this franchise in the stronger position.','Good negotiating — the return outweighs what was sent out.'],
   'B':['A useful win, with a little more coming back than went out.','Solid work — the trade improves this roster without creating a major weakness.','A positive result that quietly moves the team in the right direction.','Good business, with the incoming package earning a meaningful edge.','A sensible move that delivers more upside than risk.'],
   'C+':['Almost even, but this side earns the slightest advantage.','A balanced exchange with a small edge in their favour.','Little separates the packages, though this return just shades it.','A fair trade that leans narrowly toward this side.'],
   'C':['A balanced exchange with very little separating the two sides.','Fair business — each side can make a credible case for the deal.','A needs-based move with no obvious loser.','Close enough to call even, with the outcome likely decided over time.'],
   'D+':['A small overpay, though the move remains easy enough to justify.','They gave up a little extra, but the roster fit softens the damage.','Slightly expensive, without becoming a serious mistake.','The price was a touch high, though the return still has a clear purpose.'],
-  'D':['A noticeable overpay that puts pressure on the return to deliver.','The outgoing package carries the stronger value, making this a difficult result.','They paid above market and will need the centrepiece to outperform.','A clear loss on the exchange, even if the strategic logic is understandable.'],
-  'F':['A painful overpay, with a sizeable gap between cost and return.','This one is difficult to defend — far too much went out the door.','A major value loss that places enormous pressure on the incoming assets.','They surrendered the stronger package by a considerable margin.'],
+  'D':['A noticeable overpay, but not one that cannot be justified.','The outgoing package carries more weight, placing pressure on the return.','They paid above the going rate and will need the incoming assets to deliver.','A clear disadvantage on the exchange, though the logic remains understandable.'],
+  'F':['A major overpay, with a sizeable gap between cost and return.','This one is difficult to defend — too much went out the door.','A significant value loss that places enormous pressure on the incoming assets.','They surrendered the stronger package by a considerable margin.'],
   'FLEECE ALERT 🚨':['FLEECE ALERT 🚨 Trade authorities have been notified after a landslide result.','FLEECE ALERT 🚨 A brutal gap makes this one almost impossible to defend.','FLEECE ALERT 🚨 One side walked away with the keys, the car and the registration.','FLEECE ALERT 🚨 This was less a negotiation and more a daylight robbery.']
 };
-function tradeGrade(t,managerId){const m=tradeSideMetrics(t,managerId),base=packageGradePoints(m.edge,m.net),final=Math.min(10,base+m.strategic),grade=gradeFromPoints(final,m.edge,m.net),comments=TRADE_COMMENTS[grade]||TRADE_COMMENTS.C;return{...m,base,final,grade,comment:comments[stableIndex(`${t.transaction_id||t.created}|${managerId}|${grade}`,comments.length)]}}
+function tradeGrade(t,managerId){const m=tradeSideMetrics(t,managerId),base=packageGradePoints(m.edge,m.net),final=Math.min(10,base+m.strategic),grade=gradeFromPoints(final,m),comments=TRADE_COMMENTS[grade]||TRADE_COMMENTS.C;return{...m,base,final,grade,comment:comments[stableIndex(`${t.transaction_id||t.created}|${managerId}|${grade}`,comments.length)]}}
 function tradeGrades(t){return mids(t).map(id=>tradeGrade(t,id))}
-function winWinTrade(t){const grades=tradeGrades(t),rank={'A+':10,'A':9,'B+':8,'B':7,'C+':6,'C':5,'D+':4,'D':3,'F':2,'FLEECE ALERT 🚨':0};return grades.length>=2&&grades.every(g=>(rank[g.grade]||0)>=7)&&grades.every(g=>g.strategic>0)}
+function winWinTrade(t){const grades=tradeGrades(t),rank={'A+':10,'A':9,'B+':8,'B':7,'C+':6,'C':5,'D+':4,'D':3,'F':2,'FLEECE ALERT 🚨':0};return grades.length>=2&&grades.every(g=>(rank[g.grade]||0)>=7)&&grades.every(g=>g.strategic>0||g.edge>=3)}
 function gradeClass(grade){return grade.startsWith('A')?'grade-a':grade.startsWith('B')?'grade-b':grade.startsWith('C')?'grade-c':grade.startsWith('D')?'grade-d':'grade-f'}
 function tradeEditorialHTML(t,compact=false){const grades=tradeGrades(t),winwin=winWinTrade(t);return `<div class="trade-editorial ${compact?'compact':''}">${winwin?'<div class="win-win-label">🤝 WIN-WIN TRADE</div>':''}${grades.map(g=>`<div class="trade-grade-row"><span class="trade-grade-team">${esc(managerName(g.id,t))}</span><span class="trade-grade-badge ${gradeClass(g.grade)}">${esc(g.grade)}</span><span class="trade-grade-comment">${esc(g.comment)}</span></div>`).join('')}</div>`}
 function tradeSummary(t){const assets=Object.values(tradeAssets(t)).flat().filter(a=>a.type==='player').map(a=>a.name);const core=assets.slice(0,3).join(' / ')||'Draft-pick trade';return core}
@@ -483,6 +496,21 @@ function openManagerFromHash(){
   else closeManagerProfile(false);
 }
 
+
+function currentRosterOwner(playerId){for(const roster of state.currentRosters||[]){if((roster.players||[]).map(String).includes(String(playerId)))return String(roster.owner_id)}return null}
+function tickerTopPerformer(){
+  const rostered=new Set((state.currentRosters||[]).flatMap(r=>(r.players||[]).map(String))),seasons=["2026","2025",String(state.modelBundle?.league?.season||"")].filter((v,i,a)=>v&&a.indexOf(v)===i);
+  for(const season of seasons){const candidates=[];Object.entries(state.gameLogs?.[season]||{}).forEach(([id,rows])=>{if(!rostered.has(String(id)))return;(rows||[]).forEach(row=>{const date=gameDateValue(row),fpts=rawFantasyPoints(row,state.modelBundle?.league?.scoring_settings||{});if(date&&gameWasPlayed(row)&&Number.isFinite(fpts))candidates.push({id,date,fpts})})});if(!candidates.length)continue;const latest=Math.max(...candidates.map(x=>x.date)),day=candidates.filter(x=>Math.abs(x.date-latest)<43200000).sort((a,b)=>b.fpts-a.fpts)[0];if(day){const owner=currentRosterOwner(day.id);return `🔥 ${playerName(day.id)}: ${day.fpts.toFixed(1)} FPTS${owner?` for ${managerName(owner)}`:''}`}}
+  const bundle=state.modelBundle,weeks=meaningfulWeeks(bundle);if(!weeks.length)return null;const week=weeks.at(-1),rows=bundle.matchups.filter(x=>x.week===week),best=[];rows.forEach(row=>Object.entries(row.players_points||{}).forEach(([id,v])=>{if(rostered.has(String(id))&&Number(v)>0)best.push({id,fpts:Number(v)})}));best.sort((a,b)=>b.fpts-a.fpts);return best[0]?`🔥 Latest leader: ${playerName(best[0].id)} ${best[0].fpts.toFixed(1)} FPTS`:null
+}
+function tickerMatchup(){const bundle=state.bundles.find(b=>String(b.league?.league_id)===CONFIG.currentLeagueId)||state.modelBundle;if(!bundle)return null;const played=meaningfulWeeks(bundle),nextWeek=(played.at(-1)||0)+1,rows=bundle.matchups.filter(x=>x.week===nextWeek&&x.matchup_id!=null),groups={};rows.forEach(x=>(groups[x.matchup_id]??=[]).push(x));const standings=Object.fromEntries(standingsTable(bundle).map(x=>[x.id,x.standingRank]));const options=Object.values(groups).filter(g=>g.length>=2).map(g=>{const ids=g.map(x=>bundle.ownerByRoster[String(x.roster_id)]).filter(Boolean);return{ids,score:ids.reduce((sum,id)=>sum+(standings[id]||99),0)}}).filter(x=>x.ids.length>=2).sort((a,b)=>a.score-b.score);const pick=options[0];return pick?`Matchup of the Week: #${standings[pick.ids[0]]||'—'} ${managerName(pick.ids[0])} vs #${standings[pick.ids[1]]||'—'} ${managerName(pick.ids[1])}`:null}
+function tickerStreak(){const outcomes=outcomesForBundle(state.modelBundle),rows=[];Object.entries(outcomes).forEach(([id,games])=>{let type=null,count=0;for(let i=games.length-1;i>=0;i--){const next=games[i].result===1?'W':games[i].result===0?'L':'T';if(next==='T')break;if(type===null)type=next;if(next!==type)break;count++}if(count>=2)rows.push({id,type,count})});rows.sort((a,b)=>b.count-a.count);const x=rows[0];return x?`${x.type==='W'?'Hot streak':'Cold streak'}: ${managerName(x.id)} ${x.type==='W'?'has won':'has lost'} ${x.count} straight`:null}
+function tickerDrought(){let best=null;for(const m of state.managers.values()){const last=state.trades.find(t=>mids(t).includes(m.id))?.created||0,days=last?Math.floor((Date.now()-last)/864e5):null;if(days!==null&&(!best||days>best.days))best={m,days}}return best?`${best.m.name} owns the longest fun drought at ${best.days} days without a trade`:null}
+function tickerRankingOrRecord(){const weeks=meaningfulWeeks(state.modelBundle);if(weeks.length<2)return null;const last=weeks.at(-1),prior=weeks.at(-2),now=modelRows(state.modelBundle,last,'power'),before=Object.fromEntries(modelRows(state.modelBundle,prior,'power').map(x=>[x.id,x.rank])),moves=now.map(x=>({...x,move:(before[x.id]||x.rank)-x.rank})).sort((a,b)=>Math.abs(b.move)-Math.abs(a.move));const top=moves[0];if(top&&Math.abs(top.move)>=2)return `${top.name} jumps ${Math.abs(top.move)} spot${Math.abs(top.move)===1?'':'s'} to #${top.rank} in the Power Rankings`;const currentRows=state.modelBundle.matchups.filter(x=>x.week===last),best=currentRows.filter(x=>Number(x.points)>0).sort((a,b)=>Number(b.points)-Number(a.points))[0],all=highestTeamScore(state.bundles);if(best&&all&&Number(best.points)>=all.pts)return `New league record: ${managerName(state.modelBundle.ownerByRoster[String(best.roster_id)])} posts ${Number(best.points).toFixed(1)} points`;return null}
+function shortTradeHeadline(t){if(!t)return null;const names=mids(t).map(id=>managerName(id,t));return names.length?`${names.join(' and ')} complete a deal involving ${tradeSummary(t)}`:null}
+function renderTicker(){const root=$('leagueTicker');if(!root)return;const good=recentPlayerForm().good.slice(0,2),stories=[tickerTopPerformer(),...good.map(x=>`${x.name} is in good form, averaging ${x.recentAvg.toFixed(1)} FPTS over the last 5`),...state.trades.slice(0,2).map(t=>shortTradeHeadline(t)),tickerMatchup(),tickerStreak(),'IMO Awards voting opens 3 January 2027',tickerRankingOrRecord(),tickerDrought()].filter(Boolean);const unique=[...new Set(stories)].slice(0,10);if(!unique.length){root.hidden=true;return}root.hidden=false;const group=unique.map((text,i)=>`<span class="ticker-item">${esc(text)}</span>${i<unique.length-1?'<span class="ticker-dot">•</span>':''}`).join('');root.innerHTML=`<span class="ticker-live">LIVE</span><div class="ticker-window"><div class="ticker-track"><div class="ticker-group">${group}</div><div class="ticker-group" aria-hidden="true">${group}</div></div></div>`}
+async function loadTickerGameLogs(){const season=String(state.modelBundle?.league?.season||'2025'),ids=[...new Set((state.currentRosters||[]).flatMap(r=>(r.players||[]).map(String)))],scoring=state.modelBundle?.league?.scoring_settings||{};if(!ids.length)return;const rows=await limitedMap(ids,8,async id=>{const result=await loadPlayerGameLogAverage(id,season,scoring);return result?{id,...result}:null});state.gameLogs[season]??={};rows.filter(Boolean).forEach(row=>state.gameLogs[season][row.id]=row.rows||[]);renderPlayerForm();renderTicker()}
+
 function safeRender(name,fn){try{fn()}catch(error){console.error(`Failed to render ${name}:`,error)}}
 function renderAll(){
   safeRender("summary",renderSummary);
@@ -497,6 +525,7 @@ function renderAll(){
   safeRender("recent trades",renderRecent);
   safeRender("biggest trades",renderBiggestTrades);
   safeRender("voting",renderVoting);
+  safeRender("ticker",renderTicker);
 }
 
 function relevantPlayerIds(){
@@ -686,6 +715,7 @@ async function load(){
     state.trades=[...unique.values()].sort((a,b)=>(b.created||0)-(a.created||0));
     prepareModels();
     renderAll();
+    loadTickerGameLogs().catch(error=>console.warn("Ticker game logs unavailable:",error));
     const averageCount=Object.values(state.seasonTotalMeta||{}).reduce((sum,season)=>sum+Object.keys(season||{}).length,0);
     if(status)status.textContent=`Live · ${valid.length} seasons loaded · ${averageCount} player season averages`;
   }catch(e){
