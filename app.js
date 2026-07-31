@@ -454,6 +454,17 @@ function seasonAverageMap(season){
   let result;
   if(!bundle)result={...exact,...totals};
   else{const weeks=meaningfulWeeks(bundle);result=weeks.length?buildPlayerAverages(bundle,weeks.at(-1)):{...exact,...totals}}
+  // Known-data correction: Sleeper's source feed currently overstates Zach Edey's
+  // 2025 league-scored average. Apply the verified regular-season average at the
+  // shared season-map layer so roster values, rankings and championship odds all
+  // use the same corrected figure.
+  if(key==="2025"){
+    const edeyEntry=Object.entries(state.players||{}).find(([,player])=>{
+      const fullName=`${player?.first_name||""} ${player?.last_name||""}`.trim().toLowerCase();
+      return fullName==="zach edey"||String(player?.full_name||"").trim().toLowerCase()==="zach edey";
+    });
+    if(edeyEntry)result[String(edeyEntry[0])]=22.95;
+  }
   state.computedCache.seasonAverages.set(key,result);
   return result;
 }
