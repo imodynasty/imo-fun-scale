@@ -1,4 +1,4 @@
-/* IMO DYNASTY V2.7.5 — corrected superstar grade floors and top-10 premium fallback */
+/* IMO DYNASTY V2.7.6 — late-pick values and low-value A+ safeguard */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[]};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
@@ -42,7 +42,10 @@ function playerLink(id,name=playerName(id),className=""){return `<button type="b
 function pickOriginalOwner(p,t){const owner=t.roster_owner_map?.[String(p.roster_id)];return owner?managerName(owner,t):null}
 function roundWord(n){return ({1:"First",2:"Second",3:"Third",4:"Fourth",5:"Fifth"})[Number(n)]||`Round ${n}`}
 function draftedPlayerForPick(p){const season=String(p.season),round=String(p.round),candidates=[p.roster_id,p.original_roster_id,p.previous_owner_id,p.owner_id].filter(x=>x!=null).map(String);for(const key of candidates){const found=state.draftPickMap[`${season}|${key}|${round}`];if(found)return found}return null}
-function fixedPickValue(round){round=Number(round);return round===1?17.5:round===2?2.5:0}
+function fixedPickValue(round){
+  round=Number(round);
+  return round===1?17.5:round===2?2.5:round===3?2:round===4?1:round===5?.5:0
+}
 function bundleForSeason(season){return state.bundles.find(b=>String(b.league?.season)===String(season))||null}
 function bundleForTrade(t){return state.bundles.find(b=>String(b.league?.league_id)===String(t.league_id))||bundleForSeason(String(t.season_label||"").match(/\d{4}/)?.[0])||null}
 function latestKnownAverage(playerId){for(const bundle of [...state.bundles].sort((a,b)=>Number(b.league?.season)-Number(a.league?.season))){const weeks=meaningfulWeeks(bundle);if(!weeks.length)continue;const avg=Number(buildPlayerAverages(bundle,weeks.at(-1))[playerId]||0);if(avg>0)return avg}return Number(state.playerAverages[playerId]||0)}
@@ -133,7 +136,16 @@ function packageGradePoints(edge,net){
   return points
 }
 function gradeFromPoints(points,m){
-  if(points>=10&&(m.edge>=40&&m.net>=18||m.clearCentrepiece&&m.edge>=24))return'A+';
+  // A+ is reserved for genuinely meaningful wins, not tiny percentage steals.
+  // A low-value player acquired for a late pick can still grade very well, but
+  // needs a substantial absolute gain or a truly premium centrepiece to reach A+.
+  const totalDealValue=m.receivedValue+m.sentValue;
+  const premiumCentrepiece=Boolean(m.clearCentrepiece&&Number(m.bestPlayer?.value||0)>=25);
+  const meaningfulAPlus=points>=10&&m.net>=10&&totalDealValue>=20&&(
+    (m.edge>=40&&m.net>=18)||
+    (premiumCentrepiece&&m.edge>=24&&m.net>=12)
+  );
+  if(meaningfulAPlus)return'A+';
   if(points>=9)return'A';
   if(points>=8)return'B+';
   if(points>=7)return'B';
