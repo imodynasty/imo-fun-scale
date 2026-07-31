@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.2.0 — Sleeper FPTS Source of Truth */
+/* IMO DYNASTY V3.2.1 — Exact League-Scored Season Averages */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -481,17 +481,6 @@ function seasonAverageMap(season){
   let result;
   if(!bundle)result={...exact,...totals};
   else{const weeks=meaningfulWeeks(bundle);result=weeks.length?buildPlayerAverages(bundle,weeks.at(-1)):{...exact,...totals}}
-  // Known-data correction: Sleeper's source feed currently overstates Zach Edey's
-  // 2025 league-scored average. Apply the verified regular-season average at the
-  // shared season-map layer so roster values, rankings and championship odds all
-  // use the same corrected figure.
-  if(key==="2025"){
-    const edeyEntry=Object.entries(state.players||{}).find(([,player])=>{
-      const fullName=`${player?.first_name||""} ${player?.last_name||""}`.trim().toLowerCase();
-      return fullName==="zach edey"||String(player?.full_name||"").trim().toLowerCase()==="zach edey";
-    });
-    if(edeyEntry)result[String(edeyEntry[0])]=22.95;
-  }
   state.computedCache.seasonAverages.set(key,result);
   return result;
 }
@@ -1020,30 +1009,64 @@ function statNumber(stats,keys){
   }
   return 0;
 }
+function seasonStatsObject(payload){
+  if(!payload)return null;
+  if(payload.stats&&typeof payload.stats==="object")return payload.stats;
+  if(Array.isArray(payload)){
+    const row=payload.find(x=>x?.stats&&typeof x.stats==="object")||payload[0];
+    return row?.stats||row||null;
+  }
+  return typeof payload==="object"?payload:null;
+}
 function scoreSeasonStats(stats,scoring){
-  let total=0;
+  let total=0,matched=0;
   const aliases={
-    pts:["pts"],reb:["reb"],ast:["ast"],stl:["stl"],blk:["blk"],to:["to"],
+    pts:["pts"],reb:["reb"],ast:["ast"],stl:["stl"],blk:["blk"],to:["to","turnovers"],
     fgm:["fgm"],fga:["fga"],fgmi:["fgmi"],ftm:["ftm"],fta:["fta"],ftmi:["ftmi"],
     tpm:["tpm"],tpa:["tpa"],tpmi:["tpmi"],oreb:["oreb"],dreb:["dreb"],
     pf:["pf"],tf:["tf"],ff:["ff"],dd:["dd"],td:["td"],
-    bonus_double_double:["dd"],bonus_triple_double:["td"],
-    bonus_pt_40p:["bonus_pt_40p"],bonus_pt_50p:["bonus_pt_50p"],
-    bonus_ast_15p:["bonus_ast_15p"],bonus_reb_20p:["bonus_reb_20p"]
+    bonus_double_double:["bonus_double_double","dd"],
+    bonus_triple_double:["bonus_triple_double","td"],
+    bonus_pt_15p:["bonus_pt_15p"],bonus_pt_20p:["bonus_pt_20p"],bonus_pt_25p:["bonus_pt_25p"],
+    bonus_pt_30p:["bonus_pt_30p"],bonus_pt_35p:["bonus_pt_35p"],bonus_pt_40p:["bonus_pt_40p"],
+    bonus_pt_45p:["bonus_pt_45p"],bonus_pt_50p:["bonus_pt_50p"],
+    bonus_ast_10p:["bonus_ast_10p"],bonus_ast_15p:["bonus_ast_15p"],bonus_ast_20p:["bonus_ast_20p"],
+    bonus_reb_10p:["bonus_reb_10p"],bonus_reb_15p:["bonus_reb_15p"],bonus_reb_20p:["bonus_reb_20p"],
+    bonus_stl_5p:["bonus_stl_5p"],bonus_blk_5p:["bonus_blk_5p"],
+    bonus_3pm_5p:["bonus_3pm_5p"],bonus_3pm_10p:["bonus_3pm_10p"],
+    plus_minus:["plus_minus"],pts_reb_ast:["pts_reb_ast"],reb_ast:["reb_ast"],blk_stl:["blk_stl"]
   };
   Object.entries(scoring||{}).forEach(([key,multiplier])=>{
     const mult=Number(multiplier);
     if(!Number.isFinite(mult)||mult===0)return;
-    const value=statNumber(stats,aliases[key]||[key]);
+    const keys=aliases[key]||[key];
+    let found=false,value=0;
+    for(const statKey of keys){
+      const n=Number(stats?.[statKey]);
+      if(Number.isFinite(n)){value=n;found=true;break}
+    }
+    if(!found)return;
     total+=value*mult;
+    matched+=1;
   });
-  return total;
+  return matched?total:null;
 }
 async function loadPlayerSeasonAverage(playerId,season,scoring){
-  // Average Sleeper-provided per-game FPTS values. No local re-scoring is performed
-  // when Sleeper supplies its fantasy-points field.
-  const result=await loadPlayerGameLogAverage(playerId,season,scoring);
-  return result?{average:result.average,totalFantasyPoints:result.points,gamesPlayed:result.games}:null;
+  // Sleeper's player season endpoint provides the exact aggregate box-score and
+  // bonus counters used by its app. Apply the scoring settings from the matching
+  // league season, then divide by Sleeper's own GP value. This reproduces the
+  // league-specific FPTS/game shown in Sleeper and automatically works for future seasons.
+  const url=`${CONFIG.statsApi}/${encodeURIComponent(playerId)}?season_type=regular&season=${encodeURIComponent(season)}`;
+  const payload=await statsJSON(url);
+  const stats=seasonStatsObject(payload);
+  const gamesPlayed=Number(stats?.gp);
+  const totalFantasyPoints=scoreSeasonStats(stats,scoring);
+  if(Number.isFinite(gamesPlayed)&&gamesPlayed>0&&Number.isFinite(totalFantasyPoints)){
+    return {average:totalFantasyPoints/gamesPlayed,totalFantasyPoints,gamesPlayed,source:"league-season-stats"};
+  }
+  // Defensive fallback only when the aggregate endpoint is incomplete.
+  const fallback=await loadPlayerGameLogAverage(playerId,season,scoring);
+  return fallback?{average:fallback.average,totalFantasyPoints:fallback.points,gamesPlayed:fallback.games,source:"game-log-fallback"}:null;
 }
 async function loadSeasonTotalAverages(){
   const playerIds=relevantPlayerIds();
@@ -1062,7 +1085,8 @@ async function loadSeasonTotalAverages(){
       meta[season][row.id]={
         gamesPlayed:row.gamesPlayed,
         totalFantasyPoints:row.totalFantasyPoints,
-        average:row.average
+        average:row.average,
+        source:row.source||"unknown"
       };
     });
   }

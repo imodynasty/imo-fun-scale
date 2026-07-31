@@ -340,3 +340,12 @@ V3.2.0 — Sleeper FPTS source of truth
 - Player season averages now use Sleeper-provided per-game fantasy-points values directly.
 - Local box-score re-scoring is only a defensive fallback when Sleeper omits FPTS.
 - Removed the one-player manual average override so one API source feeds profiles, roster values, rankings, odds and trade calculations.
+
+
+V3.2.1 — Exact league-scored season averages
+- Uses each season's matching Sleeper league scoring_settings.
+- Fetches aggregate regular-season player stats from api.sleeper.com/stats/nba/player/{id}.
+- Calculates league-specific total FPTS from Sleeper aggregate stats and divides by Sleeper GP.
+- Supports the configured 2024, 2025 and current 2026 league IDs automatically.
+- Uses game-log reconstruction only as a fallback when aggregate stats are unavailable.
+- Removed the Zach Edey hard-coded override so Sleeper is the single source of truth.
