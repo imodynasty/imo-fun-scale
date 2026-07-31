@@ -697,3 +697,189 @@ main{margin-top:22px}.metric,.panel{background:linear-gradient(180deg,rgba(17,22
 footer{border-top:1px solid rgba(148,160,181,.14);padding-top:20px}
 @media(max-width:700px){.site-header{height:auto;min-height:70px;padding-top:8px;padding-bottom:8px}.brand-mark{width:38px;height:38px}.brand h1{font-size:15px}.panel{padding:16px}.section-brand img{width:28px;height:28px}.metric strong{font-size:27px}.insider-story{padding:18px 0!important}}
 @media(prefers-reduced-motion:reduce){.refresh-btn,.headlines-btn,.v26-manager-btn{transition:none}}
+
+/* =========================================================
+   V3.1.1 — Minimal CSS polish pass
+   1) Typography contrast
+   2) IMO Insider serif isolation
+   3) Tabular numerals
+   4) Simplified buttons
+   ========================================================= */
+
+/* 1. TYPOGRAPHY CONTRAST
+   Make display titles more dominant while reducing the weight and scale of metadata. */
+:where(.topbar h2,
+       .power-rankings-hero .panel-heading h3,
+       .manager-profile-hero h2,
+       .insider-header h2,
+       .panel-heading > h3,
+       .league-history-heading h2,
+       .trade-week h3){
+  font-weight:950;
+  letter-spacing:-.035em;
+  color:var(--text);
+}
+
+:where(.eyebrow,
+       .section-brand b,
+       .section-brand small,
+       .metric span,
+       .metric small,
+       .panel-heading small,
+       .panel-heading p,
+       .period-pill,
+       .trade-date,
+       .trade-meta,
+       .rank-item .meta,
+       .profile-help,
+       .profile-record-row small,
+       .profile-form-player small,
+       .manager-directory-copy small,
+       .disclaimer,
+       .method-note,
+       .sticky-note p,
+       time,
+       [class*="timestamp"],
+       [class*="meta"],
+       [class*="date"]){
+  color:color-mix(in srgb,var(--muted) 82%,transparent);
+  font-size:.9em;
+  font-weight:500;
+  line-height:1.45;
+}
+
+:where(.eyebrow,
+       .section-brand b,
+       .section-brand small,
+       .metric span,
+       .panel-heading small,
+       .period-pill,
+       th){
+  text-transform:uppercase;
+  letter-spacing:.13em;
+}
+
+:where(body,p,td,.trade-player,.team-name,.profile-partner-row,.eligible-player){
+  font-weight:450;
+}
+
+/* 2. NEWSPAPER FONT ISOLATION
+   Serif is reserved exclusively for IMO Insider editorial headlines, section titles and pull quotes. */
+:root{
+  --font-ui:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --font-editorial:Georgia,"Times New Roman",Times,serif;
+}
+
+body,
+button,
+input,
+select,
+textarea,
+table,
+.metric,
+.panel,
+.card,
+.section,
+.site-header,
+.manager-profile-sheet,
+.manager-directory-sheet,
+.power-rankings-hero,
+.trade-week,
+.league-history-heading{
+  font-family:var(--font-ui)!important;
+}
+
+:where(.insider,.insider-modal,.insider-sheet,[class*="insider"])
+  :where(h1,h2,h3,.article-title,.article-headline,.section-title,blockquote,.pull-quote){
+  font-family:var(--font-editorial)!important;
+}
+
+:where(.insider,.insider-modal,.insider-sheet,[class*="insider"])
+  :where(p,span,small,time,button,.eyebrow,.meta,.article-meta){
+  font-family:var(--font-ui)!important;
+}
+
+/* 3. TABULAR NUMERALS
+   Keep ranks, odds, grades, scores and records aligned as data changes. */
+:where(.rank,
+       .rank-badge,
+       .manager-directory-rank,
+       .movement,
+       .power-score,
+       .odds,
+       .odds-move,
+       .trade-score,
+       .trade-count,
+       .grade,
+       [class*="grade"],
+       [class*="score"],
+       [class*="stat"],
+       [class*="record"],
+       [class*="rank"],
+       [class*="odds"],
+       .metric strong,
+       .leader-row,
+       .odds-row,
+       .power-row,
+       .profile-form-player,
+       .profile-record-row,
+       td,
+       th){
+  font-variant-numeric:tabular-nums lining-nums;
+  font-feature-settings:"tnum" 1,"lnum" 1;
+}
+
+/* 4. BUTTON SIMPLIFICATION
+   Reduce pill styling, glow and padding while preserving each action's colour identity. */
+:where(button,
+       .refresh-btn,
+       .window-btn,
+       .headlines-btn,
+       .v2-manager-btn,
+       .v26-manager-btn,
+       .branded-action,
+       .period-pill,
+       .roster-season-toggle button){
+  border-radius:8px!important;
+  border-width:1px!important;
+  box-shadow:none!important;
+  padding:8px 16px;
+}
+
+:where(.refresh-btn,
+       .window-btn,
+       .headlines-btn,
+       .v2-manager-btn,
+       .v26-manager-btn,
+       .branded-action,
+       .roster-season-toggle button){
+  transition:background-color .14s ease,border-color .14s ease,color .14s ease,transform .14s ease;
+}
+
+:where(.refresh-btn,
+       .window-btn,
+       .headlines-btn,
+       .v2-manager-btn,
+       .v26-manager-btn,
+       .branded-action,
+       .roster-season-toggle button):hover{
+  transform:translateY(-1px);
+  box-shadow:none!important;
+}
+
+:where(.refresh-btn,
+       .window-btn,
+       .headlines-btn,
+       .v2-manager-btn,
+       .v26-manager-btn,
+       .branded-action,
+       .roster-season-toggle button):active{
+  transform:translateY(0);
+}
+
+@media(max-width:600px){
+  :where(.refresh-btn,.headlines-btn,.v2-manager-btn,.v26-manager-btn,.branded-action){
+    padding:7px 10px;
+    border-radius:6px!important;
+  }
+}
