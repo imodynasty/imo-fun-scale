@@ -678,7 +678,7 @@ function latestDraftAverage(playerId){
 }
 function eligibleDraftClassRows(){
   const bySeason={};
-  (state.draftSelections||[]).forEach(p=>{if(p?.playerId&&p?.pickedBy)(bySeason[String(p.season)]??=[]).push(p)});
+  (state.draftSelections||[]).forEach(p=>{const season=String(p?.season||'');if((season==='2025'||season==='2026')&&p?.isRookieDraft===true&&p?.playerId&&p?.pickedBy)(bySeason[season]??=[]).push(p)});
   const rows=[];
   Object.entries(bySeason).forEach(([season,picks])=>{
     // A class remains completely excluded until at least one player from that
@@ -694,9 +694,24 @@ function managerDraftResume(managerId){
   return{managerId:id,picks,count:picks.length,totalScore:picks.reduce((sum,p)=>sum+Number(p.draftScore||0),0),biggestSteal:sortedSteals[0]||null,biggestBust:sortedBusts[0]||null}
 }
 function managerTradingRaw(managerId){
-  const gradeValue={'A+':10,'A':9,'A-':8.5,'B+':8,'B':7,'B-':6.5,'C+':6,'C':5,'C-':4.5,'D+':4,'D':3,'F':1,'FLEECE ALERT 🚨':0};
-  const trades=managerTrades(managerId);if(!trades.length)return 5;
-  return trades.reduce((sum,t)=>sum+(gradeValue[tradeGrade(t,managerId).grade]??5),0)/trades.length
+  const trades=managerTrades(managerId);if(!trades.length)return 0;
+  const metrics=trades.map(t=>tradeSideMetrics(t,managerId));
+  const averageEdge=metrics.reduce((sum,m)=>sum+Math.max(-60,Math.min(60,Number(m.edge)||0)),0)/metrics.length;
+  const averageNet=metrics.reduce((sum,m)=>sum+Math.max(-30,Math.min(30,Number(m.net)||0)),0)/metrics.length;
+  const wins=metrics.filter(m=>Number(m.net)>1).length,losses=metrics.filter(m=>Number(m.net)<-1).length;
+  const resultRate=(wins-losses)/metrics.length;
+  const activityConfidence=Math.min(1,Math.log2(metrics.length+1)/3);
+  // Grade real value captured rather than averaging the already-generous
+  // individual trade badges. This creates meaningful league-wide variance.
+  return (averageEdge*.50+averageNet*1.25+resultRate*24)*(.65+.35*activityConfidence)
+}
+function managerDepthRaw(managerId){
+  const season=String(currentBundle()?.league?.season||'2026'),current=seasonAverageMap(season),fallback=seasonAverageMap('2025');
+  const values=currentRosterIds(managerId).map(pid=>{const avg=Number(current[pid]||fallback[pid]||latestKnownAverage(pid)||0);return playerDynastyValue(pid,avg,Date.now())}).filter(v=>v>0).sort((a,b)=>b-a);
+  if(!values.length)return 0;
+  const top12=values.slice(0,12),bench=top12.slice(4),benchAverage=bench.length?bench.reduce((a,b)=>a+b,0)/bench.length:0;
+  const productive=values.filter(v=>v>=18).length,elite=values.filter(v=>v>=35).length;
+  return benchAverage*1.8+productive*4+Math.min(elite,4)*2
 }
 function managerLetterGrade(rating){
   const n=Number(rating)||0;
@@ -704,26 +719,29 @@ function managerLetterGrade(rating){
 }
 function managerGradesLeague(){
   if(state.computedCache.managerGrades)return state.computedCache.managerGrades;
-  const ids=[...state.managers.keys()],tendency=managerTendencyLeague(),raw={trading:{},drafting:{},development:{},building:{}},draftResumes={};
+  const ids=[...state.managers.keys()],tendency=managerTendencyLeague(),raw={trading:{},drafting:{},development:{},building:{}},draftResumes={},depthRaw={};
   ids.forEach(id=>{
     const r=tendency.ratings,resume=managerDraftResume(id);draftResumes[id]=resume;
     raw.trading[id]=managerTradingRaw(id);
     raw.drafting[id]=resume.totalScore;
     raw.development[id]=(r.youth[id]||25)*.55+(r.waiver[id]||25)*.25+(r.asset[id]||25)*.20;
-    raw.building[id]=(r.asset[id]||25)*.40+(r.star[id]||25)*.25+(r.winNow[id]||25)*.25+(r.draft[id]||25)*.10
+    depthRaw[id]=managerDepthRaw(id);
+    raw.building[id]=(r.asset[id]||25)*.28+(r.star[id]||25)*.18+(r.winNow[id]||25)*.20+(r.draft[id]||25)*.08
   });
-  const ratings={trading:leagueScale(raw.trading),drafting:leagueScale(raw.drafting),development:leagueScale(raw.development),building:leagueScale(raw.building)},grades={};
+  const depthRatings=leagueScale(depthRaw),ratings={trading:leagueScale(raw.trading),drafting:leagueScale(raw.drafting),development:leagueScale(raw.development),building:{}},grades={};
+  ids.forEach(id=>{ratings.building[id]=Math.round((leagueScale(raw.building)[id]||25)*.62+(depthRatings[id]||25)*.38)});
   ids.forEach(id=>grades[id]={trading:managerLetterGrade(ratings.trading[id]),drafting:managerLetterGrade(ratings.drafting[id]),development:managerLetterGrade(ratings.development[id]),building:managerLetterGrade(ratings.building[id])});
   return state.computedCache.managerGrades={raw,ratings,grades,draftResumes}
 }
+function rookiePickLabel(pick){const teams=Math.max(1,Number(pick?.teamCount)||8),overall=Math.max(1,Number(pick?.overallPick)||1),round=Math.floor((overall-1)/teams)+1,slot=((overall-1)%teams)+1;return`${round}.${String(slot).padStart(2,'0')}`}
 function managerGradePlayerHTML(label,pick){
   if(!pick)return`<div class="manager-draft-highlight empty"><span>${esc(label)}</span><small>—</small></div>`;
   const id=String(pick.playerId),name=playerName(id),avatar=`https://sleepercdn.com/content/nba/players/${id}.jpg`;
-  return`<div class="manager-draft-highlight"><span>${esc(label)}</span><div><span class="manager-grade-player-avatar"><img src="${esc(avatar)}" alt="" loading="lazy" onerror="this.style.display='none'"></span>${playerLink(id,name,'manager-grade-player-name')}</div></div>`
+  return`<div class="manager-draft-highlight"><span>${esc(label)}</span><div><span class="manager-grade-player-avatar"><img src="${esc(avatar)}" alt="" loading="lazy" onerror="this.style.display='none'"></span>${playerLink(id,name,'manager-grade-player-name')}<small class="manager-grade-pick-label">${esc(rookiePickLabel(pick))}</small></div></div>`
 }
 function managerGradesHTML(managerId){
   const league=managerGradesLeague(),id=String(managerId),grades=league.grades[id]||{},resume=league.draftResumes[id]||managerDraftResume(id),items=[['Trading',grades.trading],['Drafting',grades.drafting],['Player Development',grades.development],['Team Building',grades.building]];
-  return`<section class="manager-grades-row" aria-label="Manager grades"><div class="manager-grades-title"><span class="eyebrow">MANAGER GRADES</span></div><div class="manager-grade-items">${items.map(([label,grade])=>`<div class="manager-grade-item"><span>${esc(label)}</span><strong class="manager-grade-badge ${gradeClass(grade||'F')}">${esc(grade||'—')}</strong></div>`).join('')}</div><div class="manager-draft-highlights">${managerGradePlayerHTML('Biggest Steal',resume.biggestSteal)}${managerGradePlayerHTML('Biggest Bust',resume.biggestBust)}</div></section>`
+  return`<section class="manager-grades-row" aria-label="Manager grades"><div class="manager-grades-title"><span class="eyebrow">MANAGER GRADES</span></div><div class="manager-grade-items">${items.map(([label,grade])=>`<div class="manager-grade-item"><span>${esc(label)}</span><strong class="manager-grade-badge ${gradeClass(grade||'F')}">${esc(grade||'—')}</strong></div>`).join('')}</div><div class="manager-draft-highlights">${managerGradePlayerHTML('Draft Steal',resume.biggestSteal)}${managerGradePlayerHTML('Draft Bust',resume.biggestBust)}</div></section>`
 }
 function ensureManagerGradeStyles(){
   if(document.getElementById('managerGradeStyles'))return;
@@ -732,7 +750,7 @@ function ensureManagerGradeStyles(){
   .manager-grades-title{white-space:nowrap}.manager-grade-items{display:grid;grid-template-columns:repeat(4,minmax(86px,1fr));gap:8px}.manager-grade-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;border-radius:10px;background:rgba(255,255,255,.035)}
   .manager-grade-item>span{font-size:11px;line-height:1.2;color:var(--muted,#94a3b8)}.manager-grade-badge{display:grid;place-items:center;min-width:34px;height:28px;padding:0 7px;border-radius:8px;font-size:14px;line-height:1;font-weight:900}
   .manager-grade-badge.grade-a{color:#052e16;background:#4ade80}.manager-grade-badge.grade-b{color:#172554;background:#60a5fa}.manager-grade-badge.grade-c{color:#422006;background:#facc15}.manager-grade-badge.grade-d{color:#431407;background:#fb923c}.manager-grade-badge.grade-f{color:#450a0a;background:#f87171}
-  .manager-draft-highlights{display:flex;gap:8px}.manager-draft-highlight{min-width:142px;padding:6px 9px;border-left:1px solid rgba(148,163,184,.18)}.manager-draft-highlight>span{display:block;margin-bottom:4px;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#94a3b8)}.manager-draft-highlight>div{display:flex;align-items:center;gap:7px}.manager-grade-player-avatar{width:26px;height:26px;border-radius:50%;overflow:hidden;background:rgba(148,163,184,.15);flex:0 0 auto}.manager-grade-player-avatar img{width:100%;height:100%;object-fit:cover}.manager-grade-player-name{padding:0;border:0;background:none;color:inherit;font:inherit;font-size:11px;font-weight:800;text-align:left}.manager-draft-highlight.empty small{font-size:16px}
+  .manager-draft-highlights{display:flex;gap:8px}.manager-draft-highlight{min-width:142px;padding:6px 9px;border-left:1px solid rgba(148,163,184,.18)}.manager-draft-highlight>span{display:block;margin-bottom:4px;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#94a3b8)}.manager-draft-highlight>div{display:flex;align-items:center;gap:7px}.manager-grade-player-avatar{width:26px;height:26px;border-radius:50%;overflow:hidden;background:rgba(148,163,184,.15);flex:0 0 auto}.manager-grade-player-avatar img{width:100%;height:100%;object-fit:cover}.manager-grade-player-name{padding:0;border:0;background:none;color:inherit;font:inherit;font-size:11px;font-weight:800;text-align:left}.manager-grade-pick-label{margin-left:auto;padding:3px 5px;border:1px solid rgba(148,163,184,.18);border-radius:6px;color:var(--muted,#94a3b8);font-size:9px;font-weight:900;letter-spacing:.04em;white-space:nowrap}.manager-draft-highlight.empty small{font-size:16px}
   @media(max-width:900px){.manager-grades-row{grid-template-columns:1fr}.manager-grades-title{display:none}.manager-draft-highlights{justify-content:space-between}.manager-draft-highlight{flex:1;border-left:0;border-top:1px solid rgba(148,163,184,.18);padding-top:9px}}
   @media(max-width:620px){.manager-grades-row{padding:10px;gap:10px}.manager-grade-items{grid-template-columns:repeat(2,1fr)}.manager-grade-item{padding:8px}.manager-draft-highlights{display:grid;grid-template-columns:1fr 1fr}.manager-draft-highlight{min-width:0}.manager-grade-player-name{font-size:10px}}
   `;document.head.appendChild(style)
@@ -767,12 +785,12 @@ const ARCHETYPE_GUIDE=[
   {icon:'🌱',name:'Prospect Hunter',description:'Committed to a youth-led build. Consistently targets young players and emerging prospects whose best fantasy years are still ahead of them.'},
   {icon:'🎲',name:'The Gambler',description:'Embraces volatility and variance. Comfortable taking on high-risk, high-reward moves and blockbuster trades in pursuit of a massive payoff.'}
 ];
-function openArchetypeGuide(currentArchetype=''){
+function openArchetypeGuide(currentArchetype='',secondaryArchetype=''){
   const modal=$("archetypeGuideModal");if(!modal)return;
   const list=$("archetypeGuideList");
-  const current=String(currentArchetype||'').trim().toLowerCase();
+  const current=String(currentArchetype||'').trim().toLowerCase(),secondary=String(secondaryArchetype||'').trim().toLowerCase();
   if(list){
-    list.innerHTML=ARCHETYPE_GUIDE.map(x=>{const active=current&&x.name.toLowerCase()===current;return `<article class="archetype-guide-item${active?' current':''}"${active?' aria-current="true"':''}><span>${x.icon}</span><div><h3>${esc(x.name)}${active?'<small>Current profile</small>':''}</h3><p>${esc(x.description)}</p></div></article>`}).join('');
+    list.innerHTML=ARCHETYPE_GUIDE.map(x=>{const key=x.name.toLowerCase(),active=current&&key===current,isSecondary=!active&&secondary&&key===secondary,label=active?'<small>Current profile</small>':isSecondary?'<small class="secondary-label">Secondary profile</small>':'';return `<article class="archetype-guide-item${active?' current':isSecondary?' secondary':''}"${active?' aria-current="true"':''}><span>${x.icon}</span><div><h3>${esc(x.name)}${label}</h3><p>${esc(x.description)}</p></div></article>`}).join('');
   }
   modal.classList.add('open');modal.setAttribute('aria-hidden','false');document.body.classList.add('modal-open');
   requestAnimationFrame(()=>$("archetypeGuideClose")?.focus({preventScroll:true}));
@@ -790,7 +808,7 @@ function managerProfileHTML(managerId){
   const partnerRows=partners.map((p,i)=>`<div class="profile-partner-row"><b>${i+1}</b><button class="manager-profile-link" type="button" data-manager-id="${esc(p.partner)}">${esc(managerName(p.partner))}</button><span>${p.count} trades · ${p.percent.toFixed(0)}%</span></div>`).join("")||'<div class="profile-empty">No trade partners yet.</div>';
   const h2hRows=headToHead.map(r=>{const recordClass=r.wins>r.losses?"winning":r.wins<r.losses?"losing":"even",drawText=r.draws?` <span>(${r.draws} ${r.draws===1?"draw":"draws"})</span>`:"";return `<div class="profile-h2h-row ${recordClass}"><button class="manager-profile-link" type="button" data-manager-id="${esc(r.oppId)}">vs ${esc(managerName(r.oppId))}</button><strong>${r.wins}-${r.losses}${drawText}</strong><small>${r.games} games · includes finals</small></div>`}).join("")||'<div class="profile-empty">No completed head-to-head matchups.</div>';
   const eligibleRows=eligible.map(p=>`<div class="eligible-player">${playerLink(p.id,p.name)}<span>${p.avg.toFixed(2)}</span></div>`).join("")||'<div class="profile-empty">No current top-50 players.</div>';
-  return `<header class="manager-profile-hero"><div class="manager-profile-avatar">${managerAvatar}</div><div class="manager-profile-hero-copy"><div class="manager-profile-kicker"><span class="eyebrow">TEAM PROFILE</span><button type="button" class="archetype-guide-btn archetype-guide-btn-desktop" data-open-archetype-guide data-current-archetype="${esc(gm.primary.name)}"><span aria-hidden="true">📖</span> Archetype Guide</button></div><div class="profile-name-line">${managerSwitcherHTML(id)}<div class="profile-badge-icons">${badgeIconsHTML(badges)}</div></div><p>Current franchise overview and league history</p><button type="button" class="archetype-guide-btn archetype-guide-btn-mobile" data-open-archetype-guide data-current-archetype="${esc(gm.primary.name)}"><span aria-hidden="true">📖</span> Archetype Guide</button></div></header>
+  return `<header class="manager-profile-hero"><div class="manager-profile-avatar">${managerAvatar}</div><div class="manager-profile-hero-copy"><div class="manager-profile-kicker"><span class="eyebrow">TEAM PROFILE</span><button type="button" class="archetype-guide-btn archetype-guide-btn-desktop" data-open-archetype-guide data-current-archetype="${esc(gm.primary.name)}" data-secondary-archetype="${esc(gm.secondary.name)}"><span aria-hidden="true">📖</span> Archetype Guide</button></div><div class="profile-name-line">${managerSwitcherHTML(id)}<div class="profile-badge-icons">${badgeIconsHTML(badges)}</div></div><p>Current franchise overview and league history</p><button type="button" class="archetype-guide-btn archetype-guide-btn-mobile" data-open-archetype-guide data-current-archetype="${esc(gm.primary.name)}" data-secondary-archetype="${esc(gm.secondary.name)}"><span aria-hidden="true">📖</span> Archetype Guide</button></div></header>
   <div class="manager-profile-stat-grid"><div><span>Power rank</span><strong class="power-rank-with-move">${power?`#${power.rank}`:"—"}${power&&powerMovement.move?` <em class="rank-move ${powerMovement.move>0?'up':'down'}">${powerMovement.move>0?'↑':'↓'}${Math.abs(powerMovement.move)}</em>`:""}</strong></div><div><span>Ladder</span><strong>${power?`#${power.standingRank}`:"—"}</strong></div><div><span>Record</span><strong>${form.games?`${form.wins}-${form.games-form.wins}`:"—"}</strong></div><div><span>Championship odds</span><strong>${odds?championshipOddsLabel(odds):"—"}</strong></div><div><span>Team average age</span><strong>${avgAge?avgAge.toFixed(1):"—"}</strong></div><div><span>Career trades</span><strong>${trades.length}</strong></div></div>
   ${managerGrades}
   <div class="manager-profile-grid">
@@ -1256,6 +1274,10 @@ async function loadSeason(id){
   const relevantDrafts=rookieDrafts.length?rookieDrafts:draftResults;
   const draftPickMap={},draftSelections=[];
   relevantDrafts.forEach(({draft,picks})=>{
+    const draftName=String(draft?.metadata?.name||draft?.name||'').toLowerCase();
+    const configuredRounds=Number(draft?.settings?.rounds)||0;
+    const observedRounds=Math.max(0,...picks.map(p=>Number(p.round)||0));
+    const isRookieDraft=draftName.includes('rookie')||((configuredRounds||observedRounds)>0&&(configuredRounds||observedRounds)<=5);
     const season=String(draft?.season||league.season);
     const teamCount=Number(draft?.settings?.teams)||Number(league?.total_rosters)||rosters.length||8;
     const draftType=String(draft?.type||draft?.settings?.type||'linear').toLowerCase();
@@ -1278,7 +1300,8 @@ async function loadSeason(id){
           pickNo:Number.isFinite(pickNo)&&pickNo>0?pickNo:overallPick,
           round,
           draftSlot:Number(p.draft_slot)||null,
-          teamCount
+          teamCount,
+          isRookieDraft
         });
       }
       let originalSlot=null;
@@ -1429,7 +1452,7 @@ let lastArchetypePointerAction=0;
 document.addEventListener("pointerup",e=>{
   if(e.pointerType==='mouse'&&e.button!==0)return;
   const archetypeButton=e.target.closest?.('[data-open-archetype-guide]');
-  if(archetypeButton){e.preventDefault();e.stopPropagation();lastArchetypePointerAction=Date.now();openArchetypeGuide(archetypeButton.dataset.currentArchetype||'');return}
+  if(archetypeButton){e.preventDefault();e.stopPropagation();lastArchetypePointerAction=Date.now();openArchetypeGuide(archetypeButton.dataset.currentArchetype||'',archetypeButton.dataset.secondaryArchetype||'');return}
   const switchTrigger=e.target.closest?.('[data-manager-switcher-trigger]');
   if(switchTrigger){e.preventDefault();e.stopPropagation();lastManagerPointerAction=Date.now();toggleManagerSwitcher(switchTrigger);return}
   const switchOption=e.target.closest?.('[data-switch-manager]');
@@ -1446,7 +1469,7 @@ document.addEventListener("click",e=>{
   const switchTrigger=e.target.closest('[data-manager-switcher-trigger]');if(switchTrigger){if(Date.now()-lastManagerPointerAction<700)return;toggleManagerSwitcher(switchTrigger);return}
   const switchOption=e.target.closest('[data-switch-manager]');if(switchOption){if(Date.now()-lastManagerPointerAction<700)return;closeManagerSwitchers();openManagerProfile(switchOption.dataset.switchManager);return}
   if(window.matchMedia('(max-width: 620px)').matches){const badgeSummary=e.target.closest('.profile-badge-pop > summary');if(badgeSummary){e.preventDefault();const details=badgeSummary.parentElement,body=details?.querySelector(':scope > div');openMobileProfileInfo(body?.querySelector('strong')?.textContent||'Badge',body?.innerHTML||'');details.open=false;return}const formSummary=e.target.closest('.profile-form-result > summary');if(formSummary){e.preventDefault();const details=formSummary.parentElement,body=details?.querySelector(':scope > div');openMobileProfileInfo('Match result',body?.innerHTML||'');details.open=false;return}}
-  const archetypeButton=e.target.closest('[data-open-archetype-guide]');if(archetypeButton){e.preventDefault();if(Date.now()-lastArchetypePointerAction<700)return;openArchetypeGuide(archetypeButton.dataset.currentArchetype||'');return}
+  const archetypeButton=e.target.closest('[data-open-archetype-guide]');if(archetypeButton){e.preventDefault();if(Date.now()-lastArchetypePointerAction<700)return;openArchetypeGuide(archetypeButton.dataset.currentArchetype||'',archetypeButton.dataset.secondaryArchetype||'');return}
   if(e.target.closest('[data-close-archetype-guide]')||e.target.closest('#archetypeGuideClose')){closeArchetypeGuide();return}
   if(e.target.closest("#headlinesBtn")){openHeadlines();return}
   if(e.target.closest("[data-close-headlines]")||e.target.closest("#headlinesClose")){closeHeadlines();return}
