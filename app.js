@@ -1074,27 +1074,41 @@ async function loadSeason(id){
     const season=String(draft?.season||league.season);
     const teamCount=Number(draft?.settings?.teams)||Number(league?.total_rosters)||rosters.length||8;
     const draftType=String(draft?.type||draft?.settings?.type||'linear').toLowerCase();
+    const slotToRoster=draft?.slot_to_roster_id||draft?.metadata?.slot_to_roster_id||{};
     picks.forEach(p=>{
       if(p.player_id==null||p.round==null)return;
       const round=Number(p.round);
       const pickNo=Number(p.pick_no);
       let originalSlot=null;
 
-      // Sleeper's draft_slot can reflect the manager who made a traded pick,
-      // not the franchise whose pick asset it originally was. Reconstruct the
-      // true slot from the overall pick number instead.
+      // Work out the slot at which the selection was made. The pick payload's
+      // draft_slot can describe the drafter after trades, so pick_no is the
+      // safest source for the actual position in the round.
       if(Number.isFinite(pickNo)&&pickNo>0&&teamCount>0){
         const positionInRound=((pickNo-1)%teamCount)+1;
         originalSlot=(draftType==='snake'&&round%2===0)
           ? teamCount-positionInRound+1
           : positionInRound;
       }else if(p.draft_slot!=null){
-        // Fallback only for older/incomplete draft payloads without pick_no.
         originalSlot=Number(p.draft_slot);
       }
 
       if(!Number.isFinite(originalSlot)||originalSlot<1)return;
-      draftPickMap[`${season}|${String(originalSlot)}|${String(round)}`]=String(p.player_id);
+
+      // Historical trade assets identify a pick by its ORIGINAL roster_id,
+      // not by the numerical draft slot. Convert the final slot back to the
+      // franchise whose pick created that slot before storing the player.
+      // This keeps traded selections correct everywhere the shared trade
+      // formatter is used (Trade Centre, manager Recent Trades and Biggest
+      // Ever Trades).
+      const originalRosterId=slotToRoster[String(originalSlot)]??slotToRoster[originalSlot]??null;
+      if(originalRosterId!=null){
+        draftPickMap[`${season}|${String(originalRosterId)}|${String(round)}`]=String(p.player_id);
+      }else{
+        // Older draft payload fallback: retain a slot key only when Sleeper
+        // does not expose slot_to_roster_id.
+        draftPickMap[`${season}|${String(originalSlot)}|${String(round)}`]=String(p.player_id);
+      }
     });
   });
 

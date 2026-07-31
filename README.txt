@@ -322,3 +322,9 @@ V3.1.13
 - Corrected drafted-player attribution for traded rookie picks.
 - Rookie selections are now mapped from overall pick_no to the original franchise slot, rather than Sleeper draft_slot (which may identify the manager who made a traded selection).
 - Example: original 1.08 maps to the player taken eighth, while original 1.05 maps to the player taken fifth, regardless of which manager submitted the pick.
+
+
+V3.1.14
+- Corrected historical rookie-pick attribution by mapping each final rookie draft slot back to the original roster_id via Sleeper slot_to_roster_id.
+- Applies through the shared trade formatter used by manager Recent Trades, Biggest Ever Trades and trade details.
+- Trade grading and valuation logic unchanged.
