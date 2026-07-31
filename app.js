@@ -19,9 +19,9 @@ const CANONICAL_DRAFT_COLUMNS={
 function normaliseTeamKey(name){return String(name||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
 function canonicalDraftSlot(season,teamName){return CANONICAL_DRAFT_COLUMNS[String(season)]?.[normaliseTeamKey(teamName)]??null}
 
-const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null}};
+const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,draftSelections:[],oddsMovement:null,computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null,managerGrades:null}};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
-function resetComputedCaches(){state.computedCache.seasonAverages.clear();state.computedCache.managerTrades.clear();state.computedCache.tradeSide.clear();state.computedCache.completedMatchups.clear();state.computedCache.tendencyLeague=null;state.profileHTMLCache.clear()}
+function resetComputedCaches(){state.computedCache.seasonAverages.clear();state.computedCache.managerTrades.clear();state.computedCache.tradeSide.clear();state.computedCache.completedMatchups.clear();state.computedCache.tendencyLeague=null;state.computedCache.managerGrades=null;state.profileHTMLCache.clear()}
 async function getJSON(url,optional=false){try{const r=await fetch(url);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){if(optional)return null;throw e}}
 async function statsJSON(url){if(state.statsRequestCache.has(url))return state.statsRequestCache.get(url);const request=getJSON(url,true).finally(()=>{});state.statsRequestCache.set(url,request);return request}
 async function limitedMap(items,limit,fn){const out=new Array(items.length);let n=0;async function run(){while(n<items.length){const i=n++;try{out[i]=await fn(items[i])}catch{out[i]=null}}}await Promise.all(Array.from({length:limit},run));return out}
@@ -289,13 +289,32 @@ function championshipOddsLabel(row){return row?.eliminated?'0%':row?.odds!=null?
 function managerPowerTrend(managerId){const bundle=activeTrendBundle(),weeks=meaningfulWeeks(bundle),outcomes=outcomesForBundle(bundle);return weeks.map(week=>{const row=modelRows(bundle,week,"power").find(x=>String(x.id)===String(managerId)),odds=priceRowsForBundle(bundle,week).find(x=>String(x.id)===String(managerId)),games=(outcomes[String(managerId)]||[]).filter(g=>g.week<=week),weekGame=games.find(g=>g.week===week),wins=games.reduce((sum,g)=>sum+g.result,0);return row?{week,rank:row.rank,odds:odds?.odds??null,oddsLabel:odds?championshipOddsLabel(odds):'Unavailable',wins,games:games.length,score:weekGame?.points??null,season:String(bundle.league?.season||'')}:null}).filter(Boolean)}
 function powerTrendHTML(managerId){const rows=managerPowerTrend(managerId);if(!rows.length)return '<div class="profile-empty">Power-ranking history will appear once the season begins.</div>';const width=760,height=210,padX=42,padY=24,maxRank=Math.max(state.managers.size,...rows.map(x=>x.rank)),x=i=>rows.length===1?width/2:padX+i*(width-padX*2)/(rows.length-1),y=rank=>padY+(rank-1)*(height-padY*2)/Math.max(1,maxRank-1),points=rows.map((r,i)=>`${x(i).toFixed(1)},${y(r.rank).toFixed(1)}`).join(' '),dots=rows.map((r,i)=>`<circle class="spark-point" tabindex="0" cx="${x(i)}" cy="${y(r.rank)}" r="6" data-week="${r.week}" data-rank="${r.rank}" data-record="${r.wins}-${r.games-r.wins}" data-score="${r.score==null?'Unavailable':Number(r.score).toFixed(1)}" data-odds="${r.oddsLabel||'Unavailable'}"></circle>`).join(''),labels=rows.map((r,i)=>`<text x="${x(i)}" y="${height-5}" text-anchor="middle">W${r.week}</text>`).join(''),last=rows.at(-1),currentBundle=state.bundles.find(b=>String(b.league?.league_id)===CONFIG.currentLeagueId),isCurrent=currentBundle&&String(currentBundle.league?.season)===last.season&&meaningfulWeeks(currentBundle).length>0,endLabel=isCurrent?'Current':'Finished',movement=rows[0].rank-last.rank;return `<div class="profile-sparkline-wrap" data-season="${esc(last.season)}"><div class="sparkline-season-label">${esc(last.season)} POWER RANKING JOURNEY</div><div class="sparkline-chart"><svg class="profile-sparkline" viewBox="0 0 ${width} ${height}" role="img" aria-label="Week-on-week power ranking"><line x1="${padX}" y1="${padY}" x2="${padX}" y2="${height-padY}"/><line x1="${padX}" y1="${height-padY}" x2="${width-padX}" y2="${height-padY}"/><text x="8" y="${padY+5}">#1</text><text x="8" y="${height-padY+5}">#${maxRank}</text><polyline points="${points}"/>${dots}${labels}</svg><div class="sparkline-tooltip" aria-hidden="true"></div></div><div class="profile-sparkline-summary"><span>Started: #${rows[0].rank}</span><strong>${movement>0?'▲ '+movement:movement<0?'▼ '+Math.abs(movement):'—'} </strong><span>${endLabel}: #${last.rank}</span></div></div>`}
 function bindSparklineTooltips(root=document){root.querySelectorAll('.sparkline-chart').forEach(chart=>{const tip=chart.querySelector('.sparkline-tooltip');chart.querySelectorAll('.spark-point').forEach(point=>{const show=()=>{tip.innerHTML=`<strong>Week ${esc(point.dataset.week)}</strong><span>Power Rank <b>#${esc(point.dataset.rank)}</b></span><span>Record <b>${esc(point.dataset.record)}</b></span><span>Weekly Score <b>${esc(point.dataset.score)}</b></span><span>Championship Odds <b>${esc(point.dataset.odds)}</b></span>`;const svg=chart.querySelector('svg'),box=svg.getBoundingClientRect(),cx=Number(point.getAttribute('cx'))/760*box.width,cy=Number(point.getAttribute('cy'))/210*box.height;tip.style.left=`${Math.max(8,Math.min(box.width-170,cx-75))}px`;tip.style.top=`${Math.max(8,cy-128)}px`;tip.classList.add('show');tip.setAttribute('aria-hidden','false')},hide=()=>{tip.classList.remove('show');tip.setAttribute('aria-hidden','true')};point.addEventListener('mouseenter',show);point.addEventListener('focus',show);point.addEventListener('mouseleave',hide);point.addEventListener('blur',hide);point.addEventListener('click',e=>{e.stopPropagation();show()})});chart.addEventListener('click',e=>{if(!e.target.classList.contains('spark-point'))tip.classList.remove('show')})})}
-function renderPower(){const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,prior=weeks.length>1?weeks.at(-2):through,p=modelRows(state.modelBundle,through,"power"),priced=priceRows(through),oddsById=Object.fromEntries(priced.map(x=>[String(x.id),x])),oldOdds=Object.fromEntries(priceRows(prior).map(x=>[String(x.id),x])),n=Math.max(p.length-1,1),favouriteId=String([...priced].filter(x=>!x.eliminated).sort((a,b)=>a.odds-b.odds)[0]?.id||""),bottomFour=p.slice(-4),smokeyId=String([...bottomFour].sort((a,b)=>recentThreePointAverage(b.id,state.modelBundle,through)-recentThreePointAverage(a.id,state.modelBundle,through))[0]?.id||"");$("powerRankings").classList.remove("loading");$("powerRankings").innerHTML=p.map((x,i)=>{const oldRank=state.previousPowerRanks[x.id]??x.rank,diff=oldRank-x.rank,arrow=diff>0?`<span class="movement up">▲ ${diff}</span>`:diff<0?`<span class="movement down">▼ ${Math.abs(diff)}</span>`:`<span class="movement flat">—</span>`,hue=140-(140*i/n),m=state.managers.get(String(x.id)),avatar=m?.avatar?`<img src="${esc(m.avatar)}" alt="" loading="lazy">`:`<span>${esc(m?.initials||x.name.slice(0,2).toUpperCase())}</span>`,o=oddsById[String(x.id)]||x,prev=oldOdds[String(x.id)]?.odds??o.odds,delta=o.odds-prev,oddsClass=delta<0?'up':delta>0?'down':'flat',moveText=prev===o.odds?'No price movement':`$${prev.toFixed(2)} → $${o.odds.toFixed(2)}`,ladderMove=(oldOdds[String(x.id)]?.standingRank||o.standingRank)-o.standingRank,ladderText=ladderMove>0?`Moved up to ${ordinal(o.standingRank)} on ladder`:ladderMove<0?`Dropped to ${ordinal(o.standingRank)} on ladder`:`Currently ${ordinal(o.standingRank)} on ladder`,streak=o.streak>=1?`Won last ${o.streak}`:`Form: ${Math.round(o.form*5)} wins from last 5`,temperature=Number(o.avg5||0)<220?'❄️':'🔥',luck=managerLuckRating(x.id,state.modelBundle,through),luckText=`${luck>=0?'+':''}${luck.toFixed(1)} wins vs expected`,tag=String(x.id)===favouriteId?'<span class="market-tag favourite-tag">Favourite</span>':String(x.id)===smokeyId?'<span class="market-tag smokey-tag">Smokey</span>':'';return `<details class="power-odds-row ${x.rank===1?'featured-number-one':''}" style="--rank-colour:hsl(${hue} 85% 52%)"><summary><b class="power-rank-number">${x.rank}</b><span class="power-avatar">${avatar}</span><span class="power-copy"><button class="power-name manager-profile-link" type="button" data-manager-id="${esc(x.id)}">${esc(x.name)}</button><small>View manager profile</small></span><span class="power-market-stack"><span class="power-odds-price">${championshipOddsLabel(o)}</span>${tag}</span>${arrow}<span class="power-chevron">⌄</span></summary><div class="power-detail"><div>${o.streak>=3?'🔥':o.streak?'✅':'⚪'} ${streak}</div><div>${temperature} Averaging ${Number(o.avg5||0).toFixed(1)} over last five games</div><div>${ladderMove<0?'⬇':'⬆'} ${ladderText}</div><div class="odds-move ${oddsClass}">${moveText}</div><div class="luck-rating ${luck>0.5?'lucky':luck<-0.5?'unlucky':'neutral'}">🍀 Luck rating: ${luckText}</div></div></details>`}).join("")}
+function latestCurrentLeagueTrade(){return state.trades.find(t=>String(t.league_id)===String(CONFIG.currentLeagueId))||state.trades[0]||null}
+function oddsSnapshotRows(){const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity;return priceRows(through)}
+function readStoredJSON(key){try{return JSON.parse(localStorage.getItem(key)||"null")}catch{return null}}
+function prepareOddsMovement(){
+  const rows=oddsSnapshotRows(),latest=latestCurrentLeagueTrade(),tradeId=String(latest?.transaction_id||latest?.created||"none"),currentOdds=Object.fromEntries(rows.map(x=>[String(x.id),Number(x.odds)]));
+  const existing=readStoredJSON("imoOddsMovementV2"),dedicated=readStoredJSON("imoOddsSnapshotV2"),market=readStoredJSON("imoMarketSnapshotV1"),previous=dedicated||market;
+  let movement=existing?.tradeId===tradeId?existing:null;
+  if(!movement&&previous&&String(previous.latestTradeId||"none")!==tradeId){
+    const changes={};
+    Object.entries(currentOdds).forEach(([id,newOdds])=>{const raw=previous.odds?.[id],oldOdds=Number(raw&&typeof raw==="object"?raw.odds:raw);if(Number.isFinite(oldOdds)&&Number.isFinite(newOdds)&&Math.abs(newOdds-oldOdds)>=.001)changes[id]={oldOdds,newOdds}});
+    movement={tradeId,tradeCreated:Number(latest?.created||Date.now()),changes};
+    try{localStorage.setItem("imoOddsMovementV2",JSON.stringify(movement))}catch(_){ }
+  }else if(movement){
+    Object.entries(currentOdds).forEach(([id,newOdds])=>{if(movement.changes?.[id])movement.changes[id].newOdds=newOdds});
+    try{localStorage.setItem("imoOddsMovementV2",JSON.stringify(movement))}catch(_){ }
+  }
+  state.oddsMovement=movement;
+  try{localStorage.setItem("imoOddsSnapshotV2",JSON.stringify({savedAt:Date.now(),latestTradeId:tradeId,odds:currentOdds}))}catch(_){ }
+}
+function renderPower(){const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,prior=weeks.length>1?weeks.at(-2):through,p=modelRows(state.modelBundle,through,"power"),priced=priceRows(through),oddsById=Object.fromEntries(priced.map(x=>[String(x.id),x])),oldOdds=Object.fromEntries(priceRows(prior).map(x=>[String(x.id),x])),n=Math.max(p.length-1,1),favouriteId=String([...priced].filter(x=>!x.eliminated).sort((a,b)=>a.odds-b.odds)[0]?.id||""),bottomFour=p.slice(-4),smokeyId=String([...bottomFour].sort((a,b)=>recentThreePointAverage(b.id,state.modelBundle,through)-recentThreePointAverage(a.id,state.modelBundle,through))[0]?.id||"");$("powerRankings").classList.remove("loading");$("powerRankings").innerHTML=p.map((x,i)=>{const oldRank=state.previousPowerRanks[x.id]??x.rank,diff=oldRank-x.rank,arrow=diff>0?`<span class="movement up">▲ ${diff}</span>`:diff<0?`<span class="movement down">▼ ${Math.abs(diff)}</span>`:`<span class="movement flat">—</span>`,hue=140-(140*i/n),m=state.managers.get(String(x.id)),avatar=m?.avatar?`<img src="${esc(m.avatar)}" alt="" loading="lazy">`:`<span>${esc(m?.initials||x.name.slice(0,2).toUpperCase())}</span>`,o=oddsById[String(x.id)]||x,tradeMove=state.oddsMovement?.changes?.[String(x.id)],prev=Number.isFinite(Number(tradeMove?.oldOdds))?Number(tradeMove.oldOdds):(oldOdds[String(x.id)]?.odds??o.odds),current=Number.isFinite(Number(tradeMove?.newOdds))?Number(tradeMove.newOdds):Number(o.odds),delta=current-prev,oddsClass=delta<0?'up':delta>0?'down':'flat',moveText=Math.abs(delta)<.001?'No price movement':`$${prev.toFixed(2)} → $${current.toFixed(2)}`,ladderMove=(oldOdds[String(x.id)]?.standingRank||o.standingRank)-o.standingRank,ladderText=ladderMove>0?`Moved up to ${ordinal(o.standingRank)} on ladder`:ladderMove<0?`Dropped to ${ordinal(o.standingRank)} on ladder`:`Currently ${ordinal(o.standingRank)} on ladder`,streak=o.streak>=1?`Won last ${o.streak}`:`Form: ${Math.round(o.form*5)} wins from last 5`,temperature=Number(o.avg5||0)<220?'❄️':'🔥',luck=managerLuckRating(x.id,state.modelBundle,through),luckText=`${luck>=0?'+':''}${luck.toFixed(1)} wins vs expected`,tag=String(x.id)===favouriteId?'<span class="market-tag favourite-tag">Favourite</span>':String(x.id)===smokeyId?'<span class="market-tag smokey-tag">Smokey</span>':'';return `<details class="power-odds-row ${x.rank===1?'featured-number-one':''}" style="--rank-colour:hsl(${hue} 85% 52%)"><summary><b class="power-rank-number">${x.rank}</b><span class="power-avatar">${avatar}</span><span class="power-copy"><button class="power-name manager-profile-link" type="button" data-manager-id="${esc(x.id)}">${esc(x.name)}</button><small>View manager profile</small></span><span class="power-market-stack"><span class="power-odds-price">${championshipOddsLabel(o)}</span>${tag}</span>${arrow}<span class="power-chevron">⌄</span></summary><div class="power-detail"><div>${o.streak>=3?'🔥':o.streak?'✅':'⚪'} ${streak}</div><div>${temperature} Averaging ${Number(o.avg5||0).toFixed(1)} over last five games</div><div>${ladderMove<0?'⬇':'⬆'} ${ladderText}</div><div class="odds-move ${oddsClass}">${moveText}</div><div class="luck-rating ${luck>0.5?'lucky':luck<-0.5?'unlucky':'neutral'}">🍀 Luck rating: ${luckText}</div></div></details>`}).join("")}
 function roundFive(x){return Math.round(x*20)/20}
 function priceRows(through){const current=state.bundles.find(b=>String(b.league?.league_id)===CONFIG.currentLeagueId);return priceRowsForBundle(current||state.modelBundle,through)}
 function renderOdds(){}
 function ordinal(n){const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0])}
 function renderTradeWeek(){
-  const recent=state.trades.filter(t=>t.created>=Date.now()-7*864e5),pool=recent.length?recent:state.trades.slice(0,25),t=[...pool].sort((a,b)=>tradeValue(b)-tradeValue(a))[0];
+  const currentLeagueTrades=state.trades.filter(t=>String(t.league_id)===String(CONFIG.currentLeagueId)),t=currentLeagueTrades.find(t=>tradeValue(t)>=25)||state.trades.find(t=>tradeValue(t)>=25)||null;
   const target=$("tradeOfWeek");if(!target)return;
   if(!t){target.innerHTML="No trade available";return}
   const featuredGrades=Object.fromEntries(tradeGrades(t).map(g=>[String(g.id),g])),sides=Object.entries(tradeAssets(t)).slice(0,3),html=sides.map(([mid,assets])=>{const g=featuredGrades[String(mid)];return `<div class="trade-side-v2">${g?`<span class="featured-trade-grade ${gradeClass(g.grade)}">${esc(g.grade)}</span>`:''}<strong>${esc(managerName(mid,t))} receives</strong>${assets.length?assets.map(a=>`<div class="asset-row"><span>${a.type==='player'&&a.id?playerLink(a.id,a.name):esc(a.name)}${a.owner?`<small class="asset-owner">Originally ${esc(a.owner)}'s pick</small>`:''}</span></div>`).join(""):'<div class="asset-row"><span>No listed assets</span></div>'}</div>`}).join('<div class="trade-mid">⇄</div>');
@@ -645,6 +664,80 @@ function managerGMProfile(managerId){
 }
 function gmProfileHTML(gm){const updated=gm.week?`Updated weekly · Through Week ${gm.week}`:'Pre-season profile · Recalculates weekly once games begin';return `<section class="manager-profile-card gm-profile-card"><div class="gm-profile-top"><div><span class="eyebrow">GM PROFILE</span><div class="gm-archetype-line"><span class="gm-archetype-icon">${gm.primary.icon}</span><div><h3>${esc(gm.primary.name)}</h3><p>Secondary: ${gm.secondary.icon} ${esc(gm.secondary.name)}</p></div></div></div><div class="gm-updated-note">${esc(updated)}</div></div><div class="gm-tendency-grid">${gm.rows.map(x=>`<div class="gm-tendency"><div class="gm-tendency-head"><span>${x.icon} ${esc(x.label)}</span><strong>${x.rating} <small>#${x.rank}</small></strong></div><div class="gm-rating-track"><i style="width:${x.rating}%"></i></div></div>`).join('')}</div><div class="gm-profile-bottom"><div class="gm-traits"><span class="eyebrow">TENDENCIES</span>${gm.traits.map(x=>`<span class="gm-trait">✓ ${esc(x)}</span>`).join('')||'<span class="profile-muted">Profile will sharpen as more league activity is recorded.</span>'}</div><div class="gm-scout-report"><span class="eyebrow">SCOUT\'S REPORT</span><p>“${esc(gm.report)}”</p></div></div></section>`}
 
+
+function draftGamesPlayed(playerId,season){
+  return Number(state.seasonTotalMeta?.[String(season)]?.[String(playerId)]?.gamesPlayed||state.gameLogMeta?.[String(season)]?.[String(playerId)]?.gamesPlayed||0)
+}
+function latestDraftAverage(playerId){
+  const seasons=[...new Set(state.bundles.map(b=>String(b.league?.season||'')))].filter(Boolean).sort((a,b)=>Number(b)-Number(a));
+  for(const season of seasons){
+    const avg=Number(seasonAverageMap(season)?.[String(playerId)]||0);
+    if(avg>0)return avg
+  }
+  return Number(latestKnownAverage(String(playerId))||0)
+}
+function eligibleDraftClassRows(){
+  const bySeason={};
+  (state.draftSelections||[]).forEach(p=>{if(p?.playerId&&p?.pickedBy)(bySeason[String(p.season)]??=[]).push(p)});
+  const rows=[];
+  Object.entries(bySeason).forEach(([season,picks])=>{
+    // A class remains completely excluded until at least one player from that
+    // class has appeared in three NBA games.
+    if(!picks.some(p=>draftGamesPlayed(p.playerId,season)>=3))return;
+    const ranked=picks.map(p=>({...p,currentAverage:latestDraftAverage(p.playerId)})).sort((a,b)=>b.currentAverage-a.currentAverage||a.overallPick-b.overallPick||a.playerId.localeCompare(b.playerId));
+    ranked.forEach((p,index)=>rows.push({...p,redraftRank:index+1,draftScore:Number(p.overallPick)-(index+1)}))
+  });
+  return rows
+}
+function managerDraftResume(managerId){
+  const id=String(managerId),picks=eligibleDraftClassRows().filter(p=>String(p.pickedBy)===id),sortedSteals=[...picks].sort((a,b)=>b.draftScore-a.draftScore||a.overallPick-b.overallPick),sortedBusts=[...picks].sort((a,b)=>a.draftScore-b.draftScore||a.overallPick-b.overallPick);
+  return{managerId:id,picks,count:picks.length,totalScore:picks.reduce((sum,p)=>sum+Number(p.draftScore||0),0),biggestSteal:sortedSteals[0]||null,biggestBust:sortedBusts[0]||null}
+}
+function managerTradingRaw(managerId){
+  const gradeValue={'A+':10,'A':9,'A-':8.5,'B+':8,'B':7,'B-':6.5,'C+':6,'C':5,'C-':4.5,'D+':4,'D':3,'F':1,'FLEECE ALERT 🚨':0};
+  const trades=managerTrades(managerId);if(!trades.length)return 5;
+  return trades.reduce((sum,t)=>sum+(gradeValue[tradeGrade(t,managerId).grade]??5),0)/trades.length
+}
+function managerLetterGrade(rating){
+  const n=Number(rating)||0;
+  if(n>=94)return'A+';if(n>=88)return'A';if(n>=82)return'A-';if(n>=76)return'B+';if(n>=70)return'B';if(n>=64)return'B-';if(n>=58)return'C+';if(n>=52)return'C';if(n>=46)return'C-';if(n>=38)return'D';return'F'
+}
+function managerGradesLeague(){
+  if(state.computedCache.managerGrades)return state.computedCache.managerGrades;
+  const ids=[...state.managers.keys()],tendency=managerTendencyLeague(),raw={trading:{},drafting:{},development:{},building:{}},draftResumes={};
+  ids.forEach(id=>{
+    const r=tendency.ratings,resume=managerDraftResume(id);draftResumes[id]=resume;
+    raw.trading[id]=managerTradingRaw(id);
+    raw.drafting[id]=resume.totalScore;
+    raw.development[id]=(r.youth[id]||25)*.55+(r.waiver[id]||25)*.25+(r.asset[id]||25)*.20;
+    raw.building[id]=(r.asset[id]||25)*.40+(r.star[id]||25)*.25+(r.winNow[id]||25)*.25+(r.draft[id]||25)*.10
+  });
+  const ratings={trading:leagueScale(raw.trading),drafting:leagueScale(raw.drafting),development:leagueScale(raw.development),building:leagueScale(raw.building)},grades={};
+  ids.forEach(id=>grades[id]={trading:managerLetterGrade(ratings.trading[id]),drafting:managerLetterGrade(ratings.drafting[id]),development:managerLetterGrade(ratings.development[id]),building:managerLetterGrade(ratings.building[id])});
+  return state.computedCache.managerGrades={raw,ratings,grades,draftResumes}
+}
+function managerGradePlayerHTML(label,pick){
+  if(!pick)return`<div class="manager-draft-highlight empty"><span>${esc(label)}</span><small>—</small></div>`;
+  const id=String(pick.playerId),name=playerName(id),avatar=`https://sleepercdn.com/content/nba/players/${id}.jpg`;
+  return`<div class="manager-draft-highlight"><span>${esc(label)}</span><div><span class="manager-grade-player-avatar"><img src="${esc(avatar)}" alt="" loading="lazy" onerror="this.style.display='none'"></span>${playerLink(id,name,'manager-grade-player-name')}</div></div>`
+}
+function managerGradesHTML(managerId){
+  const league=managerGradesLeague(),id=String(managerId),grades=league.grades[id]||{},resume=league.draftResumes[id]||managerDraftResume(id),items=[['Trading',grades.trading],['Drafting',grades.drafting],['Player Development',grades.development],['Team Building',grades.building]];
+  return`<section class="manager-grades-row" aria-label="Manager grades"><div class="manager-grades-title"><span class="eyebrow">MANAGER GRADES</span></div><div class="manager-grade-items">${items.map(([label,grade])=>`<div class="manager-grade-item"><span>${esc(label)}</span><strong class="manager-grade-badge ${gradeClass(grade||'F')}">${esc(grade||'—')}</strong></div>`).join('')}</div><div class="manager-draft-highlights">${managerGradePlayerHTML('Biggest Steal',resume.biggestSteal)}${managerGradePlayerHTML('Biggest Bust',resume.biggestBust)}</div></section>`
+}
+function ensureManagerGradeStyles(){
+  if(document.getElementById('managerGradeStyles'))return;
+  const style=document.createElement('style');style.id='managerGradeStyles';style.textContent=`
+  .manager-grades-row{margin:14px 0 16px;padding:12px 14px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:16px;align-items:center;border:1px solid rgba(148,163,184,.18);border-radius:14px;background:rgba(15,23,42,.34)}
+  .manager-grades-title{white-space:nowrap}.manager-grade-items{display:grid;grid-template-columns:repeat(4,minmax(86px,1fr));gap:8px}.manager-grade-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;border-radius:10px;background:rgba(255,255,255,.035)}
+  .manager-grade-item>span{font-size:11px;line-height:1.2;color:var(--muted,#94a3b8)}.manager-grade-badge{display:grid;place-items:center;min-width:34px;height:28px;padding:0 7px;border-radius:8px;font-size:14px;line-height:1;font-weight:900}
+  .manager-grade-badge.grade-a{color:#052e16;background:#4ade80}.manager-grade-badge.grade-b{color:#172554;background:#60a5fa}.manager-grade-badge.grade-c{color:#422006;background:#facc15}.manager-grade-badge.grade-d{color:#431407;background:#fb923c}.manager-grade-badge.grade-f{color:#450a0a;background:#f87171}
+  .manager-draft-highlights{display:flex;gap:8px}.manager-draft-highlight{min-width:142px;padding:6px 9px;border-left:1px solid rgba(148,163,184,.18)}.manager-draft-highlight>span{display:block;margin-bottom:4px;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#94a3b8)}.manager-draft-highlight>div{display:flex;align-items:center;gap:7px}.manager-grade-player-avatar{width:26px;height:26px;border-radius:50%;overflow:hidden;background:rgba(148,163,184,.15);flex:0 0 auto}.manager-grade-player-avatar img{width:100%;height:100%;object-fit:cover}.manager-grade-player-name{padding:0;border:0;background:none;color:inherit;font:inherit;font-size:11px;font-weight:800;text-align:left}.manager-draft-highlight.empty small{font-size:16px}
+  @media(max-width:900px){.manager-grades-row{grid-template-columns:1fr}.manager-grades-title{display:none}.manager-draft-highlights{justify-content:space-between}.manager-draft-highlight{flex:1;border-left:0;border-top:1px solid rgba(148,163,184,.18);padding-top:9px}}
+  @media(max-width:620px){.manager-grades-row{padding:10px;gap:10px}.manager-grade-items{grid-template-columns:repeat(2,1fr)}.manager-grade-item{padding:8px}.manager-draft-highlights{display:grid;grid-template-columns:1fr 1fr}.manager-draft-highlight{min-width:0}.manager-grade-player-name{font-size:10px}}
+  `;document.head.appendChild(style)
+}
+
 function managerPowerMovement(managerId){
   const weeks=meaningfulWeeks(state.modelBundle);if(weeks.length<2)return{move:0,previous:null};
   const currentWeek=weeks.at(-1),previousWeek=weeks.at(-2),current=modelRows(state.modelBundle,currentWeek,'power').find(x=>String(x.id)===String(managerId)),previous=modelRows(state.modelBundle,previousWeek,'power').find(x=>String(x.id)===String(managerId));
@@ -688,7 +781,7 @@ function closeArchetypeGuide(){const modal=$("archetypeGuideModal");if(!modal)re
 
 function managerProfileHTML(managerId){
   const id=String(managerId),manager=state.managers.get(id);if(!manager)return `<div class="profile-empty">Manager profile unavailable.</div>`;
-  const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,power=modelRows(state.modelBundle,through,"power").find(x=>x.id===id),odds=priceRows(through).find(x=>x.id===id),form=managerFormData(id),roster=managerRosterPlayers(id,state.profileAverageSeason),trades=managerTrades(id),biggest=[...trades].map(t=>({t,value:tradeValue(t)})).sort((a,b)=>b.value-a.value||(b.t.created||0)-(a.t.created||0)).slice(0,5),recent=trades.slice(0,5),badges=managerBadges(id),avgAge=managerAverageAge(id),partners=favouriteTradePartners(id),teamForm=teamFormPlayers(id),allTimeHigh=teamHighestScore(id,state.bundles),seasonBundle=state.bundles.find(b=>String(b.league.league_id)===CONFIG.currentLeagueId),seasonHigh=teamHighestScore(id,seasonBundle?[seasonBundle]:[]),matchups=managerRecentMatchups(id),headToHead=managerHeadToHead(id),eligible=allNBAEligible(id),biggestResult=managerBiggestResult(id),gm=managerGMProfile(id),powerMovement=managerPowerMovement(id);
+  const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,power=modelRows(state.modelBundle,through,"power").find(x=>x.id===id),odds=priceRows(through).find(x=>x.id===id),form=managerFormData(id),roster=managerRosterPlayers(id,state.profileAverageSeason),trades=managerTrades(id),biggest=[...trades].map(t=>({t,value:tradeValue(t)})).sort((a,b)=>b.value-a.value||(b.t.created||0)-(a.t.created||0)).slice(0,5),recent=trades.slice(0,5),badges=managerBadges(id),avgAge=managerAverageAge(id),partners=favouriteTradePartners(id),teamForm=teamFormPlayers(id),allTimeHigh=teamHighestScore(id,state.bundles),seasonBundle=state.bundles.find(b=>String(b.league.league_id)===CONFIG.currentLeagueId),seasonHigh=teamHighestScore(id,seasonBundle?[seasonBundle]:[]),matchups=managerRecentMatchups(id),headToHead=managerHeadToHead(id),eligible=allNBAEligible(id),biggestResult=managerBiggestResult(id),gm=managerGMProfile(id),managerGrades=managerGradesHTML(id),powerMovement=managerPowerMovement(id);
   const formPills=matchups.map(g=>`<details class="profile-form-result"><summary class="profile-form-pill ${g.result==="W"?"win":g.result==="D"?"draw":"loss"}">${g.result}</summary><div>${esc(manager.name)} <b>${g.result}</b> ${g.myPts.toFixed(2)} v ${esc(managerName(g.oppId))} ${g.oppPts.toFixed(2)}<small>Week ${g.week}</small></div></details>`).join("")||'<span class="profile-muted">No completed games</span>';
   const rosterRow=(p,i)=>`<div class="profile-roster-row"><span class="profile-roster-rank">${i+1}</span><span class="player-avatar-wrap"><img src="${esc(p.avatar)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><span class="player-avatar-fallback">${esc(p.name.split(/\s+/).map(x=>x[0]).slice(0,2).join(""))}</span></span><div>${playerLink(p.id,p.name,"profile-player-name")}<small>${esc(p.position)}${p.age?` · Age ${p.age}`:""}</small></div><b class="profile-player-average">${p.avg.toFixed(2)}${p.avgRank?` <small>#${p.avgRank}</small>`:""}</b></div>`;
   const topRoster=roster.slice(0,10).map(rosterRow).join(""),remainingRoster=roster.slice(10).map((p,i)=>rosterRow(p,i+10)).join("");
@@ -699,6 +792,7 @@ function managerProfileHTML(managerId){
   const eligibleRows=eligible.map(p=>`<div class="eligible-player">${playerLink(p.id,p.name)}<span>${p.avg.toFixed(2)}</span></div>`).join("")||'<div class="profile-empty">No current top-50 players.</div>';
   return `<header class="manager-profile-hero"><div class="manager-profile-avatar">${managerAvatar}</div><div class="manager-profile-hero-copy"><div class="manager-profile-kicker"><span class="eyebrow">TEAM PROFILE</span><button type="button" class="archetype-guide-btn archetype-guide-btn-desktop" data-open-archetype-guide data-current-archetype="${esc(gm.primary.name)}"><span aria-hidden="true">📖</span> Archetype Guide</button></div><div class="profile-name-line">${managerSwitcherHTML(id)}<div class="profile-badge-icons">${badgeIconsHTML(badges)}</div></div><p>Current franchise overview and league history</p><button type="button" class="archetype-guide-btn archetype-guide-btn-mobile" data-open-archetype-guide data-current-archetype="${esc(gm.primary.name)}"><span aria-hidden="true">📖</span> Archetype Guide</button></div></header>
   <div class="manager-profile-stat-grid"><div><span>Power rank</span><strong class="power-rank-with-move">${power?`#${power.rank}`:"—"}${power&&powerMovement.move?` <em class="rank-move ${powerMovement.move>0?'up':'down'}">${powerMovement.move>0?'↑':'↓'}${Math.abs(powerMovement.move)}</em>`:""}</strong></div><div><span>Ladder</span><strong>${power?`#${power.standingRank}`:"—"}</strong></div><div><span>Record</span><strong>${form.games?`${form.wins}-${form.games-form.wins}`:"—"}</strong></div><div><span>Championship odds</span><strong>${odds?championshipOddsLabel(odds):"—"}</strong></div><div><span>Team average age</span><strong>${avgAge?avgAge.toFixed(1):"—"}</strong></div><div><span>Career trades</span><strong>${trades.length}</strong></div></div>
+  ${managerGrades}
   <div class="manager-profile-grid">
     ${gmProfileHTML(gm)}
     <section class="manager-profile-card profile-roster-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">CURRENT TEAM</span><h3>Roster</h3></div><div class="roster-season-toggle"><button type="button" class="${state.profileAverageSeason==="2025"?"active":""}" data-profile-season="2025">2025 averages</button><button type="button" class="${state.profileAverageSeason==="2026"?"active":""}" data-profile-season="2026">2026 season averages</button></div></div><div class="profile-roster-list">${rosterRows}</div></section>
@@ -738,8 +832,8 @@ function openManagerDirectory(){const modal=$("managerDirectoryModal"),list=$("m
 function closeManagerDirectory(){const modal=$("managerDirectoryModal");if(!modal)return;modal.classList.remove("open");modal.setAttribute("aria-hidden","true");document.body.classList.remove("manager-directory-open")}
 
 function managerProfileCacheKey(managerId){return `${String(managerId)}|${String(state.profileAverageSeason||"")}`}
-function managerProfileDataFingerprint(){const latest=state.trades?.[0]?.created||0,current=state.modelBundle?.league?.season||'';return `${CONFIG.currentLeagueId}|${current}|${latest}|${state.trades.length}|${state.managers.size}`}
-function managerProfileSessionKey(key){return `imo-profile-v314|${managerProfileDataFingerprint()}|${key}`}
+function managerProfileDataFingerprint(){const latest=state.trades?.[0]?.created||0,current=state.modelBundle?.league?.season||'';return `${CONFIG.currentLeagueId}|${current}|${latest}|${state.trades.length}|${state.managers.size}|${state.draftSelections.length}`}
+function managerProfileSessionKey(key){return `imo-profile-v322-grades|${managerProfileDataFingerprint()}|${key}`}
 function cachedManagerProfileHTML(managerId){
   const key=managerProfileCacheKey(managerId);
   if(state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
@@ -885,6 +979,7 @@ function closeHeadlines(){const modal=$('headlinesModal');modal?.classList.remov
 
 function safeRender(name,fn){try{fn()}catch(error){console.error(`Failed to render ${name}:`,error)}}
 function renderAll(){
+  ensureManagerGradeStyles();
   safeRender("summary",renderSummary);
   safeRender("leaderboard",renderLeaderboard);
   safeRender("power rankings",renderPower);
@@ -910,6 +1005,7 @@ function relevantPlayerIds(){
       Object.keys(t.drops||{}).forEach(id=>ids.add(String(id)));
     });
     Object.values(bundle.draftPickMap||{}).forEach(id=>ids.add(String(id)));
+    (bundle.draftSelections||[]).forEach(p=>{if(p?.playerId)ids.add(String(p.playerId))});
   });
   return [...ids].filter(id=>id&&id!=="0");
 }
@@ -1158,7 +1254,7 @@ async function loadSeason(id){
     return name.includes('rookie')||((configuredRounds||observedRounds)>0&&(configuredRounds||observedRounds)<=5);
   });
   const relevantDrafts=rookieDrafts.length?rookieDrafts:draftResults;
-  const draftPickMap={};
+  const draftPickMap={},draftSelections=[];
   relevantDrafts.forEach(({draft,picks})=>{
     const season=String(draft?.season||league.season);
     const teamCount=Number(draft?.settings?.teams)||Number(league?.total_rosters)||rosters.length||8;
@@ -1168,6 +1264,23 @@ async function loadSeason(id){
       if(p.player_id==null||p.round==null)return;
       const round=Number(p.round);
       const pickNo=Number(p.pick_no);
+      const overallPick=Number.isFinite(pickNo)&&pickNo>0?pickNo:(round-1)*teamCount+Number(p.draft_slot||0);
+      // Draft grading permanently credits the Sleeper user who actually made
+      // the selection. Never infer this from roster ownership, pick origin or
+      // the player's current team.
+      if(p.picked_by!=null&&Number.isFinite(overallPick)&&overallPick>0){
+        draftSelections.push({
+          season,
+          draftId:String(draft?.draft_id||''),
+          playerId:String(p.player_id),
+          pickedBy:String(p.picked_by),
+          overallPick,
+          pickNo:Number.isFinite(pickNo)&&pickNo>0?pickNo:overallPick,
+          round,
+          draftSlot:Number(p.draft_slot)||null,
+          teamCount
+        });
+      }
       let originalSlot=null;
 
       // Work out the slot at which the selection was made. The pick payload's
@@ -1228,7 +1341,7 @@ async function loadSeason(id){
     });
     return{trades,transactions:completedTransactions.map(t=>({...t,week:wk})),matchups:(match||[]).map(x=>({...x,week:wk}))}
   });
-  return{league,users,rosters,ownerByRoster,draftPickMap,tradedPicks:tradedPicks||[],winnersBracket:winnersBracket||[],trades:weeks.flatMap(x=>x?.trades||[]),transactions:weeks.flatMap(x=>x?.transactions||[]),matchups:weeks.flatMap(x=>x?.matchups||[])}
+  return{league,users,rosters,ownerByRoster,draftPickMap,draftSelections,tradedPicks:tradedPicks||[],winnersBracket:winnersBracket||[],trades:weeks.flatMap(x=>x?.trades||[]),transactions:weeks.flatMap(x=>x?.transactions||[]),matchups:weeks.flatMap(x=>x?.matchups||[])}
 }
 async function load(){
   const refresh=$("refreshBtn"),status=$("statusText");
@@ -1249,6 +1362,7 @@ async function load(){
     state.currentRosters=cur.rosters||[];
     state.players=players||{};
     state.draftPickMap=Object.assign({},...valid.map(b=>b.draftPickMap||{}));
+    state.draftSelections=valid.flatMap(b=>b.draftSelections||[]);
     buildManagers();
     const unique=new Map();
     valid.flatMap(x=>x.trades||[]).forEach(t=>unique.set(t.transaction_id||`${t.league_id}-${t.created}`,t));
@@ -1257,6 +1371,7 @@ async function load(){
     await loadSeasonTotalAverages();
     prepareModels();
     resetComputedCaches();
+    prepareOddsMovement();
     state.profilePrewarmQueued=false;
     renderAll();
     if(status)status.textContent=`Live · ${valid.length} seasons loaded`;
