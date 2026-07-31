@@ -658,10 +658,13 @@ const ARCHETYPE_GUIDE=[
   {icon:'🌱',name:'Prospect Hunter',description:'Committed to a youth-led build. Consistently targets young players and emerging prospects whose best fantasy years are still ahead of them.'},
   {icon:'🎲',name:'The Gambler',description:'Embraces volatility and variance. Comfortable taking on high-risk, high-reward moves and blockbuster trades in pursuit of a massive payoff.'}
 ];
-function openArchetypeGuide(){
+function openArchetypeGuide(currentArchetype=''){
   const modal=$("archetypeGuideModal");if(!modal)return;
   const list=$("archetypeGuideList");
-  if(list&&!list.dataset.ready){list.innerHTML=ARCHETYPE_GUIDE.map(x=>`<article class="archetype-guide-item"><span>${x.icon}</span><div><h3>${esc(x.name)}</h3><p>${esc(x.description)}</p></div></article>`).join('');list.dataset.ready='1'}
+  const current=String(currentArchetype||'').trim().toLowerCase();
+  if(list){
+    list.innerHTML=ARCHETYPE_GUIDE.map(x=>{const active=current&&x.name.toLowerCase()===current;return `<article class="archetype-guide-item${active?' current':''}"${active?' aria-current="true"':''}><span>${x.icon}</span><div><h3>${esc(x.name)}${active?'<small>Current profile</small>':''}</h3><p>${esc(x.description)}</p></div></article>`}).join('');
+  }
   modal.classList.add('open');modal.setAttribute('aria-hidden','false');document.body.classList.add('modal-open');
   requestAnimationFrame(()=>$("archetypeGuideClose")?.focus({preventScroll:true}));
 }
@@ -678,7 +681,7 @@ function managerProfileHTML(managerId){
   const partnerRows=partners.map((p,i)=>`<div class="profile-partner-row"><b>${i+1}</b><button class="manager-profile-link" type="button" data-manager-id="${esc(p.partner)}">${esc(managerName(p.partner))}</button><span>${p.count} trades · ${p.percent.toFixed(0)}%</span></div>`).join("")||'<div class="profile-empty">No trade partners yet.</div>';
   const h2hRows=headToHead.map(r=>{const recordClass=r.wins>r.losses?"winning":r.wins<r.losses?"losing":"even",drawText=r.draws?` <span>(${r.draws} ${r.draws===1?"draw":"draws"})</span>`:"";return `<div class="profile-h2h-row ${recordClass}"><button class="manager-profile-link" type="button" data-manager-id="${esc(r.oppId)}">vs ${esc(managerName(r.oppId))}</button><strong>${r.wins}-${r.losses}${drawText}</strong><small>${r.games} games · includes finals</small></div>`}).join("")||'<div class="profile-empty">No completed head-to-head matchups.</div>';
   const eligibleRows=eligible.map(p=>`<div class="eligible-player">${playerLink(p.id,p.name)}<span>${p.avg.toFixed(2)}</span></div>`).join("")||'<div class="profile-empty">No current top-50 players.</div>';
-  return `<header class="manager-profile-hero"><div class="manager-profile-avatar">${managerAvatar}</div><div class="manager-profile-hero-copy"><div class="manager-profile-kicker"><span class="eyebrow">TEAM PROFILE</span><button type="button" class="archetype-guide-btn" data-open-archetype-guide>Archetype Guide</button></div><div class="profile-name-line">${managerSwitcherHTML(id)}<div class="profile-badge-icons">${badgeIconsHTML(badges)}</div></div><p>Current franchise overview and league history</p></div></header>
+  return `<header class="manager-profile-hero"><div class="manager-profile-avatar">${managerAvatar}</div><div class="manager-profile-hero-copy"><div class="manager-profile-kicker"><span class="eyebrow">TEAM PROFILE</span><button type="button" class="archetype-guide-btn" data-open-archetype-guide data-current-archetype="${esc(gm.primary.name)}"><span aria-hidden="true">📖</span> Archetype Guide</button></div><div class="profile-name-line">${managerSwitcherHTML(id)}<div class="profile-badge-icons">${badgeIconsHTML(badges)}</div></div><p>Current franchise overview and league history</p></div></header>
   <div class="manager-profile-stat-grid"><div><span>Power rank</span><strong class="power-rank-with-move">${power?`#${power.rank}`:"—"}${power&&powerMovement.move?` <em class="rank-move ${powerMovement.move>0?'up':'down'}">${powerMovement.move>0?'↑':'↓'}${Math.abs(powerMovement.move)}</em>`:""}</strong></div><div><span>Ladder</span><strong>${power?`#${power.standingRank}`:"—"}</strong></div><div><span>Record</span><strong>${form.games?`${form.wins}-${form.games-form.wins}`:"—"}</strong></div><div><span>Championship odds</span><strong>${odds?championshipOddsLabel(odds):"—"}</strong></div><div><span>Team average age</span><strong>${avgAge?avgAge.toFixed(1):"—"}</strong></div><div><span>Career trades</span><strong>${trades.length}</strong></div></div>
   <div class="manager-profile-grid">
     ${gmProfileHTML(gm)}
@@ -1129,9 +1132,12 @@ function toggleManagerSwitcher(trigger){
   trigger.setAttribute('aria-expanded',String(opening));
 }
 
+let lastArchetypePointerAction=0;
 // Use one pointer-up path on touch devices so a single tap always opens the profile or switcher.
 document.addEventListener("pointerup",e=>{
   if(e.pointerType==='mouse'&&e.button!==0)return;
+  const archetypeButton=e.target.closest?.('[data-open-archetype-guide]');
+  if(archetypeButton){e.preventDefault();e.stopPropagation();lastArchetypePointerAction=Date.now();openArchetypeGuide(archetypeButton.dataset.currentArchetype||'');return}
   const switchTrigger=e.target.closest?.('[data-manager-switcher-trigger]');
   if(switchTrigger){e.preventDefault();e.stopPropagation();lastManagerPointerAction=Date.now();toggleManagerSwitcher(switchTrigger);return}
   const switchOption=e.target.closest?.('[data-switch-manager]');
@@ -1148,7 +1154,7 @@ document.addEventListener("click",e=>{
   const switchTrigger=e.target.closest('[data-manager-switcher-trigger]');if(switchTrigger){if(Date.now()-lastManagerPointerAction<700)return;toggleManagerSwitcher(switchTrigger);return}
   const switchOption=e.target.closest('[data-switch-manager]');if(switchOption){if(Date.now()-lastManagerPointerAction<700)return;closeManagerSwitchers();openManagerProfile(switchOption.dataset.switchManager);return}
   if(window.matchMedia('(max-width: 620px)').matches){const badgeSummary=e.target.closest('.profile-badge-pop > summary');if(badgeSummary){e.preventDefault();const details=badgeSummary.parentElement,body=details?.querySelector(':scope > div');openMobileProfileInfo(body?.querySelector('strong')?.textContent||'Badge',body?.innerHTML||'');details.open=false;return}const formSummary=e.target.closest('.profile-form-result > summary');if(formSummary){e.preventDefault();const details=formSummary.parentElement,body=details?.querySelector(':scope > div');openMobileProfileInfo('Match result',body?.innerHTML||'');details.open=false;return}}
-  if(e.target.closest('[data-open-archetype-guide]')){e.preventDefault();openArchetypeGuide();return}
+  const archetypeButton=e.target.closest('[data-open-archetype-guide]');if(archetypeButton){e.preventDefault();if(Date.now()-lastArchetypePointerAction<700)return;openArchetypeGuide(archetypeButton.dataset.currentArchetype||'');return}
   if(e.target.closest('[data-close-archetype-guide]')||e.target.closest('#archetypeGuideClose')){closeArchetypeGuide();return}
   if(e.target.closest("#headlinesBtn")){openHeadlines();return}
   if(e.target.closest("[data-close-headlines]")||e.target.closest("#headlinesClose")){closeHeadlines();return}
