@@ -1,3 +1,5 @@
+IMO DYNASTY V3.1.8
+
 IMO DYNASTY V3.1.6 — Manager Switcher + Mobile Profile Fix
 
 V3.1.6 UPDATES
@@ -302,3 +304,8 @@ V2.7.2 updates:
 - Old Dogs badge now requires 8 or more players over age 30.
 
 V3.1.7 — Mobile manager switching now uses a native select input on screens 620px and below for reliable single-tap behaviour on iOS and Android. Desktop dropdown remains unchanged.
+
+
+V3.1.8 CHANGES
+- Player season averages are now rebuilt from individual regular-season game logs using the league's exact scoring settings. This fixes the incorrect Zach Edey average and prevents default-provider fantasy scoring from overriding league scoring.
+- Added an Archetype Guide button to every manager profile with definitions for all nine manager archetypes.

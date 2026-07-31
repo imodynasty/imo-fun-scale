@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.0.4 — League HQ */
+/* IMO DYNASTY V3.1.8 — League HQ */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null}};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
@@ -34,14 +34,9 @@ function gameLogAverageMap(season){return state.gameLogAverages?.[String(season)
 function buildPlayerAverages(bundle,throughWeek=Infinity){
   const season=String(bundle?.league?.season||"");
   const calculated=calculatedPlayerAverages(bundle,throughWeek);
-  const totals=seasonTotalAverageMap(season);
   const exact=exactAverageMap(season);
-  const gameLogs=gameLogAverageMap(season);
-  // Prefer averages rebuilt from individual game logs using this league's
-  // scoring settings. Sleeper's supplied fantasy_points field can reflect a
-  // different/default scoring format, which produced inflated results for
-  // players such as Zach Edey.
-  return {...calculated,...totals,...exact,...gameLogs};
+  const totals=seasonTotalAverageMap(season);
+  return {...calculated,...exact,...totals};
 }
 function prepareModels(){state.modelBundle=selectModelBundle();const weeks=meaningfulWeeks(state.modelBundle),last=weeks.at(-1)||Infinity,prior=weeks.length>1?weeks.at(-2):last;state.previousPowerRanks=Object.fromEntries(modelRows(state.modelBundle,prior,"power").map(x=>[x.id,x.rank]));state.playerAverages=buildPlayerAverages(state.modelBundle,last)}
 function playerName(id){const p=state.players[id]||{};return p.full_name||[p.first_name,p.last_name].filter(Boolean).join(" ")||`Player ${id}`}
@@ -641,6 +636,26 @@ function managerSwitcherHTML(managerId){
     <div class="manager-switcher-menu" hidden>${options.map(m=>{const avatar=m.avatar?`<img src="${esc(m.avatar)}" alt="" loading="lazy">`:`<span>${esc(m.initials||m.name.slice(0,2).toUpperCase())}</span>`;return `<button type="button" class="manager-switcher-option ${m.id===currentId?'active':''}" data-switch-manager="${esc(m.id)}">${avatar}<b>${esc(m.name)}</b>${m.id===currentId?'<small>Current</small>':''}</button>`}).join('')}</div>
   </div>`
 }
+const ARCHETYPE_GUIDE=[
+  {icon:'🏗️',name:'The Rebuilder',description:'Operating with a long horizon, this front office prioritizes young talent, developmental upside, and future roster flexibility over short-term wins.'},
+  {icon:'🤝',name:'The Wheel & Dealer',description:'One of the most active front offices in the league. Always testing the market, floating offers, and continually reshaping the roster through trades.'},
+  {icon:'🦖',name:'The Veteran Chaser',description:'Built around proven, immediate production. Prefers established veterans with proven track records who can contribute win-now points right away.'},
+  {icon:'🏆',name:'The Contender',description:'Assembled explicitly to win a championship right now. Boasts high-end production across the roster with a clear focus on maximizing their title window.'},
+  {icon:'🎯',name:'The Talent Collector',description:'Concentrates top-tier, elite talent at the very top of the roster. Built around superstar players capable of deciding weekly matchups single-handedly.'},
+  {icon:'💎',name:'Draft Capital King',description:'A premier asset accumulator who holds a stockpile of future draft picks, maintaining ultimate leverage and long-term optionality.'},
+  {icon:'🛡️',name:'Diamond Hands',description:'Runs a patient, steady front office. Values roster continuity, chemistry, and calculated long-term moves over constant turnover and roster churn.'},
+  {icon:'🌱',name:'Prospect Hunter',description:'Committed to a youth-led build. Consistently targets young players and emerging prospects whose best fantasy years are still ahead of them.'},
+  {icon:'🎲',name:'The Gambler',description:'Embraces volatility and variance. Comfortable taking on high-risk, high-reward moves and blockbuster trades in pursuit of a massive payoff.'}
+];
+function openArchetypeGuide(){
+  const modal=$("archetypeGuideModal");if(!modal)return;
+  const list=$("archetypeGuideList");
+  if(list&&!list.dataset.ready){list.innerHTML=ARCHETYPE_GUIDE.map(x=>`<article class="archetype-guide-item"><span>${x.icon}</span><div><h3>${esc(x.name)}</h3><p>${esc(x.description)}</p></div></article>`).join('');list.dataset.ready='1'}
+  modal.classList.add('open');modal.setAttribute('aria-hidden','false');document.body.classList.add('modal-open');
+  requestAnimationFrame(()=>$("archetypeGuideClose")?.focus({preventScroll:true}));
+}
+function closeArchetypeGuide(){const modal=$("archetypeGuideModal");if(!modal)return;modal.classList.remove('open');modal.setAttribute('aria-hidden','true');if(!document.querySelector('.manager-profile-modal.open,.player-history-modal.open,.manager-directory-modal.open,.headlines-modal.open'))document.body.classList.remove('modal-open')}
+
 function managerProfileHTML(managerId){
   const id=String(managerId),manager=state.managers.get(id);if(!manager)return `<div class="profile-empty">Manager profile unavailable.</div>`;
   const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,power=modelRows(state.modelBundle,through,"power").find(x=>x.id===id),odds=priceRows(through).find(x=>x.id===id),form=managerFormData(id),roster=managerRosterPlayers(id,state.profileAverageSeason),trades=managerTrades(id),biggest=[...trades].map(t=>({t,value:tradeValue(t)})).sort((a,b)=>b.value-a.value||(b.t.created||0)-(a.t.created||0)).slice(0,5),recent=trades.slice(0,5),badges=managerBadges(id),avgAge=managerAverageAge(id),partners=favouriteTradePartners(id),teamForm=teamFormPlayers(id),allTimeHigh=teamHighestScore(id,state.bundles),seasonBundle=state.bundles.find(b=>String(b.league.league_id)===CONFIG.currentLeagueId),seasonHigh=teamHighestScore(id,seasonBundle?[seasonBundle]:[]),matchups=managerRecentMatchups(id),headToHead=managerHeadToHead(id),eligible=allNBAEligible(id),biggestResult=managerBiggestResult(id),gm=managerGMProfile(id),powerMovement=managerPowerMovement(id);
@@ -652,7 +667,7 @@ function managerProfileHTML(managerId){
   const partnerRows=partners.map((p,i)=>`<div class="profile-partner-row"><b>${i+1}</b><button class="manager-profile-link" type="button" data-manager-id="${esc(p.partner)}">${esc(managerName(p.partner))}</button><span>${p.count} trades · ${p.percent.toFixed(0)}%</span></div>`).join("")||'<div class="profile-empty">No trade partners yet.</div>';
   const h2hRows=headToHead.map(r=>{const recordClass=r.wins>r.losses?"winning":r.wins<r.losses?"losing":"even",drawText=r.draws?` <span>(${r.draws} ${r.draws===1?"draw":"draws"})</span>`:"";return `<div class="profile-h2h-row ${recordClass}"><button class="manager-profile-link" type="button" data-manager-id="${esc(r.oppId)}">vs ${esc(managerName(r.oppId))}</button><strong>${r.wins}-${r.losses}${drawText}</strong><small>${r.games} games · includes finals</small></div>`}).join("")||'<div class="profile-empty">No completed head-to-head matchups.</div>';
   const eligibleRows=eligible.map(p=>`<div class="eligible-player">${playerLink(p.id,p.name)}<span>${p.avg.toFixed(2)}</span></div>`).join("")||'<div class="profile-empty">No current top-50 players.</div>';
-  return `<header class="manager-profile-hero"><div class="manager-profile-avatar">${managerAvatar}</div><div><span class="eyebrow">TEAM PROFILE</span><div class="profile-name-line">${managerSwitcherHTML(id)}<div class="profile-badge-icons">${badgeIconsHTML(badges)}</div></div><p>Current franchise overview and league history</p></div></header>
+  return `<header class="manager-profile-hero"><div class="manager-profile-avatar">${managerAvatar}</div><div class="manager-profile-hero-copy"><div class="manager-profile-kicker"><span class="eyebrow">TEAM PROFILE</span><button type="button" class="archetype-guide-btn" data-open-archetype-guide>Archetype Guide</button></div><div class="profile-name-line">${managerSwitcherHTML(id)}<div class="profile-badge-icons">${badgeIconsHTML(badges)}</div></div><p>Current franchise overview and league history</p></div></header>
   <div class="manager-profile-stat-grid"><div><span>Power rank</span><strong class="power-rank-with-move">${power?`#${power.rank}`:"—"}${power&&powerMovement.move?` <em class="rank-move ${powerMovement.move>0?'up':'down'}">${powerMovement.move>0?'↑':'↓'}${Math.abs(powerMovement.move)}</em>`:""}</strong></div><div><span>Ladder</span><strong>${power?`#${power.standingRank}`:"—"}</strong></div><div><span>Record</span><strong>${form.games?`${form.wins}-${form.games-form.wins}`:"—"}</strong></div><div><span>Championship odds</span><strong>${odds?championshipOddsLabel(odds):"—"}</strong></div><div><span>Team average age</span><strong>${avgAge?avgAge.toFixed(1):"—"}</strong></div><div><span>Career trades</span><strong>${trades.length}</strong></div></div>
   <div class="manager-profile-grid">
     ${gmProfileHTML(gm)}
@@ -782,7 +797,7 @@ function tickerRankingOrRecord(){const weeks=meaningfulWeeks(state.modelBundle);
 function tickerPlayerRumours(){const templates=[x=>`SHAMS: Unnamed sources indicate growing trade chatter surrounding ${playerName(x.playerId)}.`,x=>`SOURCES: Rival GMs believe ${x.managerId?managerName(x.managerId):'a mystery team'} is exploring trade packages involving ${playerName(x.playerId)}.`,x=>`REPORTS: ${playerName(x.playerId)} has featured heavily in recent trade inquiries.`];return playerInterestRows().slice(-3).reverse().map(x=>(templates[Number(x.template)%templates.length]||templates[0])(x))}
 function shortTradeHeadline(t){if(!t)return null;const names=mids(t).map(id=>managerName(id,t));return names.length?`${names.join(' and ')} complete a deal involving ${tradeSummary(t)}`:null}
 function renderTicker(){const root=$('leagueTicker');if(!root)return;const good=recentPlayerForm().good.slice(0,2),stories=[...tickerPlayerRumours(),tickerTopPerformer(),...good.map(x=>`${x.name} is in good form, averaging ${x.recentAvg.toFixed(1)} FPTS over the last 5`),...state.trades.slice(0,2).map(t=>shortTradeHeadline(t)),tickerMatchup(),tickerStreak(),'IMO Awards voting opens 23 February · closes 28 February',tickerRankingOrRecord(),tickerDrought()].filter(Boolean);const unique=[...new Set(stories)].slice(0,10);if(!unique.length){root.hidden=true;return}root.hidden=false;const group=unique.map((text,i)=>`<span class="ticker-item">${esc(text)}</span>${i<unique.length-1?'<span class="ticker-dot">•</span>':''}`).join('');root.innerHTML=`<span class="ticker-live">LIVE</span><div class="ticker-window"><div class="ticker-track"><div class="ticker-group">${group}</div><div class="ticker-group" aria-hidden="true">${group}</div></div></div>`}
-async function loadTickerGameLogs(){const season=String(state.modelBundle?.league?.season||'2025'),ids=[...new Set((state.currentRosters||[]).flatMap(r=>(r.players||[]).map(String)))],scoring=state.modelBundle?.league?.scoring_settings||{};if(!ids.length)return;const rows=await limitedMap(ids,8,async id=>{const result=await loadPlayerGameLogAverage(id,season,scoring);return result?{id,...result}:null});state.gameLogs[season]??={};state.gameLogAverages[season]??={};state.gameLogMeta[season]??={};rows.filter(Boolean).forEach(row=>{state.gameLogs[season][row.id]=row.rows||[];state.gameLogAverages[season][row.id]=row.average;state.gameLogMeta[season][row.id]={gamesPlayed:row.games,totalFantasyPoints:row.points,average:row.average,source:'league-scored game logs'}});prepareModels();resetComputedCaches();renderPlayerForm();renderTicker();const modal=$("managerProfileModal"),id=modal?.dataset.managerId;if(id&&modal.classList.contains("open")){const content=$("managerProfileContent");content.innerHTML=cachedManagerProfileHTML(id);bindSparklineTooltips(content)}}
+async function loadTickerGameLogs(){const season=String(state.modelBundle?.league?.season||'2025'),ids=[...new Set((state.currentRosters||[]).flatMap(r=>(r.players||[]).map(String)))],scoring=state.modelBundle?.league?.scoring_settings||{};if(!ids.length)return;const rows=await limitedMap(ids,8,async id=>{const result=await loadPlayerGameLogAverage(id,season,scoring);return result?{id,...result}:null});state.gameLogs[season]??={};rows.filter(Boolean).forEach(row=>state.gameLogs[season][row.id]=row.rows||[]);renderPlayerForm();renderTicker()}
 
 
 function insiderEventKey(){
@@ -893,9 +908,9 @@ function gameWasPlayed(row){
   return !(status.includes("dnp")||status.includes("inactive")||status.includes("did not play"));
 }
 function rawFantasyPoints(row,scoring){
-  // Rebuild fantasy points from the raw box score and the league's own
-  // scoring settings. Do not trust the API's precomputed fantasy_points value
-  // first, because it may use Sleeper's default scoring rather than this league.
+  // Sleeper's generic fantasy_points field can use a default scoring format.
+  // Rebuild from this league's scoring settings first so player averages match the league.
+  const direct=numericValue(row,["fantasy_points","fantasy_pts","fpts","fp"]);
   let total=0,matched=false;
   Object.entries(scoring||{}).forEach(([key,multiplier])=>{
     if(key.startsWith("bonus_"))return;
@@ -911,8 +926,7 @@ function rawFantasyPoints(row,scoring){
   const doubles=[pts,reb,ast,stl,blk].filter(v=>v!==null&&v>=10).length;
   if(Number(scoring?.bonus_double_double)&&doubles>=2)total+=Number(scoring.bonus_double_double);
   if(Number(scoring?.bonus_triple_double)&&doubles>=3)total+=Number(scoring.bonus_triple_double);
-  if(matched)return total;
-  return numericValue(row,["fantasy_points","fantasy_pts","fpts","fp"]);
+  return matched?total:direct;
 }
 async function loadPlayerGameLogAverage(playerId,season,scoring){
   const url=`${CONFIG.statsApi}/${encodeURIComponent(playerId)}?season_type=regular&season=${encodeURIComponent(season)}&grouping=game`;
@@ -982,14 +996,10 @@ function scoreSeasonStats(stats,scoring){
   return total;
 }
 async function loadPlayerSeasonAverage(playerId,season,scoring){
-  const url=`${CONFIG.statsApi}/${encodeURIComponent(playerId)}?season_type=regular&season=${encodeURIComponent(season)}`;
-  const payload=await statsJSON(url);
-  const stats=payload?.stats||{};
-  const gp=Number(stats.gp);
-  if(!Number.isFinite(gp)||gp<=0)return null;
-  const total=scoreSeasonStats(stats,scoring);
-  if(!Number.isFinite(total))return null;
-  return {average:total/gp,totalFantasyPoints:total,gamesPlayed:gp};
+  // Calculate from individual games rather than the aggregate endpoint. This avoids
+  // mismatched games-played totals and ensures league-specific scoring is applied.
+  const result=await loadPlayerGameLogAverage(playerId,season,scoring);
+  return result?{average:result.average,totalFantasyPoints:result.points,gamesPlayed:result.games}:null;
 }
 async function loadSeasonTotalAverages(){
   const playerIds=relevantPlayerIds();
@@ -1127,6 +1137,8 @@ document.addEventListener("click",e=>{
   const switchTrigger=e.target.closest('[data-manager-switcher-trigger]');if(switchTrigger){if(Date.now()-lastManagerPointerAction<700)return;toggleManagerSwitcher(switchTrigger);return}
   const switchOption=e.target.closest('[data-switch-manager]');if(switchOption){if(Date.now()-lastManagerPointerAction<700)return;closeManagerSwitchers();openManagerProfile(switchOption.dataset.switchManager);return}
   if(window.matchMedia('(max-width: 620px)').matches){const badgeSummary=e.target.closest('.profile-badge-pop > summary');if(badgeSummary){e.preventDefault();const details=badgeSummary.parentElement,body=details?.querySelector(':scope > div');openMobileProfileInfo(body?.querySelector('strong')?.textContent||'Badge',body?.innerHTML||'');details.open=false;return}const formSummary=e.target.closest('.profile-form-result > summary');if(formSummary){e.preventDefault();const details=formSummary.parentElement,body=details?.querySelector(':scope > div');openMobileProfileInfo('Match result',body?.innerHTML||'');details.open=false;return}}
+  if(e.target.closest('[data-open-archetype-guide]')){e.preventDefault();openArchetypeGuide();return}
+  if(e.target.closest('[data-close-archetype-guide]')||e.target.closest('#archetypeGuideClose')){closeArchetypeGuide();return}
   if(e.target.closest("#headlinesBtn")){openHeadlines();return}
   if(e.target.closest("[data-close-headlines]")||e.target.closest("#headlinesClose")){closeHeadlines();return}
   const starEl=e.target.closest("[data-star-player]");if(starEl){togglePlayerInterest(starEl.dataset.starPlayer);return}
@@ -1151,6 +1163,6 @@ document.addEventListener('change',e=>{
 document.addEventListener('pointerdown',e=>{if(!e.target.closest('[data-manager-switcher]')&&!e.target.closest('#mobileManagerSwitcherSheet'))closeManagerSwitchers()},{passive:true});
 document.addEventListener("pointerover",e=>{const link=e.target.closest?.(".manager-profile-link");if(link)queueManagerProfilePrewarm(link.dataset.managerId)},{passive:true});
 document.addEventListener("focusin",e=>{const link=e.target.closest?.(".manager-profile-link");if(link)queueManagerProfilePrewarm(link.dataset.managerId)});
-document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(document.getElementById('mobileManagerSwitcherSheet'))closeMobileManagerSwitcher();else if(document.getElementById('mobileProfileInfoSheet')?.classList.contains('open'))closeMobileProfileInfo();else if(document.querySelector('[data-manager-switcher].open'))closeManagerSwitchers();else if($("headlinesModal")?.classList.contains("open"))closeHeadlines();else if($("playerHistoryModal")?.classList.contains("open"))closePlayerHistory();else if($("managerProfileModal")?.classList.contains("open"))closeManagerProfile();else if($("managerDirectoryModal")?.classList.contains("open"))closeManagerDirectory()});
+document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("archetypeGuideModal")?.classList.contains("open"))closeArchetypeGuide();else if(document.getElementById('mobileManagerSwitcherSheet'))closeMobileManagerSwitcher();else if(document.getElementById('mobileProfileInfoSheet')?.classList.contains('open'))closeMobileProfileInfo();else if(document.querySelector('[data-manager-switcher].open'))closeManagerSwitchers();else if($("headlinesModal")?.classList.contains("open"))closeHeadlines();else if($("playerHistoryModal")?.classList.contains("open"))closePlayerHistory();else if($("managerProfileModal")?.classList.contains("open"))closeManagerProfile();else if($("managerDirectoryModal")?.classList.contains("open"))closeManagerDirectory()});
 window.addEventListener("popstate",openManagerFromHash);
 load().then?.(()=>openManagerFromHash());
