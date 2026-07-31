@@ -621,3 +621,38 @@ footer span{display:flex;align-items:center;gap:6px}
   .v26-header-actions{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 62px;gap:5px}
   .v26-header-actions button{font-size:9px;padding:8px 5px}
 }
+
+/* V3.0.4 — mobile-safe manager profile popovers */
+.manager-profile-content{contain:layout style}
+.profile-badge-pop>div,
+.profile-form-result>div{
+  overflow-wrap:anywhere;
+  word-break:normal;
+  white-space:normal;
+}
+@media(max-width:620px){
+  .profile-badge-pop,
+  .profile-form-result{position:static}
+  .profile-badge-pop>div,
+  .profile-form-result>div{
+    position:fixed;
+    z-index:1600;
+    left:50%;
+    right:auto;
+    top:auto;
+    bottom:calc(env(safe-area-inset-bottom, 0px) + 20px);
+    width:min(360px,calc(100vw - 28px));
+    max-width:calc(100vw - 28px);
+    transform:translateX(-50%);
+    padding:16px 18px;
+    border-radius:16px;
+    box-shadow:0 22px 60px rgba(0,0,0,.72);
+    font-size:13px;
+    line-height:1.5;
+  }
+  .profile-badge-pop>div strong,
+  .profile-form-result>div strong{font-size:15px;line-height:1.25}
+  .profile-badge-pop>div small,
+  .profile-form-result>div small{font-size:12px;line-height:1.5;margin-top:6px}
+  .profile-form-result>div{top:auto}
+}
