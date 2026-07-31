@@ -1063,7 +1063,30 @@ async function load(){
 }
 document.querySelectorAll('.active-window-btn').forEach(b=>b.addEventListener('click',()=>{state.activeWindow=b.dataset.activeWindow;document.querySelectorAll('.active-window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary();renderLeaderboard()}));$("refreshBtn").addEventListener('click',load);$("biggestTradesToggle").addEventListener('click',()=>{state.biggestTradesExpanded=!state.biggestTradesExpanded;renderBiggestTrades()});
 let lastManagerPointerAction=0;
+function closeMobileManagerSwitcher(){
+  const sheet=document.getElementById('mobileManagerSwitcherSheet');
+  if(sheet)sheet.remove();
+  document.body.classList.remove('mobile-manager-switcher-open');
+  document.querySelectorAll('[data-manager-switcher-trigger][aria-expanded="true"]').forEach(btn=>btn.setAttribute('aria-expanded','false'));
+}
+function openMobileManagerSwitcher(trigger){
+  closeMobileManagerSwitcher();
+  const currentId=String($("managerProfileModal")?.dataset.managerId||'');
+  const options=[...state.managers.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  const sheet=document.createElement('div');
+  sheet.id='mobileManagerSwitcherSheet';
+  sheet.className='mobile-manager-switcher-sheet open';
+  sheet.innerHTML=`<button type="button" class="mobile-manager-switcher-backdrop" data-close-mobile-manager-switcher aria-label="Close manager switcher"></button><section class="mobile-manager-switcher-card" role="dialog" aria-modal="true" aria-label="Switch manager"><div class="mobile-manager-switcher-head"><div><span class="eyebrow">TEAM PROFILES</span><h3>Switch Manager</h3></div><button type="button" class="mobile-manager-switcher-close" data-close-mobile-manager-switcher aria-label="Close">×</button></div><div class="mobile-manager-switcher-list">${options.map(m=>{const avatar=m.avatar?`<img src="${esc(m.avatar)}" alt="" loading="lazy">`:`<span>${esc(m.initials||m.name.slice(0,2).toUpperCase())}</span>`;return `<button type="button" class="mobile-manager-switcher-option ${m.id===currentId?'active':''}" data-mobile-switch-manager="${esc(m.id)}">${avatar}<b>${esc(m.name)}</b>${m.id===currentId?'<small>Current</small>':''}</button>`}).join('')}</div></section>`;
+  document.body.appendChild(sheet);
+  document.body.classList.add('mobile-manager-switcher-open');
+  trigger.setAttribute('aria-expanded','true');
+  requestAnimationFrame(()=>sheet.querySelector('.mobile-manager-switcher-option:not(.active)')?.focus({preventScroll:true}));
+}
 function toggleManagerSwitcher(trigger){
+  if(window.matchMedia('(max-width: 620px)').matches){
+    openMobileManagerSwitcher(trigger);
+    return;
+  }
   const sw=trigger?.closest('[data-manager-switcher]'),menu=sw?.querySelector('.manager-switcher-menu');
   if(!sw||!menu)return;
   const opening=!sw.classList.contains('open');
@@ -1085,6 +1108,9 @@ document.addEventListener("pointerup",e=>{
 });
 
 document.addEventListener("click",e=>{
+  if(e.target.closest('[data-close-mobile-manager-switcher]')){e.preventDefault();closeMobileManagerSwitcher();return}
+  const mobileSwitchOption=e.target.closest('[data-mobile-switch-manager]');
+  if(mobileSwitchOption){e.preventDefault();e.stopPropagation();const managerId=mobileSwitchOption.dataset.mobileSwitchManager;closeMobileManagerSwitcher();openManagerProfile(managerId);return}
   if(e.target.closest('[data-close-mobile-profile-info]')){closeMobileProfileInfo();return}
   const switchTrigger=e.target.closest('[data-manager-switcher-trigger]');if(switchTrigger){if(Date.now()-lastManagerPointerAction<700)return;toggleManagerSwitcher(switchTrigger);return}
   const switchOption=e.target.closest('[data-switch-manager]');if(switchOption){if(Date.now()-lastManagerPointerAction<700)return;closeManagerSwitchers();openManagerProfile(switchOption.dataset.switchManager);return}
@@ -1101,9 +1127,9 @@ document.addEventListener("click",e=>{
   if(e.target.closest("[data-close-manager-profile]")||e.target.closest("#managerProfileClose"))closeManagerProfile()
 });
 document.addEventListener("toggle",e=>{const detail=e.target;if(!(detail instanceof HTMLDetailsElement)||!detail.open)return;if(detail.matches(".profile-badge-pop")){detail.closest(".profile-badge-icons")?.querySelectorAll(".profile-badge-pop[open]").forEach(x=>{if(x!==detail)x.open=false})}if(detail.matches(".profile-form-result")){detail.closest(".profile-form-strip")?.querySelectorAll(".profile-form-result[open]").forEach(x=>{if(x!==detail)x.open=false})}if(detail.matches(".player-history-trade")){detail.closest(".player-history-timeline")?.querySelectorAll(".player-history-trade[open]").forEach(x=>{if(x!==detail)x.open=false})}},true);
-document.addEventListener('pointerdown',e=>{if(!e.target.closest('[data-manager-switcher]'))closeManagerSwitchers()},{passive:true});
+document.addEventListener('pointerdown',e=>{if(!e.target.closest('[data-manager-switcher]')&&!e.target.closest('#mobileManagerSwitcherSheet'))closeManagerSwitchers()},{passive:true});
 document.addEventListener("pointerover",e=>{const link=e.target.closest?.(".manager-profile-link");if(link)queueManagerProfilePrewarm(link.dataset.managerId)},{passive:true});
 document.addEventListener("focusin",e=>{const link=e.target.closest?.(".manager-profile-link");if(link)queueManagerProfilePrewarm(link.dataset.managerId)});
-document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(document.getElementById('mobileProfileInfoSheet')?.classList.contains('open'))closeMobileProfileInfo();else if(document.querySelector('[data-manager-switcher].open'))closeManagerSwitchers();else if($("headlinesModal")?.classList.contains("open"))closeHeadlines();else if($("playerHistoryModal")?.classList.contains("open"))closePlayerHistory();else if($("managerProfileModal")?.classList.contains("open"))closeManagerProfile();else if($("managerDirectoryModal")?.classList.contains("open"))closeManagerDirectory()});
+document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(document.getElementById('mobileManagerSwitcherSheet'))closeMobileManagerSwitcher();else if(document.getElementById('mobileProfileInfoSheet')?.classList.contains('open'))closeMobileProfileInfo();else if(document.querySelector('[data-manager-switcher].open'))closeManagerSwitchers();else if($("headlinesModal")?.classList.contains("open"))closeHeadlines();else if($("playerHistoryModal")?.classList.contains("open"))closePlayerHistory();else if($("managerProfileModal")?.classList.contains("open"))closeManagerProfile();else if($("managerDirectoryModal")?.classList.contains("open"))closeManagerDirectory()});
 window.addEventListener("popstate",openManagerFromHash);
 load().then?.(()=>openManagerFromHash());
