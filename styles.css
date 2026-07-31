@@ -1030,3 +1030,186 @@ table,
     display:none!important;
   }
 }
+
+/* =========================================================
+   V3.1.3 — Market reaction + mobile profile polish
+   ========================================================= */
+
+/* Compact, clearly formatted player-interest control. */
+.player-interest-control{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+.player-interest-control small{
+  max-width:210px;
+  color:var(--muted);
+  font-size:10px;
+  line-height:1.3;
+  font-weight:600;
+}
+.player-star-btn{
+  display:inline-grid!important;
+  place-items:center!important;
+  flex:0 0 30px;
+  width:30px!important;
+  height:30px!important;
+  min-width:30px!important;
+  min-height:30px!important;
+  padding:0!important;
+  border-radius:8px!important;
+  border:1px solid rgba(53,231,131,.35)!important;
+  background:#0c1415!important;
+  color:#8f9aaa!important;
+  font-size:18px!important;
+  line-height:1!important;
+  box-shadow:none!important;
+}
+.player-star-btn.active{
+  color:#f1c95b!important;
+  border-color:rgba(241,201,91,.65)!important;
+  background:rgba(241,201,91,.08)!important;
+}
+
+@media(max-width:620px){
+  /* Prevent the manager profile from retaining desktop width on mobile. */
+  .manager-profile-modal,
+  .manager-profile-sheet,
+  .manager-profile-content{
+    width:100%!important;
+    max-width:100vw!important;
+    box-sizing:border-box!important;
+    overflow-x:hidden!important;
+  }
+  .manager-profile-sheet{
+    inset:0!important;
+    margin:0!important;
+    border-radius:0!important;
+  }
+  .manager-profile-content{
+    padding:18px 14px calc(34px + env(safe-area-inset-bottom,0px))!important;
+  }
+  .manager-profile-hero{
+    display:grid!important;
+    grid-template-columns:72px minmax(0,1fr)!important;
+    align-items:start!important;
+    gap:14px!important;
+    width:100%!important;
+    padding:8px 52px 20px 0!important;
+  }
+  .manager-profile-avatar{
+    width:72px!important;
+    height:72px!important;
+    min-width:72px!important;
+    border-radius:18px!important;
+  }
+  .manager-profile-hero>div:nth-child(2),
+  .profile-name-line{
+    min-width:0!important;
+    max-width:100%!important;
+  }
+  .profile-name-line{
+    display:block!important;
+  }
+  .profile-name-line h2,
+  .manager-profile-hero h2{
+    display:block!important;
+    width:100%!important;
+    max-width:100%!important;
+    margin:4px 0 8px!important;
+    font-size:clamp(28px,9.5vw,43px)!important;
+    line-height:.98!important;
+    letter-spacing:-.045em!important;
+    overflow-wrap:anywhere!important;
+    word-break:break-word!important;
+    white-space:normal!important;
+  }
+  .manager-profile-hero p{
+    max-width:100%!important;
+    font-size:15px!important;
+    line-height:1.35!important;
+  }
+  .profile-badge-icons{
+    margin-top:10px!important;
+  }
+  .manager-profile-stat-grid,
+  .manager-profile-grid{
+    width:100%!important;
+    max-width:100%!important;
+    grid-template-columns:1fr!important;
+  }
+  .manager-profile-stat-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:10px!important;
+  }
+  .manager-profile-card{
+    min-width:0!important;
+    width:100%!important;
+    max-width:100%!important;
+    box-sizing:border-box!important;
+  }
+
+  /* Badge and recent-result explanations become viewport-safe bottom sheets. */
+  .profile-badge-pop>div,
+  .profile-form-result>div{
+    position:fixed!important;
+    z-index:1800!important;
+    left:14px!important;
+    right:14px!important;
+    top:auto!important;
+    bottom:calc(env(safe-area-inset-bottom,0px) + 18px)!important;
+    width:auto!important;
+    max-width:none!important;
+    max-height:min(46vh,360px)!important;
+    overflow:auto!important;
+    transform:none!important;
+    margin:0!important;
+    padding:16px 18px!important;
+    border-radius:14px!important;
+    box-sizing:border-box!important;
+    overflow-wrap:anywhere!important;
+    white-space:normal!important;
+  }
+  .profile-form-result>div{
+    font-size:13px!important;
+    line-height:1.45!important;
+  }
+  .profile-form-result>div small,
+  .profile-badge-pop>div small{
+    display:block!important;
+    margin-top:6px!important;
+    font-size:12px!important;
+    line-height:1.45!important;
+  }
+
+  .player-history-hero{
+    display:grid!important;
+    grid-template-columns:58px minmax(0,1fr)!important;
+    padding-right:46px!important;
+  }
+  .player-history-main,
+  .player-title-row{
+    min-width:0!important;
+  }
+  .player-title-row{
+    display:block!important;
+  }
+  .player-title-row h2{
+    overflow-wrap:anywhere!important;
+    word-break:break-word!important;
+  }
+  .player-interest-control{
+    display:flex!important;
+    margin-top:9px;
+    align-items:center;
+  }
+  .player-interest-control small{
+    max-width:190px;
+    font-size:9px;
+  }
+  .player-current-average{
+    grid-column:1/-1!important;
+    margin-top:10px!important;
+  }
+}

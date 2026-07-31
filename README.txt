@@ -1,6 +1,6 @@
-IMO DYNASTY V3.1.2 — Minimal CSS Polish Pass
+IMO DYNASTY V3.1.3 — Minimal CSS Polish Pass
 
-V3.1.2 UPDATES
+V3.1.3 UPDATES
 
 - Fixed manager badge and recent-result detail popovers being clipped on mobile.
 - Mobile popovers now open as centred, safe-area-aware bottom cards within the viewport.
