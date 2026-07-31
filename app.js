@@ -1,5 +1,5 @@
-/* IMO DYNASTY V3.2.1 — Exact League-Scored Season Averages */
-const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
+/* IMO DYNASTY V3.2.2 — Bulk Sleeper Season Averages */
+const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
 // traded historical pick into the player it became. Sleeper's drafter/current
@@ -1068,30 +1068,63 @@ async function loadPlayerSeasonAverage(playerId,season,scoring){
   const fallback=await loadPlayerGameLogAverage(playerId,season,scoring);
   return fallback?{average:fallback.average,totalFantasyPoints:fallback.points,gamesPlayed:fallback.games,source:"game-log-fallback"}:null;
 }
-async function loadSeasonTotalAverages(){
-  const playerIds=relevantPlayerIds();
-  const bySeason={},meta={};
-  for(const bundle of state.bundles){
-    const season=String(bundle.league.season);
-    bySeason[season]={};
-    meta[season]={};
-    const scoring=bundle.league.scoring_settings||{};
-    const rows=await limitedMap(playerIds,3,async id=>{
-      const result=await loadPlayerSeasonAverage(id,season,scoring);
-      return result?{id,...result}:null;
-    });
-    rows.filter(Boolean).forEach(row=>{
-      bySeason[season][row.id]=row.average;
-      meta[season][row.id]={
-        gamesPlayed:row.gamesPlayed,
-        totalFantasyPoints:row.totalFantasyPoints,
-        average:row.average,
-        source:row.source||"unknown"
-      };
-    });
+async function loadBulkSeasonPayload(season){
+  const positions=['PG','SG','SF','PF','C','G','F'];
+  const query=new URLSearchParams({season_type:'regular',order_by:'pts_std'});
+  positions.forEach(position=>query.append('position[]',position));
+  const url=`${CONFIG.bulkStatsApi}/${encodeURIComponent(season)}?${query.toString()}`;
+  return await statsJSON(url);
+}
+function bulkSeasonRows(payload){
+  if(Array.isArray(payload))return payload;
+  if(Array.isArray(payload?.data))return payload.data;
+  if(Array.isArray(payload?.players))return payload.players;
+  if(Array.isArray(payload?.stats))return payload.stats;
+  if(payload&&typeof payload==='object'){
+    return Object.entries(payload).map(([key,value])=>{
+      if(value&&typeof value==='object')return {...value,player_id:value.player_id??value.playerId??key};
+      return null;
+    }).filter(Boolean);
   }
+  return [];
+}
+function bulkRowPlayerId(row){
+  return String(row?.player_id??row?.playerId??row?.id??row?.metadata?.player_id??'');
+}
+function bulkRowStats(row){
+  if(row?.stats&&typeof row.stats==='object')return row.stats;
+  if(row?.stat&&typeof row.stat==='object')return row.stat;
+  return row||{};
+}
+async function loadSeasonTotalAverages(){
+  const rostered=new Set(relevantPlayerIds().map(String));
+  const bySeason={},meta={};
+  const seasonJobs=state.bundles.map(async bundle=>{
+    const season=String(bundle.league.season),scoring=bundle.league.scoring_settings||{};
+    const payload=await loadBulkSeasonPayload(season);
+    const rows=bulkSeasonRows(payload);
+    const averages={},seasonMeta={};
+    for(const row of rows){
+      const id=bulkRowPlayerId(row);
+      if(!id||!rostered.has(id))continue;
+      const stats=bulkRowStats(row),gamesPlayed=Number(stats?.gp),totalFantasyPoints=scoreSeasonStats(stats,scoring);
+      if(!Number.isFinite(gamesPlayed)||gamesPlayed<=0||!Number.isFinite(totalFantasyPoints))continue;
+      const average=totalFantasyPoints/gamesPlayed;
+      averages[id]=average;
+      seasonMeta[id]={gamesPlayed,totalFantasyPoints,average,source:'sleeper-bulk-season'};
+    }
+    console.info(`[IMO Dynasty] ${season} bulk averages loaded: ${Object.keys(averages).length}`);
+    if(season==='2025'){
+      const kp=seasonMeta['2009'];
+      console.info('[IMO Dynasty] Kevin Porter Jr 2025:',kp||'not found in bulk response');
+    }
+    return {season,averages,seasonMeta,rowCount:rows.length};
+  });
+  const results=await Promise.all(seasonJobs);
+  results.forEach(({season,averages,seasonMeta})=>{bySeason[season]=averages;meta[season]=seasonMeta});
   state.seasonTotalAverages=bySeason;
   state.seasonTotalMeta=meta;
+  return results;
 }
 
 async function loadSeason(id){
@@ -1202,15 +1235,14 @@ async function load(){
   if(refresh)refresh.disabled=true;
   if(status)status.textContent='Connecting to Sleeper…';
   try{
-    const [bundles,players,exactAverages]=await Promise.all([
+    const [bundles,players]=await Promise.all([
       Promise.all(CONFIG.leagueIds.map(loadSeason)),
-      getJSON(`${CONFIG.api}/players/nba`,true),
-      getJSON(`season-averages.json`,true)
+      getJSON(`${CONFIG.api}/players/nba`,true)
     ]);
     const valid=(bundles||[]).filter(Boolean);
     const cur=valid.find(x=>String(x.league.league_id)===CONFIG.currentLeagueId)||valid[0];
     if(!cur)throw new Error('No Sleeper league data could be loaded');
-    state.exactSeasonAverages=exactAverages||{};
+    state.exactSeasonAverages={};
     state.bundles=valid;
     state.league=cur.league;
     state.currentUsers=cur.users||[];
@@ -1221,6 +1253,8 @@ async function load(){
     const unique=new Map();
     valid.flatMap(x=>x.trades||[]).forEach(t=>unique.set(t.transaction_id||`${t.league_id}-${t.created}`,t));
     state.trades=[...unique.values()].sort((a,b)=>(b.created||0)-(a.created||0));
+    if(status)status.textContent='Loading exact Sleeper season averages…';
+    await loadSeasonTotalAverages();
     prepareModels();
     resetComputedCaches();
     state.profilePrewarmQueued=false;
@@ -1231,21 +1265,8 @@ async function load(){
       else setTimeout(fn,900);
     };
     runWhenIdle(()=>loadTickerGameLogs().catch(error=>console.warn("Ticker game logs unavailable:",error)),1800);
-    if(!state.seasonTotalsLoading){
-      state.seasonTotalsLoading=true;
-      runWhenIdle(()=>loadSeasonTotalAverages().then(()=>{
-        prepareModels();
-        resetComputedCaches();
-        safeRender("power rankings",renderPower);
-        safeRender("odds",renderOdds);
-        safeRender("trade of the week",renderTradeWeek);
-        safeRender("recent trades",renderRecent);
-        safeRender("biggest trades",renderBiggestTrades);
-        safeRender("voting",renderVoting);
-        const averageCount=Object.values(state.seasonTotalMeta||{}).reduce((sum,season)=>sum+Object.keys(season||{}).length,0);
-        if(status)status.textContent=`Live · ${valid.length} seasons loaded · ${averageCount} player season averages`;
-      }).catch(error=>console.warn('Season totals unavailable; continuing with loaded data:',error)).finally(()=>{state.seasonTotalsLoading=false}),3200);
-    }
+    const averageCount=Object.values(state.seasonTotalMeta||{}).reduce((sum,season)=>sum+Object.keys(season||{}).length,0);
+    if(status)status.textContent=`Live · ${valid.length} seasons loaded · ${averageCount} exact player averages`;
   }catch(e){
     console.error('IMO DYNASTY load failed:',e);
     if(status)status.textContent='Could not load Sleeper data';

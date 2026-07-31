@@ -349,3 +349,11 @@ V3.2.1 — Exact league-scored season averages
 - Supports the configured 2024, 2025 and current 2026 league IDs automatically.
 - Uses game-log reconstruction only as a fallback when aggregate stats are unavailable.
 - Removed the Zach Edey hard-coded override so Sleeper is the single source of truth.
+
+V3.2.2 — Bulk Sleeper Season Averages
+- Loads one bulk Sleeper NBA regular-season stats payload per season.
+- Applies that season league's scoring_settings to Sleeper aggregate stats.
+- Divides by Sleeper gp to produce league-specific FPTS/game.
+- Loads exact averages before the initial dashboard render.
+- Removes the local season-averages.json dependency from runtime.
+- Console diagnostics include the number of bulk averages loaded and Kevin Porter Jr's 2025 result.
