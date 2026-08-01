@@ -1744,3 +1744,23 @@ body.manager-picks-open{overflow:hidden}
   .h2h-main-event .h2h-key-player{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px}.h2h-main-event .h2h-key-avatar{width:52px;height:52px}.h2h-main-event .h2h-key-player-link{font-size:11px;text-align:center}.h2h-main-event .h2h-key-player>strong{text-align:center}
   .h2h-line strong,.h2h-rivalry strong{font-size:11px!important}.h2h-line span,.h2h-rivalry span{font-size:9px!important}
 }
+
+/* V3.3.17 — tabbed manager profiles */
+.manager-profile-tabs{position:sticky;top:0;z-index:18;display:flex;gap:8px;margin:14px 0 18px;padding:8px;border:1px solid rgba(148,163,184,.16);border-radius:14px;background:rgba(5,8,20,.92);backdrop-filter:blur(18px);box-shadow:0 10px 28px rgba(0,0,0,.22);overflow-x:auto;scrollbar-width:none}
+.manager-profile-tabs::-webkit-scrollbar{display:none}
+.manager-profile-tab{appearance:none;flex:1 0 auto;min-width:118px;padding:11px 16px;border:1px solid transparent;border-radius:10px;background:transparent;color:#8f9bb0;font:900 10px/1.1 inherit;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:background .18s ease,color .18s ease,border-color .18s ease,transform .18s ease}
+.manager-profile-tab:hover{color:#e7eaf0;background:rgba(139,92,246,.08)}
+.manager-profile-tab.active{color:#fff;background:linear-gradient(135deg,rgba(124,58,237,.88),rgba(99,102,241,.72));border-color:rgba(167,139,250,.48);box-shadow:0 8px 22px rgba(91,33,182,.22)}
+.manager-profile-tab:active{transform:translateY(1px)}
+.manager-profile-tab-panel{display:none;animation:managerTabIn .2s ease}
+.manager-profile-tab-panel.active{display:block}
+.manager-profile-tab-panel[hidden]{display:none!important}
+.manager-profile-tab-panel>.manager-profile-stat-grid,.manager-profile-tab-panel>.manager-grades-row{margin-left:0;margin-right:0}
+.manager-profile-tab-panel .manager-profile-grid{margin-top:0}
+.gm-archetype-summary .gm-scout-report{margin-top:12px}
+@keyframes managerTabIn{from{opacity:.35;transform:translateY(5px)}to{opacity:1;transform:none}}
+@media(max-width:680px){
+  .manager-profile-tabs{margin:10px -8px 14px;padding:7px;border-radius:12px;top:0}
+  .manager-profile-tab{flex:0 0 auto;min-width:max-content;padding:10px 14px;font-size:9px}
+  .manager-profile-tab-panel .manager-profile-grid{grid-template-columns:1fr}
+}
