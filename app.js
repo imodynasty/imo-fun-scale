@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.11 — Canonical Current Draft Pick Ownership */
+/* IMO DYNASTY V3.3.12 — Canonical Current Draft Pick Ownership */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -614,7 +614,7 @@ async function buildManagerShareCardCanvas(data){
 }
 async function downloadManagerShareCard(managerId,button){
   const data=managerShareCardData(managerId);if(!data)return;
-  const buttons=document.querySelectorAll(`[data-download-manager-share-card="${CSS.escape(String(managerId))}"]`),reset=label=>buttons.forEach(btn=>{btn.disabled=false;btn.classList.remove('is-loading','is-success','is-error');btn.textContent=label});
+  const buttons=document.querySelectorAll(`[data-download-manager-share-card="${CSS.escape(String(managerId))}"]`),reset=()=>buttons.forEach(btn=>{btn.disabled=false;btn.classList.remove('is-loading','is-success','is-error');btn.textContent='↓'});
   buttons.forEach(btn=>{btn.disabled=true;btn.classList.remove('is-success','is-error');btn.classList.add('is-loading');btn.textContent='…'});
   try{const canvas=await buildManagerShareCardCanvas(data);const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('PNG export failed')),'image/png'));const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`imo-dynasty-${fileSafeName(data.name)}-share-card.png`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);buttons.forEach(btn=>{btn.disabled=false;btn.classList.remove('is-loading','is-error');btn.classList.add('is-success');btn.textContent='✓'});setTimeout(()=>reset('🖼️'),1600)}catch(error){console.error('Failed to download manager share card',error);buttons.forEach(btn=>{btn.disabled=false;btn.classList.remove('is-loading','is-success');btn.classList.add('is-error');btn.textContent='!'});setTimeout(()=>reset('🖼️'),1800)}}
 function favouriteTradePartners(id){const all=managerTrades(id),counts={};all.forEach(t=>mids(t).filter(x=>x!==String(id)).forEach(x=>counts[x]=(counts[x]||0)+1));return Object.entries(counts).map(([partner,count])=>({partner,count,percent:all.length?count/all.length*100:0})).sort((a,b)=>b.count-a.count).slice(0,7)}
@@ -757,16 +757,18 @@ function managerScoutReport(name,r,primary,secondary){
 }
 function managerTraits(r,picks,avgAge){const traits=[];if(r.trade>=75)traits.push('Loves trading');if(r.trade<=35)traits.push('Patient with the roster');if(r.youth>=75)traits.push('Invests heavily in youth');if(r.winNow>=75)traits.push('Aggressive win-now build');if(r.draft>=75)traits.push(`Controls premium draft capital`);if(picks.firsts>=5)traits.push(`Holds ${picks.firsts} future firsts`);if(r.waiver>=75)traits.push('Works the waiver wire');if(r.waiver<=35)traits.push('Rarely churns the roster');if(r.risk>=75)traits.push('Comfortable with blockbuster risk');if(r.asset>=75)traits.push('Strong asset manager');if(r.star>=75)traits.push('Collects elite talent');if(avgAge>=29)traits.push('Prefers proven veterans');return traits.slice(0,5)}
 function managerWeaknesses(managerId,r,picks,avgAge){
-  const id=String(managerId),seasonTrades=currentSeasonTrades().filter(t=>mids(t).includes(id)),careerTrades=managerTrades(id),roster=managerRosterPlayers(id,'2025'),rosterIds=new Set(roster.map(x=>String(x.id))),leagueSize=Math.max(1,state.managers.size);
+  const id=String(managerId),seasonTrades=currentSeasonTrades().filter(t=>mids(t).includes(id)),careerTrades=managerTrades(id),roster=managerRosterPlayers(id,'2025');
   const seasonCounts=[...state.managers.keys()].map(mid=>currentSeasonTrades().filter(t=>mids(t).includes(String(mid))).length),seasonAvg=seasonCounts.reduce((a,b)=>a+b,0)/Math.max(1,seasonCounts.length),seasonCount=seasonTrades.length;
   const waiverCounts=[...state.managers.keys()].map(mid=>managerWaiverMoves(mid)),waiverAvg=waiverCounts.reduce((a,b)=>a+b,0)/Math.max(1,waiverCounts.length),waivers=managerWaiverMoves(id);
   const top8=roster.slice(0,8).map(x=>String(x.id)),top8Moved=top8.filter(pid=>careerTrades.some(t=>Object.prototype.hasOwnProperty.call(t.drops||{},pid))).length,leagueTop8MoveRates=[...state.managers.keys()].map(mid=>{const rr=managerRosterPlayers(mid,'2025').slice(0,8).map(x=>String(x.id)),tt=managerTrades(mid);return rr.length?rr.filter(pid=>tt.some(t=>Object.prototype.hasOwnProperty.call(t.drops||{},pid))).length/rr.length:0}),leagueTop8Avg=leagueTop8MoveRates.reduce((a,b)=>a+b,0)/Math.max(1,leagueTop8MoveRates.length),top8MoveRate=top8.length?top8Moved/top8.length:0;
   const values=roster.map(x=>Number(x.avg)||0).filter(x=>x>0),top3=values.slice(0,3).reduce((a,b)=>a+b,0),total=values.reduce((a,b)=>a+b,0),starShare=total?top3/total:0,midDepth=values.slice(5,12),midDepthAvg=midDepth.length?midDepth.reduce((a,b)=>a+b,0)/midDepth.length:0;
   const allMidDepth=[...state.managers.keys()].map(mid=>{const vals=managerRosterPlayers(mid,'2025').map(x=>Number(x.avg)||0).filter(x=>x>0).slice(5,12);return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0}),leagueMidDepth=allMidDepth.reduce((a,b)=>a+b,0)/Math.max(1,allMidDepth.length);
   const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,power=modelRows(state.modelBundle,through,'power').find(x=>String(x.id)===id),standingGap=power?Number(power.standingRank)-Number(power.rank):0;
+  const current=currentBundle(),currentWeeks=current?meaningfulWeeks(current):[],averageSeason=currentWeeks.length?String(current.league?.season||'2026'):String([...state.bundles].filter(b=>meaningfulWeeks(b).length).sort((a,b)=>Number(b.league?.season)-Number(a.league?.season))[0]?.league?.season||'2025'),leagueAverages=seasonAverageMap(averageSeason),top12Ids=new Set(Object.entries(leagueAverages).filter(([,avg])=>Number(avg)>0).sort((a,b)=>Number(b[1])-Number(a[1])).slice(0,12).map(([pid])=>String(pid))),currentRosterIds=new Set((state.managers.get(id)?.roster?.players||[]).map(String)),ownsTop12=[...top12Ids].some(pid=>currentRosterIds.has(pid));
   const candidates=[];
   const add=(score,label)=>{if(Number.isFinite(score)&&score>0)candidates.push({score,label})};
-  add(seasonAvg>0?50+Math.max(0,(seasonAvg-seasonCount)/seasonAvg)*45:45,'Needs to trade more');
+  const trulyInactive=seasonAvg>=1&&r.trade<35&&seasonCount<=Math.max(0,Math.floor(seasonAvg*.25));
+  add(trulyInactive?82+Math.min(12,(seasonAvg-seasonCount)*5):0,'Needs to trade more');
   add(top8.length&&top8MoveRate+0.08<leagueTop8Avg?62+(leagueTop8Avg-top8MoveRate)*70:0,'Values own assets too much');
   add(seasonAvg>0&&seasonCount>seasonAvg*1.75?58+Math.min(35,(seasonCount/seasonAvg-1.75)*25):0,'Too quick to reshuffle');
   add(r.waiver<55?55+(55-r.waiver)*.7+(waiverAvg>waivers?10:0):0,'Leaves value on the waiver wire');
@@ -775,7 +777,7 @@ function managerWeaknesses(managerId,r,picks,avgAge){
   add(avgAge<=24.5&&r.winNow<55?76+(55-r.winNow)*.35:0,'Youth has not converted yet');
   add(avgAge>25.5&&avgAge<28.5&&r.winNow<58&&r.draft<58?72+(58-Math.max(r.winNow,r.draft))*.35:0,'Caught between timelines');
   add(starShare>=.48?64+(starShare-.48)*120:0,'Too reliant on star power');
-  add(r.star<48?76+(48-r.star)*.45:0,'Roster lacks a clear centrepiece');
+  add(!ownsTop12?82+Math.max(0,55-r.star)*.35:0,'Roster lacks a clear centrepiece');
   add(leagueMidDepth>0&&midDepthAvg<leagueMidDepth*.88?68+(1-midDepthAvg/leagueMidDepth)*90:0,'Middle of the roster lacks depth');
   add(standingGap>=2?72+standingGap*6:0,'Results lag behind the roster');
   add(standingGap<=-2?68+Math.abs(standingGap)*5:0,'Overperforming fragile foundations');
@@ -783,11 +785,12 @@ function managerWeaknesses(managerId,r,picks,avgAge){
   add(r.asset<48?66+(48-r.asset)*.55:0,'Asset value leaks through trades');
   add(r.winNow<45&&r.draft<55?70+(45-r.winNow)*.45:0,'Limited margin for error');
   const fallback=[
-    {score:64+(100-r.trade)*.18,label:'Needs to trade more'},
     {score:63+(100-r.waiver)*.16,label:'Leaves value on the waiver wire'},
-    {score:61+(100-r.star)*.14,label:'Roster lacks a clear centrepiece'},
     {score:60+(100-r.asset)*.13,label:'Asset value leaks through trades'},
-    {score:59+(100-r.winNow)*.12,label:'Needs more reliable production'}
+    {score:59+(100-r.winNow)*.12,label:'Needs more reliable production'},
+    {score:58+Math.abs(60-r.youth)*.10,label:'Roster timeline needs more clarity'},
+    {score:57+(100-r.risk)*.08,label:'Could be more decisive in the market'},
+    {score:56+(100-r.star)*.08,label:'Needs another dependable difference-maker'}
   ];
   const ranked=[...candidates,...fallback].sort((a,b)=>b.score-a.score);
   const unique=[];for(const item of ranked){if(!unique.some(x=>x.label===item.label))unique.push(item);if(unique.length>=5)break}
@@ -973,7 +976,7 @@ function managerProfileHTML(managerId){
   const partnerRows=partners.map((p,i)=>`<div class="profile-partner-row"><b>${i+1}</b><button class="manager-profile-link" type="button" data-manager-id="${esc(p.partner)}">${esc(managerName(p.partner))}</button><span>${p.count} trades · ${p.percent.toFixed(0)}%</span></div>`).join("")||'<div class="profile-empty">No trade partners yet.</div>';
   const h2hRows=headToHead.map(r=>{const recordClass=r.wins>r.losses?"winning":r.wins<r.losses?"losing":"even",drawText=r.draws?` <span>(${r.draws} ${r.draws===1?"draw":"draws"})</span>`:"";return `<div class="profile-h2h-row ${recordClass}"><button class="manager-profile-link" type="button" data-manager-id="${esc(r.oppId)}">vs ${esc(managerName(r.oppId))}</button><strong>${r.wins}-${r.losses}${drawText}</strong><small>${r.games} games · includes finals</small></div>`}).join("")||'<div class="profile-empty">No completed head-to-head matchups.</div>';
   const eligibleRows=eligible.map(p=>`<div class="eligible-player">${playerLink(p.id,p.name)}<span>${p.avg.toFixed(2)}</span></div>`).join("")||'<div class="profile-empty">No current top-50 players.</div>';
-  return `<header class="manager-profile-hero"><div class="manager-profile-avatar">${managerAvatar}</div><div class="manager-profile-hero-copy"><div class="manager-profile-kicker"><span class="eyebrow">TEAM PROFILE</span><div class="manager-profile-hero-actions"><button type="button" class="archetype-guide-btn manager-profile-utility-btn archetype-guide-btn-desktop" data-open-archetype-guide data-current-archetype="${esc(gm.primary.name)}" data-secondary-archetype="${esc(gm.secondary.name)}" aria-label="Open archetype guide" title="Archetype Guide">📖</button><button type="button" class="manager-share-card-btn manager-share-card-btn-desktop" data-download-manager-share-card="${esc(id)}" aria-label="Download manager share card PNG" title="Download PNG">🖼️</button></div></div><div class="profile-name-line">${managerSwitcherHTML(id)}<div class="profile-badge-icons">${badgeIconsHTML(badges)}</div></div><p>Current franchise overview and league history</p><div class="manager-profile-mobile-actions"><button type="button" class="archetype-guide-btn manager-profile-utility-btn archetype-guide-btn-mobile" data-open-archetype-guide data-current-archetype="${esc(gm.primary.name)}" data-secondary-archetype="${esc(gm.secondary.name)}" aria-label="Open archetype guide" title="Archetype Guide">📖</button><button type="button" class="manager-share-card-btn manager-share-card-btn-mobile" data-download-manager-share-card="${esc(id)}" aria-label="Download manager share card PNG" title="Download PNG">🖼️</button></div></div></header>
+  return `<header class="manager-profile-hero"><div class="manager-profile-avatar">${managerAvatar}</div><div class="manager-profile-hero-copy"><div class="manager-profile-kicker"><span class="eyebrow">TEAM PROFILE</span><div class="manager-profile-hero-actions"><button type="button" class="archetype-guide-btn manager-profile-utility-btn archetype-guide-btn-desktop" data-open-archetype-guide data-current-archetype="${esc(gm.primary.name)}" data-secondary-archetype="${esc(gm.secondary.name)}" aria-label="Open archetype guide" title="Archetype Guide">📖</button><button type="button" class="manager-share-card-btn manager-share-card-btn-desktop" data-download-manager-share-card="${esc(id)}" aria-label="Download manager share card PNG" title="Download PNG">↓</button></div></div><div class="profile-name-line">${managerSwitcherHTML(id)}<div class="profile-badge-icons">${badgeIconsHTML(badges)}</div></div><p>Current franchise overview and league history</p><div class="manager-profile-mobile-actions"><button type="button" class="archetype-guide-btn manager-profile-utility-btn archetype-guide-btn-mobile" data-open-archetype-guide data-current-archetype="${esc(gm.primary.name)}" data-secondary-archetype="${esc(gm.secondary.name)}" aria-label="Open archetype guide" title="Archetype Guide">📖</button><button type="button" class="manager-share-card-btn manager-share-card-btn-mobile" data-download-manager-share-card="${esc(id)}" aria-label="Download manager share card PNG" title="Download PNG">↓</button></div></div></header>
   <div class="manager-profile-stat-grid"><div><span>Power rank</span><strong class="power-rank-with-move">${power?`#${power.rank}`:"—"}${power&&powerMovement.move?` <em class="rank-move ${powerMovement.move>0?'up':'down'}">${powerMovement.move>0?'↑':'↓'}${Math.abs(powerMovement.move)}</em>`:""}</strong></div><div><span>Ladder</span><strong>${power?`#${power.standingRank}`:"—"}</strong></div><div><span>Record</span><strong>${form.games?`${form.wins}-${form.games-form.wins}`:"—"}</strong></div><div><span>Championship odds</span><strong>${odds?championshipOddsLabel(odds):"—"}</strong></div><div><span>Team average age</span><strong>${avgAge?avgAge.toFixed(1):"—"}</strong></div><div><span>Career trades</span><strong>${trades.length}</strong></div></div>
   ${managerGrades}
   <div class="manager-profile-grid">
@@ -1166,7 +1169,7 @@ function closeManagerDirectory(){const modal=$("managerDirectoryModal");if(!moda
 
 function managerProfileCacheKey(managerId){return `${String(managerId)}|${String(state.profileAverageSeason||"")}`}
 function managerProfileDataFingerprint(){const latest=state.trades?.[0]?.created||0,current=state.modelBundle?.league?.season||'';return `${CONFIG.currentLeagueId}|${current}|${latest}|${state.trades.length}|${state.managers.size}|${state.draftSelections.length}`}
-function managerProfileSessionKey(key){return `imo-profile-v3311-canonical-pick-ownership|${managerProfileDataFingerprint()}|${key}`}
+function managerProfileSessionKey(key){return `imo-profile-v3312-weakness-rules-typography|${managerProfileDataFingerprint()}|${key}`}
 function cachedManagerProfileHTML(managerId){
   const key=managerProfileCacheKey(managerId);
   if(state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
