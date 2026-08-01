@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.12 — Canonical Current Draft Pick Ownership */
+/* IMO DYNASTY V3.3.13 — Manager Utility Bar + 2025 Draft Attribution */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -976,7 +976,7 @@ function managerProfileHTML(managerId){
   const partnerRows=partners.map((p,i)=>`<div class="profile-partner-row"><b>${i+1}</b><button class="manager-profile-link" type="button" data-manager-id="${esc(p.partner)}">${esc(managerName(p.partner))}</button><span>${p.count} trades · ${p.percent.toFixed(0)}%</span></div>`).join("")||'<div class="profile-empty">No trade partners yet.</div>';
   const h2hRows=headToHead.map(r=>{const recordClass=r.wins>r.losses?"winning":r.wins<r.losses?"losing":"even",drawText=r.draws?` <span>(${r.draws} ${r.draws===1?"draw":"draws"})</span>`:"";return `<div class="profile-h2h-row ${recordClass}"><button class="manager-profile-link" type="button" data-manager-id="${esc(r.oppId)}">vs ${esc(managerName(r.oppId))}</button><strong>${r.wins}-${r.losses}${drawText}</strong><small>${r.games} games · includes finals</small></div>`}).join("")||'<div class="profile-empty">No completed head-to-head matchups.</div>';
   const eligibleRows=eligible.map(p=>`<div class="eligible-player">${playerLink(p.id,p.name)}<span>${p.avg.toFixed(2)}</span></div>`).join("")||'<div class="profile-empty">No current top-50 players.</div>';
-  return `<header class="manager-profile-hero"><div class="manager-profile-avatar">${managerAvatar}</div><div class="manager-profile-hero-copy"><div class="manager-profile-kicker"><span class="eyebrow">TEAM PROFILE</span><div class="manager-profile-hero-actions"><button type="button" class="archetype-guide-btn manager-profile-utility-btn archetype-guide-btn-desktop" data-open-archetype-guide data-current-archetype="${esc(gm.primary.name)}" data-secondary-archetype="${esc(gm.secondary.name)}" aria-label="Open archetype guide" title="Archetype Guide">📖</button><button type="button" class="manager-share-card-btn manager-share-card-btn-desktop" data-download-manager-share-card="${esc(id)}" aria-label="Download manager share card PNG" title="Download PNG">↓</button></div></div><div class="profile-name-line">${managerSwitcherHTML(id)}<div class="profile-badge-icons">${badgeIconsHTML(badges)}</div></div><p>Current franchise overview and league history</p><div class="manager-profile-mobile-actions"><button type="button" class="archetype-guide-btn manager-profile-utility-btn archetype-guide-btn-mobile" data-open-archetype-guide data-current-archetype="${esc(gm.primary.name)}" data-secondary-archetype="${esc(gm.secondary.name)}" aria-label="Open archetype guide" title="Archetype Guide">📖</button><button type="button" class="manager-share-card-btn manager-share-card-btn-mobile" data-download-manager-share-card="${esc(id)}" aria-label="Download manager share card PNG" title="Download PNG">↓</button></div></div></header>
+  return `<div class="manager-profile-top-tools" aria-label="Manager profile tools"><button type="button" class="manager-profile-top-tool" data-open-archetype-guide data-current-archetype="${esc(gm.primary.name)}" data-secondary-archetype="${esc(gm.secondary.name)}">Archetypes</button><button type="button" class="manager-profile-top-tool manager-share-card-btn" data-download-manager-share-card="${esc(id)}" aria-label="Download manager snapshot PNG" title="Download manager snapshot">↓</button></div><header class="manager-profile-hero"><div class="manager-profile-avatar">${managerAvatar}</div><div class="manager-profile-hero-copy"><div class="manager-profile-kicker"><span class="eyebrow">TEAM PROFILE</span></div><div class="profile-name-line">${managerSwitcherHTML(id)}<div class="profile-badge-icons">${badgeIconsHTML(badges)}</div></div><p>Current franchise overview and league history</p></div></header>
   <div class="manager-profile-stat-grid"><div><span>Power rank</span><strong class="power-rank-with-move">${power?`#${power.rank}`:"—"}${power&&powerMovement.move?` <em class="rank-move ${powerMovement.move>0?'up':'down'}">${powerMovement.move>0?'↑':'↓'}${Math.abs(powerMovement.move)}</em>`:""}</strong></div><div><span>Ladder</span><strong>${power?`#${power.standingRank}`:"—"}</strong></div><div><span>Record</span><strong>${form.games?`${form.wins}-${form.games-form.wins}`:"—"}</strong></div><div><span>Championship odds</span><strong>${odds?championshipOddsLabel(odds):"—"}</strong></div><div><span>Team average age</span><strong>${avgAge?avgAge.toFixed(1):"—"}</strong></div><div><span>Career trades</span><strong>${trades.length}</strong></div></div>
   ${managerGrades}
   <div class="manager-profile-grid">
@@ -1710,7 +1710,17 @@ async function loadSeason(id){
     const season=String(draft?.season||league.season);
     const teamCount=Number(draft?.settings?.teams)||Number(league?.total_rosters)||rosters.length||8;
     const draftType=String(draft?.type||draft?.settings?.type||'linear').toLowerCase();
-    const slotToRoster=draft?.slot_to_roster_id||draft?.metadata?.slot_to_roster_id||{};
+    // Sleeper draft payloads are not consistent across seasons. Newer drafts
+    // may expose slot_to_roster_id, while older drafts (including 2025) often
+    // expose draft_order as user_id -> slot. Build one canonical slot ->
+    // ORIGINAL roster_id map so historical traded picks resolve to the player
+    // selected with that exact franchise pick.
+    const slotToRoster={...(draft?.slot_to_roster_id||draft?.metadata?.slot_to_roster_id||{})};
+    const rosterByOwner=Object.fromEntries(rosters.filter(r=>r.owner_id!=null).map(r=>[String(r.owner_id),String(r.roster_id)]));
+    Object.entries(draft?.draft_order||draft?.metadata?.draft_order||{}).forEach(([userId,slot])=>{
+      const rosterId=rosterByOwner[String(userId)];
+      if(rosterId!=null&&slot!=null)slotToRoster[String(slot)]=String(rosterId);
+    });
     picks.forEach(p=>{
       if(p.player_id==null||p.round==null)return;
       const round=Number(p.round);
