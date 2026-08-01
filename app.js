@@ -720,23 +720,48 @@ function managerScoutReport(name,r,primary,secondary){
   return`${identity} ${detail[lead]} ${support!==lead?detail[support]:''} ${transition}`.replace(/\s+/g,' ').trim()
 }
 function managerTraits(r,picks,avgAge){const traits=[];if(r.trade>=75)traits.push('Loves trading');if(r.trade<=35)traits.push('Patient with the roster');if(r.youth>=75)traits.push('Invests heavily in youth');if(r.winNow>=75)traits.push('Aggressive win-now build');if(r.draft>=75)traits.push(`Controls premium draft capital`);if(picks.firsts>=5)traits.push(`Holds ${picks.firsts} future firsts`);if(r.waiver>=75)traits.push('Works the waiver wire');if(r.waiver<=35)traits.push('Rarely churns the roster');if(r.risk>=75)traits.push('Comfortable with blockbuster risk');if(r.asset>=75)traits.push('Strong asset manager');if(r.star>=75)traits.push('Collects elite talent');if(avgAge>=29)traits.push('Prefers proven veterans');return traits.slice(0,5)}
-function managerWeaknesses(r,picks,avgAge){
-  const candidates=[
-    {score:r.trade,label:'Low trade activity'},
-    {score:r.youth,label:avgAge>=28.5?'Ageing roster':'Limited youth upside'},
-    {score:r.winNow,label:'Limited win-now strength'},
-    {score:r.draft,label:picks.firsts<=1?'Thin future first-round capital':'Limited draft flexibility'},
-    {score:r.waiver,label:'Low waiver activity'},
-    {score:r.asset,label:'Asset management risk'},
-    {score:r.star,label:'Thin elite talent'},
-    {score:100-r.risk,label:'High-risk decision making'}
+function managerWeaknesses(managerId,r,picks,avgAge){
+  const id=String(managerId),seasonTrades=currentSeasonTrades().filter(t=>mids(t).includes(id)),careerTrades=managerTrades(id),roster=managerRosterPlayers(id,'2025'),rosterIds=new Set(roster.map(x=>String(x.id))),leagueSize=Math.max(1,state.managers.size);
+  const seasonCounts=[...state.managers.keys()].map(mid=>currentSeasonTrades().filter(t=>mids(t).includes(String(mid))).length),seasonAvg=seasonCounts.reduce((a,b)=>a+b,0)/Math.max(1,seasonCounts.length),seasonCount=seasonTrades.length;
+  const waiverCounts=[...state.managers.keys()].map(mid=>managerWaiverMoves(mid)),waiverAvg=waiverCounts.reduce((a,b)=>a+b,0)/Math.max(1,waiverCounts.length),waivers=managerWaiverMoves(id);
+  const top8=roster.slice(0,8).map(x=>String(x.id)),top8Moved=top8.filter(pid=>careerTrades.some(t=>Object.prototype.hasOwnProperty.call(t.drops||{},pid))).length,leagueTop8MoveRates=[...state.managers.keys()].map(mid=>{const rr=managerRosterPlayers(mid,'2025').slice(0,8).map(x=>String(x.id)),tt=managerTrades(mid);return rr.length?rr.filter(pid=>tt.some(t=>Object.prototype.hasOwnProperty.call(t.drops||{},pid))).length/rr.length:0}),leagueTop8Avg=leagueTop8MoveRates.reduce((a,b)=>a+b,0)/Math.max(1,leagueTop8MoveRates.length),top8MoveRate=top8.length?top8Moved/top8.length:0;
+  const values=roster.map(x=>Number(x.avg)||0).filter(x=>x>0),top3=values.slice(0,3).reduce((a,b)=>a+b,0),total=values.reduce((a,b)=>a+b,0),starShare=total?top3/total:0,midDepth=values.slice(5,12),midDepthAvg=midDepth.length?midDepth.reduce((a,b)=>a+b,0)/midDepth.length:0;
+  const allMidDepth=[...state.managers.keys()].map(mid=>{const vals=managerRosterPlayers(mid,'2025').map(x=>Number(x.avg)||0).filter(x=>x>0).slice(5,12);return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0}),leagueMidDepth=allMidDepth.reduce((a,b)=>a+b,0)/Math.max(1,allMidDepth.length);
+  const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,power=modelRows(state.modelBundle,through,'power').find(x=>String(x.id)===id),standingGap=power?Number(power.standingRank)-Number(power.rank):0;
+  const candidates=[];
+  const add=(score,label)=>{if(Number.isFinite(score)&&score>0)candidates.push({score,label})};
+  add(seasonAvg>0?50+Math.max(0,(seasonAvg-seasonCount)/seasonAvg)*45:45,'Needs to trade more');
+  add(top8.length&&top8MoveRate+0.08<leagueTop8Avg?62+(leagueTop8Avg-top8MoveRate)*70:0,'Values own assets too much');
+  add(seasonAvg>0&&seasonCount>seasonAvg*1.75?58+Math.min(35,(seasonCount/seasonAvg-1.75)*25):0,'Too quick to reshuffle');
+  add(r.waiver<55?55+(55-r.waiver)*.7+(waiverAvg>waivers?10:0):0,'Leaves value on the waiver wire');
+  add(picks.firsts<=1?84:picks.totalValue<20?70:Math.max(0,58-r.draft*.35),'Short on future flexibility');
+  add(avgAge>=29&&picks.firsts<=2?82+(avgAge-29)*5:avgAge>=28.5?68+(avgAge-28.5)*6:0,'Too veteran-heavy');
+  add(avgAge<=24.5&&r.winNow<55?76+(55-r.winNow)*.35:0,'Youth has not converted yet');
+  add(avgAge>25.5&&avgAge<28.5&&r.winNow<58&&r.draft<58?72+(58-Math.max(r.winNow,r.draft))*.35:0,'Caught between timelines');
+  add(starShare>=.48?64+(starShare-.48)*120:0,'Too reliant on star power');
+  add(r.star<48?76+(48-r.star)*.45:0,'Roster lacks a clear centrepiece');
+  add(leagueMidDepth>0&&midDepthAvg<leagueMidDepth*.88?68+(1-midDepthAvg/leagueMidDepth)*90:0,'Middle of the roster lacks depth');
+  add(standingGap>=2?72+standingGap*6:0,'Results lag behind the roster');
+  add(standingGap<=-2?68+Math.abs(standingGap)*5:0,'Overperforming fragile foundations');
+  add(r.risk>=82?70+(r.risk-82)*.8:0,'Too comfortable with blockbuster risk');
+  add(r.asset<48?66+(48-r.asset)*.55:0,'Asset value leaks through trades');
+  add(r.winNow<45&&r.draft<55?70+(45-r.winNow)*.45:0,'Limited margin for error');
+  const fallback=[
+    {score:64+(100-r.trade)*.18,label:'Needs to trade more'},
+    {score:63+(100-r.waiver)*.16,label:'Leaves value on the waiver wire'},
+    {score:62+(100-r.draft)*.15,label:'Short on future flexibility'},
+    {score:61+(100-r.star)*.14,label:'Roster lacks a clear centrepiece'},
+    {score:60+(100-r.asset)*.13,label:'Asset value leaks through trades'},
+    {score:59+(100-r.winNow)*.12,label:'Needs more reliable production'}
   ];
-  const picked=candidates.sort((a,b)=>a.score-b.score).slice(0,4).map(x=>x.label);
-  return [...new Set(picked)].slice(0,4)
+  const ranked=[...candidates,...fallback].sort((a,b)=>b.score-a.score);
+  const unique=[];for(const item of ranked){if(!unique.some(x=>x.label===item.label))unique.push(item);if(unique.length>=5)break}
+  const fifth=unique[4]?.score||0,fourth=unique[3]?.score||0,count=fifth>=76?5:fourth>=70?4:3;
+  return unique.slice(0,Math.max(3,Math.min(5,count))).map(x=>x.label)
 }
 function managerGMProfile(managerId){
   const id=String(managerId),league=managerTendencyLeague(),keys=['trade','youth','winNow','draft','waiver','risk','asset','star'],labels={trade:'Trade Activity',youth:'Youth Focus',winNow:'Win-Now Focus',draft:'Draft Capital',waiver:'Waiver Activity',risk:'Risk Appetite',asset:'Asset Management',star:'Star Power'},icons={trade:'🤝',youth:'🌱',winNow:'🏆',draft:'📈',waiver:'⚡',risk:'🎲',asset:'💼',star:'🧲'},r=Object.fromEntries(keys.map(k=>[k,league.ratings[k][id]||25])),picks=managerFuturePickCounts(id),avgAge=managerAverageAge(id),types=archetypeCandidates(r,picks,avgAge),primary=types[0],secondary=types[1],overall=Math.round(r.trade*.12+r.youth*.12+r.winNow*.16+r.draft*.11+r.waiver*.08+r.risk*.10+r.asset*.17+r.star*.14),traits=managerTraits(r,picks,avgAge),report=managerScoutReport(managerName(id),r,primary,secondary);
-  const rows=keys.map(k=>({key:k,label:labels[k],icon:icons[k],rating:r[k],rank:rankForRating(k,id,league)})),weaknesses=managerWeaknesses(r,picks,avgAge);return{...league,r,rows,picks,avgAge,primary,secondary,overall,traits,weaknesses,report}
+  const rows=keys.map(k=>({key:k,label:labels[k],icon:icons[k],rating:r[k],rank:rankForRating(k,id,league)})),weaknesses=managerWeaknesses(id,r,picks,avgAge);return{...league,r,rows,picks,avgAge,primary,secondary,overall,traits,weaknesses,report}
 }
 function gmProfileHTML(gm){const updated=gm.week?`Updated weekly · Through Week ${gm.week}`:'Pre-season profile · Recalculates weekly once games begin';return `<section class="manager-profile-card gm-profile-card"><div class="gm-profile-top"><div><span class="eyebrow">GM PROFILE</span><div class="gm-archetype-line"><span class="gm-archetype-icon">${gm.primary.icon}</span><div><h3>${esc(gm.primary.name)}</h3><p>Secondary: ${gm.secondary.icon} ${esc(gm.secondary.name)}</p></div></div></div><div class="gm-updated-note">${esc(updated)}</div></div><div class="gm-tendency-grid">${gm.rows.map(x=>`<div class="gm-tendency"><div class="gm-tendency-head"><span>${x.icon} ${esc(x.label)}</span><strong>${x.rating} <small>#${x.rank}</small></strong></div><div class="gm-rating-track"><i style="width:${x.rating}%"></i></div></div>`).join('')}</div><div class="gm-profile-bottom"><div class="gm-profile-character"><div class="gm-traits"><span class="eyebrow">TENDENCIES</span>${gm.traits.map(x=>`<span class="gm-trait">✓ ${esc(x)}</span>`).join('')||'<span class="profile-muted">Profile will sharpen as more league activity is recorded.</span>'}</div><div class="gm-traits gm-weaknesses"><span class="eyebrow">WEAKNESSES</span>${(gm.weaknesses||[]).map(x=>`<span class="gm-trait gm-weakness">! ${esc(x)}</span>`).join('')||'<span class="profile-muted">No clear weakness identified.</span>'}</div></div><div class="gm-scout-report"><span class="eyebrow">SCOUT\'S REPORT</span><p>“${esc(gm.report)}”</p></div></div></section>`}
 
