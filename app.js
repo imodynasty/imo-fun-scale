@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.8 — Visible Behavioural Manager Weaknesses */
+/* IMO DYNASTY V3.3.9 — Visible Behavioural Manager Weaknesses */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -564,37 +564,54 @@ function managerShareCardData(managerId){
   const bundle=currentBundle(),season=String(bundle?.league?.season||'2026'),weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,power=modelRows(state.modelBundle,through,'power').find(x=>String(x.id)===id)||null,odds=priceRows(through).find(x=>String(x.id)===id)||null,form=managerFormData(id),gm=managerGMProfile(id),avgAge=managerAverageAge(id);
   let roster=managerRosterPlayers(id,season);if(!roster.some(p=>Number(p.avg)>0))roster=managerRosterPlayers(id,'2025');
   const bestPlayer=roster[0]||null;
-  return{id,name:manager.name,avatar:manager.avatar,initials:manager.initials||manager.name.split(/\s+/).slice(0,2).map(z=>z[0]).join('').toUpperCase(),powerRank:power?.rank||null,ladderRank:power?.standingRank||null,record:form.games?`${form.wins}-${form.games-form.wins}`:'—',bestPlayer:bestPlayer?.name||'—',averageAge:Number.isFinite(avgAge)&&avgAge>0?avgAge.toFixed(1):'—',archetype:gm?.primary?.name||'—',championshipOdds:odds?championshipOddsLabel(odds):'—'}
+  return{id,name:manager.name,avatar:manager.avatar,initials:manager.initials||manager.name.split(/\s+/).slice(0,2).map(z=>z[0]).join('').toUpperCase(),powerRank:power?.rank||null,ladderRank:power?.standingRank||null,record:form.games?`${form.wins}-${form.games-form.wins}`:'—',bestPlayer:bestPlayer?.name||'—',bestPlayerAvatar:bestPlayer?.avatar||null,averageAge:Number.isFinite(avgAge)&&avgAge>0?avgAge.toFixed(1):'—',archetype:gm?.primary?.name||'—',championshipOdds:odds?championshipOddsLabel(odds):'—'}
 }
 function blobToDataURL(blob){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob)})}
-async function loadImageAsset(url){if(!url)return null;try{const res=await fetch(url,{mode:'cors'});if(!res.ok)throw new Error(res.status);const blob=await res.blob(),dataUrl=await blobToDataURL(blob);return await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=dataUrl})}catch{return null}}
+async function imageFromDataURL(dataUrl){return await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=dataUrl})}
+async function loadImageAsset(url){
+  if(!url)return null;
+  const attempts=[url,`https://images.weserv.nl/?url=${encodeURIComponent(url)}&output=png`];
+  for(const src of attempts){try{const res=await fetch(src,{mode:'cors',cache:'force-cache'});if(!res.ok)throw new Error(res.status);const blob=await res.blob();return await imageFromDataURL(await blobToDataURL(blob))}catch{}}
+  return null
+}
 function roundedRectPath(ctx,x,y,w,h,r){const rr=Math.max(0,Math.min(r,Math.min(w,h)/2));ctx.beginPath();ctx.moveTo(x+rr,y);ctx.arcTo(x+w,y,x+w,y+h,rr);ctx.arcTo(x+w,y+h,x,y+h,rr);ctx.arcTo(x,y+h,x,y,rr);ctx.arcTo(x,y,x+w,y,rr);ctx.closePath()}
 function fillRoundedRect(ctx,x,y,w,h,r,fill,stroke=null,lineWidth=1){ctx.save();roundedRectPath(ctx,x,y,w,h,r);if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.lineWidth=lineWidth;ctx.strokeStyle=stroke;ctx.stroke()}ctx.restore()}
-function fitFontSize(ctx,text,maxWidth,start,min=24,weight='800',family='Inter,system-ui,sans-serif'){let size=start;for(;size>min;size-=2){ctx.font=`${weight} ${size}px ${family}`;if(ctx.measureText(text).width<=maxWidth)break}return size}
+function fitFontSize(ctx,text,maxWidth,start,min=24,weight='800',family='Inter,Arial,sans-serif'){let size=start;for(;size>min;size-=2){ctx.font=`${weight} ${size}px ${family}`;if(ctx.measureText(String(text)).width<=maxWidth)break}return size}
+function drawCoverImage(ctx,img,x,y,w,h,r=0){ctx.save();if(r){roundedRectPath(ctx,x,y,w,h,r);ctx.clip()}const scale=Math.max(w/img.width,h/img.height),dw=img.width*scale,dh=img.height*scale;ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);ctx.restore()}
+function drawAvatarFallback(ctx,x,y,size,initials){const grad=ctx.createLinearGradient(x,y,x+size,y+size);grad.addColorStop(0,'#10b981');grad.addColorStop(1,'#8b5cf6');fillRoundedRect(ctx,x,y,size,size,30,grad);ctx.fillStyle='#f8fafc';ctx.font=`900 ${Math.round(size*.36)}px Inter,Arial,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(initials||'IM',x+size/2,y+size/2+3);ctx.textAlign='left';ctx.textBaseline='alphabetic'}
 async function buildManagerShareCardCanvas(data){
   const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1080;const ctx=canvas.getContext('2d');
-  const bg=ctx.createLinearGradient(0,0,1080,1080);bg.addColorStop(0,'#091225');bg.addColorStop(.58,'#050814');bg.addColorStop(1,'#10172c');ctx.fillStyle=bg;ctx.fillRect(0,0,1080,1080);
-  const glow1=ctx.createRadialGradient(180,120,10,180,120,380);glow1.addColorStop(0,'rgba(52,211,153,.16)');glow1.addColorStop(1,'rgba(52,211,153,0)');ctx.fillStyle=glow1;ctx.fillRect(0,0,1080,1080);
-  const glow2=ctx.createRadialGradient(980,120,10,980,120,300);glow2.addColorStop(0,'rgba(143,115,255,.16)');glow2.addColorStop(1,'rgba(143,115,255,0)');ctx.fillStyle=glow2;ctx.fillRect(0,0,1080,1080);
-  ctx.strokeStyle='rgba(148,163,184,.08)';ctx.lineWidth=1;for(let i=90;i<1080;i+=90){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,1080);ctx.stroke()}for(let i=90;i<1080;i+=90){ctx.beginPath();ctx.moveTo(0,i);ctx.lineTo(1080,i);ctx.stroke()}
-  fillRoundedRect(ctx,36,36,1008,1008,36,'rgba(2,6,23,.28)','rgba(99,102,241,.14)',2);
-  ctx.fillStyle='#34d399';ctx.font='800 20px Inter,system-ui,sans-serif';ctx.letterSpacing='0';ctx.fillText('IMO DYNASTY',78,86);ctx.fillStyle='rgba(226,232,240,.78)';ctx.font='700 18px Inter,system-ui,sans-serif';ctx.fillText('MANAGER SHARE CARD',78,114);
-  const avatar=await loadImageAsset(data.avatar);const avatarX=78,avatarY=150,avatarSize=170;ctx.save();roundedRectPath(ctx,avatarX,avatarY,avatarSize,avatarSize,36);ctx.clip();if(avatar)ctx.drawImage(avatar,avatarX,avatarY,avatarSize,avatarSize);else{const grad=ctx.createLinearGradient(avatarX,avatarY,avatarX+avatarSize,avatarY+avatarSize);grad.addColorStop(0,'#10b981');grad.addColorStop(1,'#8b5cf6');ctx.fillStyle=grad;ctx.fillRect(avatarX,avatarY,avatarSize,avatarSize);ctx.fillStyle='#f8fafc';ctx.font='800 68px Inter,system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(data.initials||'IM',avatarX+avatarSize/2,avatarY+avatarSize/2+4);ctx.textAlign='left';ctx.textBaseline='alphabetic'}ctx.restore();fillRoundedRect(ctx,avatarX,avatarY,avatarSize,avatarSize,36,null,'rgba(52,211,153,.55)',3);
-  const nameX=286,nameY=176,nameMax=716;const nameSize=fitFontSize(ctx,data.name,nameMax,84,42,'900');ctx.fillStyle='#f8fafc';ctx.font=`900 ${nameSize}px Inter,system-ui,sans-serif`;ctx.fillText(data.name,nameX,nameY);
-  ctx.fillStyle='rgba(226,232,240,.72)';ctx.font='600 28px Inter,system-ui,sans-serif';ctx.fillText('Current franchise snapshot for social sharing',nameX,nameY+48);
-  fillRoundedRect(ctx,nameX,nameY+76,250,52,22,'rgba(16,185,129,.12)','rgba(52,211,153,.35)',2);ctx.fillStyle='#6ee7b7';ctx.font='800 18px Inter,system-ui,sans-serif';ctx.fillText('Archetype',nameX+18,nameY+108);ctx.fillStyle='#ecfdf5';const archSize=fitFontSize(ctx,data.archetype,210,23,16,'800');ctx.font=`800 ${archSize}px Inter,system-ui,sans-serif`;ctx.fillText(data.archetype,nameX+102,nameY+108);
-  fillRoundedRect(ctx,nameX+270,nameY+76,220,52,22,'rgba(139,92,246,.10)','rgba(167,139,250,.30)',2);ctx.fillStyle='#c4b5fd';ctx.font='800 18px Inter,system-ui,sans-serif';ctx.fillText('Odds',nameX+288,nameY+108);ctx.fillStyle='#f8fafc';ctx.font='800 24px Inter,system-ui,sans-serif';ctx.fillText(data.championshipOdds,nameX+350,nameY+108);
-  ctx.fillStyle='rgba(248,250,252,.06)';ctx.font='900 230px Inter,system-ui,sans-serif';ctx.textAlign='right';ctx.fillText(data.powerRank?`#${data.powerRank}`:'#—',992,252);ctx.textAlign='left';
-  const margin=78,gap=28,colW=(1080-margin*2-gap)/2,cardH=150,row1=360,row2=538,row3=716,row4=894;
-  function statCard(x,y,w,h,label,value,accent='#34d399',valueSize=54){fillRoundedRect(ctx,x,y,w,h,28,'rgba(15,23,42,.76)','rgba(148,163,184,.18)',2);ctx.fillStyle=accent;ctx.font='800 18px Inter,system-ui,sans-serif';ctx.fillText(label.toUpperCase(),x+26,y+36);const sz=fitFontSize(ctx,String(value),w-52,valueSize,24,'900');ctx.fillStyle='#f8fafc';ctx.font=`900 ${sz}px Inter,system-ui,sans-serif`;ctx.fillText(String(value),x+26,y+104)}
-  statCard(margin,row1,colW,cardH,'Power Rank',data.powerRank?`#${data.powerRank}`:'—','#34d399',58);
-  statCard(margin+colW+gap,row1,colW,cardH,'Ladder Position',data.ladderRank?`#${data.ladderRank}`:'—','#8b5cf6',58);
-  statCard(margin,row2,colW,cardH,'Record',data.record,'#38bdf8',58);
-  statCard(margin+colW+gap,row2,colW,cardH,'Championship Odds',data.championshipOdds,'#f59e0b',48);
-  statCard(margin,row3,colW,cardH,'Average Age',data.averageAge,'#60a5fa',54);
-  statCard(margin+colW+gap,row3,colW,cardH,'Archetype',data.archetype,'#a78bfa',34);
-  fillRoundedRect(ctx,margin,row4,1080-margin*2,120,28,'rgba(15,23,42,.82)','rgba(148,163,184,.18)',2);ctx.fillStyle='#34d399';ctx.font='800 18px Inter,system-ui,sans-serif';ctx.fillText('BEST PLAYER',margin+26,row4+38);const bestSize=fitFontSize(ctx,data.bestPlayer,1080-margin*2-52,52,28,'900');ctx.fillStyle='#f8fafc';ctx.font=`900 ${bestSize}px Inter,system-ui,sans-serif`;ctx.fillText(data.bestPlayer,margin+26,row4+88);
-  ctx.fillStyle='rgba(226,232,240,.52)';ctx.font='600 16px Inter,system-ui,sans-serif';ctx.fillText('Generated from live IMO HUB data',margin,1040);ctx.textAlign='right';ctx.fillText('1080 × 1080 PNG',1002,1040);ctx.textAlign='left';
+  const bg=ctx.createLinearGradient(0,0,1080,1080);bg.addColorStop(0,'#08111f');bg.addColorStop(.55,'#050914');bg.addColorStop(1,'#10162a');ctx.fillStyle=bg;ctx.fillRect(0,0,1080,1080);
+  const glowA=ctx.createRadialGradient(120,90,0,120,90,420);glowA.addColorStop(0,'rgba(52,211,153,.18)');glowA.addColorStop(1,'rgba(52,211,153,0)');ctx.fillStyle=glowA;ctx.fillRect(0,0,1080,1080);
+  const glowB=ctx.createRadialGradient(1010,100,0,1010,100,360);glowB.addColorStop(0,'rgba(139,92,246,.18)');glowB.addColorStop(1,'rgba(139,92,246,0)');ctx.fillStyle=glowB;ctx.fillRect(0,0,1080,1080);
+  fillRoundedRect(ctx,34,34,1012,1012,34,'rgba(2,6,23,.36)','rgba(148,163,184,.16)',2);
+  ctx.fillStyle='#34d399';ctx.font='900 21px Inter,Arial,sans-serif';ctx.fillText('IMO DYNASTY',72,82);ctx.fillStyle='rgba(226,232,240,.68)';ctx.font='700 17px Inter,Arial,sans-serif';ctx.fillText('MANAGER PROFILE',72,108);
+
+  const [managerAvatar,bestAvatar]=await Promise.all([loadImageAsset(data.avatar),loadImageAsset(data.bestPlayerAvatar)]);
+  const avatarX=72,avatarY=145,avatarSize=176;
+  if(managerAvatar)drawCoverImage(ctx,managerAvatar,avatarX,avatarY,avatarSize,avatarSize,34);else drawAvatarFallback(ctx,avatarX,avatarY,avatarSize,data.initials);
+  fillRoundedRect(ctx,avatarX,avatarY,avatarSize,avatarSize,34,null,'rgba(52,211,153,.52)',3);
+
+  const nameX=286,nameY=174,nameMax=704;const nameSize=fitFontSize(ctx,data.name,nameMax,72,38,'900');ctx.fillStyle='#f8fafc';ctx.font=`900 ${nameSize}px Inter,Arial,sans-serif`;ctx.fillText(data.name,nameX,nameY);
+  ctx.fillStyle='rgba(226,232,240,.72)';ctx.font='600 24px Inter,Arial,sans-serif';ctx.fillText('Current IMO Dynasty franchise snapshot',nameX,nameY+42);
+  fillRoundedRect(ctx,nameX,nameY+70,310,50,20,'rgba(16,185,129,.11)','rgba(52,211,153,.28)',2);ctx.fillStyle='#6ee7b7';ctx.font='800 16px Inter,Arial,sans-serif';ctx.fillText('ARCHETYPE',nameX+18,nameY+101);ctx.fillStyle='#f0fdf4';const archSize=fitFontSize(ctx,data.archetype,180,21,15,'900');ctx.font=`900 ${archSize}px Inter,Arial,sans-serif`;ctx.fillText(data.archetype,nameX+122,nameY+101);
+  fillRoundedRect(ctx,nameX+326,nameY+70,250,50,20,'rgba(139,92,246,.11)','rgba(167,139,250,.28)',2);ctx.fillStyle='#c4b5fd';ctx.font='800 16px Inter,Arial,sans-serif';ctx.fillText('TITLE ODDS',nameX+344,nameY+101);ctx.fillStyle='#f8fafc';ctx.font='900 22px Inter,Arial,sans-serif';ctx.fillText(data.championshipOdds,nameX+450,nameY+101);
+
+  const margin=72,gap=22,colW=(1080-margin*2-gap)/2,cardH=132,row1=354,row2=508,row3=662;
+  function statCard(x,y,label,value,accent,valueSize=52){fillRoundedRect(ctx,x,y,colW,cardH,24,'rgba(15,23,42,.80)','rgba(148,163,184,.17)',2);ctx.fillStyle=accent;ctx.font='800 16px Inter,Arial,sans-serif';ctx.fillText(label.toUpperCase(),x+24,y+34);const size=fitFontSize(ctx,value,colW-48,valueSize,26,'900');ctx.fillStyle='#f8fafc';ctx.font=`900 ${size}px Inter,Arial,sans-serif`;ctx.fillText(String(value),x+24,y+92)}
+  statCard(margin,row1,'Power Rank',data.powerRank?`#${data.powerRank}`:'—','#34d399',60);
+  statCard(margin+colW+gap,row1,'Ladder Position',data.ladderRank?`#${data.ladderRank}`:'—','#a78bfa',60);
+  statCard(margin,row2,'Record',data.record,'#38bdf8',56);
+  statCard(margin+colW+gap,row2,'Championship Odds',data.championshipOdds,'#fbbf24',48);
+  statCard(margin,row3,'Average Age',data.averageAge,'#60a5fa',54);
+  statCard(margin+colW+gap,row3,'Archetype',data.archetype,'#c084fc',34);
+
+  const bestY=816,bestH=160;fillRoundedRect(ctx,margin,bestY,936,bestH,26,'rgba(15,23,42,.84)','rgba(148,163,184,.18)',2);
+  ctx.fillStyle='#34d399';ctx.font='800 16px Inter,Arial,sans-serif';ctx.fillText('BEST PLAYER',margin+24,bestY+34);
+  const pSize=98,pX=margin+24,pY=bestY+48;if(bestAvatar)drawCoverImage(ctx,bestAvatar,pX,pY,pSize,pSize,24);else drawAvatarFallback(ctx,pX,pY,pSize,(data.bestPlayer||'—').split(/\s+/).map(x=>x[0]).slice(0,2).join('').toUpperCase());fillRoundedRect(ctx,pX,pY,pSize,pSize,24,null,'rgba(52,211,153,.34)',2);
+  const bestNameX=pX+pSize+24,bestNameMax=936-(bestNameX-margin)-28,bestSize=fitFontSize(ctx,data.bestPlayer,bestNameMax,50,26,'900');ctx.fillStyle='#f8fafc';ctx.font=`900 ${bestSize}px Inter,Arial,sans-serif`;ctx.fillText(data.bestPlayer,bestNameX,bestY+108);
+
+  ctx.fillStyle='rgba(226,232,240,.48)';ctx.font='600 15px Inter,Arial,sans-serif';ctx.fillText('Generated from live IMO HUB data',72,1018);ctx.textAlign='right';ctx.fillText('1080 × 1080 PNG',1008,1018);ctx.textAlign='left';
   return canvas
 }
 async function downloadManagerShareCard(managerId,button){
