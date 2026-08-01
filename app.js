@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.13 — Manager Utility Bar + 2025 Draft Attribution */
+/* IMO DYNASTY V3.3.14 — Live Head To Head + Waiver History */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -19,7 +19,7 @@ const CANONICAL_DRAFT_COLUMNS={
 function normaliseTeamKey(name){return String(name||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
 function canonicalDraftSlot(season,teamName){return CANONICAL_DRAFT_COLUMNS[String(season)]?.[normaliseTeamKey(teamName)]??null}
 
-const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,draftSelections:[],allDraftSelections:[],oddsMovement:null,computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null,managerGrades:null}};
+const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,draftSelections:[],allDraftSelections:[],oddsMovement:null,sportState:null,h2hRefreshTimer:null,h2hRefreshBusy:false,computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null,managerGrades:null}};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
 try{for(let i=sessionStorage.length-1;i>=0;i--){const key=sessionStorage.key(i);if(key&&key.startsWith('imo-profile-')&&!key.startsWith('imo-profile-v337-'))sessionStorage.removeItem(key)}}catch(_){ }
 function resetComputedCaches(){state.computedCache.seasonAverages.clear();state.computedCache.managerTrades.clear();state.computedCache.tradeSide.clear();state.computedCache.completedMatchups.clear();state.computedCache.tendencyLeague=null;state.computedCache.managerGrades=null;state.profileHTMLCache.clear()}
@@ -343,6 +343,151 @@ function renderHeatmap(){
   target.innerHTML=`<div class="partner-list-compact">${pairs.map((p,i)=>`<div class="partner-row-compact"><span class="partner-rank">${i+1}</span><span class="partner-team-pair"><button type="button" class="compact-manager-link manager-profile-link" data-manager-id="${esc(p.a.id)}">${esc(p.a.name)}</button><span class="partner-arrow">↔</span><button type="button" class="compact-manager-link manager-profile-link" data-manager-id="${esc(p.b.id)}">${esc(p.b.name)}</button></span><strong class="partner-count-compact">${p.count} ${p.count===1?'trade':'trades'}</strong></div>`).join("")}</div>`;
 }
 function renderBlock(){const moved={};state.trades.forEach(t=>Object.keys(t.adds||{}).forEach(id=>moved[id]=(moved[id]||0)+1));const rows=Object.entries(moved).sort((a,b)=>b[1]-a[1]).slice(0,5);$("tradeBlock").classList.remove("loading");$("tradeBlock").innerHTML=rows.length?rows.map(([id,n],i)=>`<div class="rank-item"><b>${i+1}</b><div><strong>${playerLink(id,playerName(id))}</strong><div class="meta">Most traded player of all time</div></div><span class="power-score">${n}x</span></div>`).join(""):'<div class="block-empty">No player movement yet.</div>'}
+
+function allLeagueTransactions(){
+  const unique=new Map();
+  state.bundles.forEach(bundle=>(bundle.transactions||[]).forEach(t=>{
+    const key=`${bundle.league?.league_id||t.league_id||'league'}|${t.transaction_id||`${t.created||0}-${t.week||0}-${t.type||'move'}`}`;
+    if(!unique.has(key))unique.set(key,{...t,league_id:t.league_id||bundle.league?.league_id,season_label:t.season_label||`${bundle.league?.season||''} season`});
+  }));
+  return [...unique.values()]
+}
+function renderWaivedBlock(){
+  const target=$("waiverBlock");if(!target)return;
+  const counts={};
+  allLeagueTransactions().filter(t=>['waiver','free_agent'].includes(String(t.type||''))&&(!t.status||t.status==='complete')).forEach(t=>{
+    Object.keys(t.drops||{}).forEach(id=>{if(id&&id!=='0')counts[String(id)]=(counts[String(id)]||0)+1});
+  });
+  const rows=Object.entries(counts).sort((a,b)=>b[1]-a[1]||playerName(a[0]).localeCompare(playerName(b[0]))).slice(0,5);
+  target.classList.remove("loading");
+  target.innerHTML=rows.length?rows.map(([id,n],i)=>`<div class="rank-item waiver-rank-item"><b>${i+1}</b><div><strong>${playerLink(id,playerName(id))}</strong><div class="meta">${n===1?'Waived once':`Waived ${n} times`} across loaded league history</div></div><span class="power-score">${n}x</span></div>`).join(""):'<div class="block-empty">No completed waiver drops found.</div>'
+}
+function currentLeagueBundle(){return state.bundles.find(b=>String(b.league?.league_id)===CONFIG.currentLeagueId)||state.bundles[0]||null}
+function groupedMatchupsForWeek(bundle,week){
+  const groups={};
+  (bundle?.matchups||[]).filter(row=>Number(row.week)===Number(week)&&row.matchup_id!=null).forEach(row=>(groups[String(row.matchup_id)]??=[]).push(row));
+  return Object.values(groups).filter(group=>group.length>=2).map(group=>group.slice(0,2))
+}
+function resolveHeadToHeadWeek(bundle){
+  if(!bundle)return 1;
+  const leagueSeason=String(bundle.league?.season||''),sportSeason=String(state.sportState?.season||''),sportWeek=Number(state.sportState?.week),leagueWeek=Number(bundle.league?.settings?.leg||bundle.league?.settings?.week);
+  if(sportSeason===leagueSeason&&Number.isFinite(sportWeek)&&sportWeek>0)return sportWeek;
+  if(Number.isFinite(leagueWeek)&&leagueWeek>0)return leagueWeek;
+  const allWeeks=[...new Set((bundle.matchups||[]).filter(x=>x.matchup_id!=null).map(x=>Number(x.week)).filter(Number.isFinite))].sort((a,b)=>a-b);
+  const completed=meaningfulWeeks(bundle),lastCompleted=completed.at(-1)||0;
+  return allWeeks.find(w=>w>lastCompleted)||lastCompleted||allWeeks[0]||1
+}
+function managerWeeklyScores(bundle,managerId,beforeWeek=Infinity){
+  const id=String(managerId),rows=[];
+  (bundle?.matchups||[]).forEach(row=>{
+    if(Number(row.week)>=Number(beforeWeek))return;
+    if(String(bundle.ownerByRoster?.[String(row.roster_id)]||'')!==id)return;
+    const points=Number(row.points);if(Number.isFinite(points)&&points>0)rows.push({week:Number(row.week),points});
+  });
+  return rows.sort((a,b)=>a.week-b.week)
+}
+function meanNumber(values){const nums=values.map(Number).filter(Number.isFinite);return nums.length?nums.reduce((a,b)=>a+b,0)/nums.length:0}
+function managerPreGameProjection(managerId,bundle,week){
+  let rows=managerWeeklyScores(bundle,managerId,week);
+  if(!rows.length&&state.modelBundle&&state.modelBundle!==bundle)rows=managerWeeklyScores(state.modelBundle,managerId,Infinity);
+  const scores=rows.map(x=>x.points),weeklyProjection=meanNumber(scores.slice(-5))||meanNumber(scores)||220,last3=meanNumber(scores.slice(-3))||weeklyProjection;
+  return Math.max(1,.80*weeklyProjection+.20*last3)
+}
+function gameWeekProgress(){
+  const now=new Date(),day=now.getDay(),daysSinceTuesday=(day-2+7)%7,fraction=(daysSinceTuesday+(now.getHours()+now.getMinutes()/60)/24)/7;
+  return Math.max(.03,Math.min(.97,fraction))
+}
+function liveWeightedProjection(current,pregame){
+  const progress=gameWeekProgress(),expectedSoFar=Math.max(1,pregame*progress),pace=Math.max(.65,Math.min(1.45,current/expectedSoFar||1)),remaining=pregame*(1-progress)*pace;
+  return Math.max(current,current+remaining)
+}
+function roundOdds05(value){if(!Number.isFinite(value)||value<=0)return 2;return Math.max(1.01,Math.min(51,Math.round(value/.05)*.05))}
+function matchupOdds(a,b){
+  const total=Math.max(.001,a+b),pa=a/total,pb=b/total;
+  return{a:roundOdds05(1/Math.max(.001,pa)),b:roundOdds05(1/Math.max(.001,pb))}
+}
+function managerFormBadges(managerId,bundle,beforeWeek){
+  let games=(outcomesForBundle(bundle,Number(beforeWeek)-1)[String(managerId)]||[]);
+  if(!games.length&&state.modelBundle&&state.modelBundle!==bundle)games=(outcomesForBundle(state.modelBundle)[String(managerId)]||[]);
+  return games.slice(-3).map(g=>g.result===1?'W':g.result===0?'L':'D')
+}
+function rivalryRecord(managerA,managerB){
+  const a=String(managerA),b=String(managerB),record={a:0,b:0,d:0};
+  state.bundles.forEach(bundle=>{
+    const groups={};(bundle.matchups||[]).filter(row=>Number(row.points)>0&&row.matchup_id!=null).forEach(row=>{const key=`${row.week}|${row.matchup_id}`;(groups[key]??=[]).push(row)});
+    Object.values(groups).forEach(group=>{
+      const rowA=group.find(row=>String(bundle.ownerByRoster?.[String(row.roster_id)]||'')===a),rowB=group.find(row=>String(bundle.ownerByRoster?.[String(row.roster_id)]||'')===b);
+      if(!rowA||!rowB)return;const pa=Number(rowA.points),pb=Number(rowB.points);if(!Number.isFinite(pa)||!Number.isFinite(pb)||(pa===0&&pb===0))return;
+      if(pa>pb)record.a++;else if(pb>pa)record.b++;else record.d++;
+    });
+  });
+  return record
+}
+function rivalryLabel(managerA,managerB){
+  const r=rivalryRecord(managerA,managerB),nameA=managerName(managerA),nameB=managerName(managerB);
+  if(r.a===r.b)return `Series tied ${r.a}–${r.b}${r.d?` · ${r.d} draw${r.d===1?'':'s'}`:''}`;
+  const leader=r.a>r.b?nameA:nameB,wins=Math.max(r.a,r.b),losses=Math.min(r.a,r.b);
+  return `${leader} leads ${wins}–${losses} all-time${r.d?` · ${r.d} draw${r.d===1?'':'s'}`:''}`
+}
+function keyMatchupPlayer(managerId,row){
+  const rosterIds=new Set((state.managers.get(String(managerId))?.roster?.players||[]).map(String));
+  const form=allGameLogFormRows().filter(x=>rosterIds.has(String(x.id))).sort((a,b)=>Number(b.recentAvg)-Number(a.recentAvg));
+  const fallback=managerRosterPlayers(managerId,String(currentLeagueBundle()?.league?.season||'2026'))[0]||managerRosterPlayers(managerId,'2025')[0]||null;
+  const chosen=form[0]||fallback;if(!chosen)return null;
+  const id=String(chosen.id),recentAvg=Number(chosen.recentAvg??chosen.avg??0),live=Number(row?.players_points?.[id]||0);
+  return{id,name:chosen.name||playerName(id),recentAvg,live,avatar:`https://sleepercdn.com/content/nba/players/${id}.jpg`}
+}
+function h2hManagerAvatar(managerId){
+  const manager=state.managers.get(String(managerId));return manager?.avatar?`<img src="${esc(manager.avatar)}" alt="" loading="lazy">`:`<span>${esc(manager?.initials||'—')}</span>`
+}
+function h2hFormHTML(form){return `<span class="h2h-form-badges">${form.length?form.map(x=>`<i class="${x==='W'?'win':x==='L'?'loss':'draw'}">${x}</i>`).join(''):'<small>No form</small>'}</span>`}
+function h2hKeyPlayerHTML(player,isLive){
+  if(!player)return '<div class="h2h-key-player empty">No player form available</div>';
+  return `<div class="h2h-key-player"><span class="h2h-key-avatar"><img src="${esc(player.avatar)}" alt="" loading="lazy" onerror="this.style.display='none'"></span><div>${playerLink(player.id,player.name,'h2h-key-player-link')}<small>${player.recentAvg?`${player.recentAvg.toFixed(1)} avg · last 5`:'Current roster leader'}</small></div>${isLive?`<strong>${player.live.toFixed(1)}<small>LIVE</small></strong>`:''}</div>`
+}
+function renderHeadToHead(){
+  const target=$("headToHead");if(!target)return;
+  const bundle=currentLeagueBundle();if(!bundle){target.classList.remove('loading');target.innerHTML='<div class="block-empty">Current league data unavailable.</div>';return}
+  const week=resolveHeadToHeadWeek(bundle),groups=groupedMatchupsForWeek(bundle,week);
+  if(!groups.length){target.classList.remove('loading');target.innerHTML=`<div class="h2h-empty"><strong>Week ${week} matchups are not available yet.</strong><small>The board will populate automatically when Sleeper publishes the gameweek.</small></div>`;return}
+  const anyScore=groups.some(group=>group.some(row=>Number(row.points)>0)),mode=anyScore?'live':'upcoming';
+  const status=$("headToHeadStatus");if(status){status.textContent=mode==='live'?`Week ${week} · Live`:`Week ${week} · Upcoming`;status.classList.toggle('live',mode==='live')}
+  target.classList.remove('loading');
+  target.innerHTML=`<div class="h2h-grid">${groups.map(group=>{
+    const rowA=group[0],rowB=group[1],idA=String(bundle.ownerByRoster?.[String(rowA.roster_id)]||''),idB=String(bundle.ownerByRoster?.[String(rowB.roster_id)]||'');
+    const currentA=Number(rowA.points)||0,currentB=Number(rowB.points)||0,preA=managerPreGameProjection(idA,bundle,week),preB=managerPreGameProjection(idB,bundle,week),finishA=mode==='live'?liveWeightedProjection(currentA,preA):preA,finishB=mode==='live'?liveWeightedProjection(currentB,preB):preB,odds=matchupOdds(finishA,finishB),difference=Math.abs(finishA-finishB),line=Math.floor(difference)+.5,favouriteA=finishA>=finishB;
+    const displayA=mode==='live'?currentA:finishA,displayB=mode==='live'?currentB:finishB,keyA=keyMatchupPlayer(idA,rowA),keyB=keyMatchupPlayer(idB,rowB),formA=managerFormBadges(idA,bundle,week),formB=managerFormBadges(idB,bundle,week);
+    return `<article class="h2h-card ${mode}">
+      <div class="h2h-card-kicker"><span>${mode==='live'?'<i></i> LIVE MODEL':'UPCOMING MATCHUP'}</span><small>Week ${week}</small></div>
+      <div class="h2h-scoreboard">
+        <div class="h2h-team h2h-team-a"><span class="h2h-manager-avatar">${h2hManagerAvatar(idA)}</span><button type="button" class="manager-profile-link" data-manager-id="${esc(idA)}">${esc(managerName(idA))}</button><strong>${displayA.toFixed(1)}</strong><em>$${odds.a.toFixed(2)}</em>${h2hFormHTML(formA)}</div>
+        <div class="h2h-versus">VS</div>
+        <div class="h2h-team h2h-team-b"><span class="h2h-manager-avatar">${h2hManagerAvatar(idB)}</span><button type="button" class="manager-profile-link" data-manager-id="${esc(idB)}">${esc(managerName(idB))}</button><strong>${displayB.toFixed(1)}</strong><em>$${odds.b.toFixed(2)}</em>${h2hFormHTML(formB)}</div>
+      </div>
+      ${mode==='live'?`<div class="h2h-projected-finish"><span>Live projected finish</span><strong>${finishA.toFixed(1)} – ${finishB.toFixed(1)}</strong></div>`:''}
+      <div class="h2h-line"><span>Predicted line</span><strong>${esc(managerName(favouriteA?idA:idB))} −${line.toFixed(1)} <small>·</small> ${esc(managerName(favouriteA?idB:idA))} +${line.toFixed(1)}</strong></div>
+      <div class="h2h-key-heading"><span>KEY MATCHUP</span><small>Top last-five performer</small></div>
+      <div class="h2h-key-grid">${h2hKeyPlayerHTML(keyA,mode==='live')}${h2hKeyPlayerHTML(keyB,mode==='live')}</div>
+      <div class="h2h-rivalry"><span>Rivalry record</span><strong>${esc(rivalryLabel(idA,idB))}</strong></div>
+    </article>`
+  }).join('')}</div><p class="h2h-method-note">${mode==='live'?'Live projections combine the current score with expected remaining production. Scores refresh automatically.':'Starting projections use 80% weekly scoring projection and 20% recent three-week form.'}</p>`
+}
+async function refreshHeadToHeadData(){
+  if(state.h2hRefreshBusy||document.hidden)return;state.h2hRefreshBusy=true;
+  try{
+    const bundle=currentLeagueBundle();if(!bundle)return;
+    const [league,sportState]=await Promise.all([getJSON(`${CONFIG.api}/league/${CONFIG.currentLeagueId}`,true),getJSON(`${CONFIG.api}/state/nba`,true)]);
+    if(league){bundle.league=league;state.league=league}if(sportState)state.sportState=sportState;
+    const week=resolveHeadToHeadWeek(bundle),rows=await getJSON(`${CONFIG.api}/league/${CONFIG.currentLeagueId}/matchups/${week}`,true);
+    if(Array.isArray(rows)){bundle.matchups=(bundle.matchups||[]).filter(x=>Number(x.week)!==Number(week));bundle.matchups.push(...rows.map(x=>({...x,week})))}
+    renderHeadToHead()
+  }catch(error){console.warn('Head to head live refresh unavailable:',error)}
+  finally{state.h2hRefreshBusy=false}
+}
+function setupHeadToHeadRefresh(){
+  if(state.h2hRefreshTimer)clearInterval(state.h2hRefreshTimer);
+  state.h2hRefreshTimer=setInterval(refreshHeadToHeadData,60000);
+}
 
 function gameDateValue(row){const raw=row?.date||row?.game_date||row?.gameDate||row?.start_time||row?.startTime||row?.timestamp;const d=raw?new Date(raw):null;return d&&!Number.isNaN(d.getTime())?d:null}
 function fallbackSeasonFormRows(){
@@ -1258,7 +1403,7 @@ function tickerPlayerRumours(){const templates=[x=>`SHAMS: Unnamed sources indic
 function shortTradeHeadline(t){if(!t)return null;const names=mids(t).map(id=>managerName(id,t));return names.length?`${names.join(' and ')} complete a deal involving ${tradeSummary(t)}`:null}
 function stripTickerEmoji(text){return String(text||'').replace(/[\p{Extended_Pictographic}\uFE0F]/gu,'').replace(/\s{2,}/g,' ').trim()}
 function renderTicker(){const root=$('leagueTicker');if(!root)return;const good=recentPlayerForm().good.slice(0,2),stories=[...tickerPlayerRumours(),tickerTopPerformer(),...good.map(x=>`${x.name} is in good form, averaging ${x.recentAvg.toFixed(1)} FPTS over the last 5`),...state.trades.slice(0,2).map(t=>shortTradeHeadline(t)),tickerMatchup(),tickerStreak(),'IMO Awards voting opens 23 February · closes 28 February',tickerRankingOrRecord(),tickerDrought()].filter(Boolean);const unique=[...new Set(stories.map(stripTickerEmoji).filter(Boolean))].slice(0,10);if(!unique.length){root.hidden=true;return}root.hidden=false;const group=unique.map((text,i)=>`<span class="ticker-item">${esc(text)}</span>${i<unique.length-1?'<span class="ticker-dot">•</span>':''}`).join('');root.innerHTML=`<span class="ticker-live">LIVE</span><div class="ticker-window"><div class="ticker-track"><div class="ticker-group">${group}</div><div class="ticker-group" aria-hidden="true">${group}</div></div></div>`}
-async function loadTickerGameLogs(){const season=String(state.modelBundle?.league?.season||'2025'),ids=[...new Set((state.currentRosters||[]).flatMap(r=>(r.players||[]).map(String)))],scoring=state.modelBundle?.league?.scoring_settings||{};if(!ids.length)return;const rows=await limitedMap(ids,8,async id=>{const result=await loadPlayerGameLogAverage(id,season,scoring);return result?{id,...result}:null});state.gameLogs[season]??={};rows.filter(Boolean).forEach(row=>state.gameLogs[season][row.id]=row.rows||[]);renderPlayerForm();renderTicker()}
+async function loadTickerGameLogs(){const season=String(state.modelBundle?.league?.season||'2025'),ids=[...new Set((state.currentRosters||[]).flatMap(r=>(r.players||[]).map(String)))],scoring=state.modelBundle?.league?.scoring_settings||{};if(!ids.length)return;const rows=await limitedMap(ids,8,async id=>{const result=await loadPlayerGameLogAverage(id,season,scoring);return result?{id,...result}:null});state.gameLogs[season]??={};rows.filter(Boolean).forEach(row=>state.gameLogs[season][row.id]=row.rows||[]);renderPlayerForm();renderTicker();renderHeadToHead()}
 
 
 function insiderEventKey(){
@@ -1413,6 +1558,8 @@ function renderAll(){
   safeRender("trade partners",renderHeatmap);
   safeRender("player form",renderPlayerForm);
   safeRender("most traded players",renderBlock);
+  safeRender("most waived players",renderWaivedBlock);
+  safeRender("head to head",renderHeadToHead);
   safeRender("league records",renderRecords);
   safeRender("recent trades",renderRecent);
   safeRender("biggest trades",renderBiggestTrades);
@@ -1801,7 +1948,7 @@ async function loadSeason(id){
       if(!participantRosters.size){Object.values(t.adds||{}).forEach(x=>participantRosters.add(String(x)));Object.values(t.drops||{}).forEach(x=>participantRosters.add(String(x)));(t.draft_picks||[]).forEach(p=>{if(p.owner_id!=null)participantRosters.add(String(p.owner_id));if(p.previous_owner_id!=null)participantRosters.add(String(p.previous_owner_id))})}
       return {...t,manager_ids:[...participantRosters].map(r=>ownerByRoster[r]).filter(Boolean),roster_owner_map:ownerByRoster,manager_name_map:managerNameMap,season_label:`${league.season} season`,league_id:id}
     });
-    return{trades,transactions:completedTransactions.map(t=>({...t,week:wk})),matchups:(match||[]).map(x=>({...x,week:wk}))}
+    return{trades,transactions:completedTransactions.map(t=>({...t,week:wk,league_id:id,season_label:`${league.season} season`,roster_owner_map:ownerByRoster,manager_name_map:managerNameMap})),matchups:(match||[]).map(x=>({...x,week:wk}))}
   });
   return{league,users,rosters,ownerByRoster,draftPickMap,draftSelections,allDraftSelections,tradedPicks:tradedPicks||[],winnersBracket:winnersBracket||[],trades:weeks.flatMap(x=>x?.trades||[]),transactions:weeks.flatMap(x=>x?.transactions||[]),matchups:weeks.flatMap(x=>x?.matchups||[])}
 }
@@ -1817,6 +1964,7 @@ async function load(){
     const cur=valid.find(x=>String(x.league.league_id)===CONFIG.currentLeagueId)||valid[0];
     if(!cur)throw new Error('No Sleeper league data could be loaded');
     state.exactSeasonAverages={};
+    state.sportState=await getJSON(`${CONFIG.api}/state/nba`,true);
     state.bundles=valid;
     state.league=cur.league;
     state.currentUsers=cur.users||[];
@@ -1836,6 +1984,7 @@ async function load(){
     prepareOddsMovement();
     state.profilePrewarmQueued=false;
     renderAll();
+    setupHeadToHeadRefresh();
     if(status)status.textContent=`Live · ${valid.length} seasons loaded`;
     const runWhenIdle=(fn,timeout=2500)=>{
       if('requestIdleCallback' in window)requestIdleCallback(fn,{timeout});
@@ -1948,5 +2097,6 @@ document.addEventListener('pointerdown',e=>{if(!e.target.closest('[data-manager-
 document.addEventListener("pointerover",e=>{const link=e.target.closest?.(".manager-profile-link");if(link)queueManagerProfilePrewarm(link.dataset.managerId)},{passive:true});
 document.addEventListener("focusin",e=>{const link=e.target.closest?.(".manager-profile-link");if(link)queueManagerProfilePrewarm(link.dataset.managerId)});
 document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("pickHistoryModal")?.classList.contains("open"))closePickHistory();else if($("tradeReturnTreeModal")?.classList.contains("open"))closeTradeReturnTree();else if($("managerPicksMadeModal")?.classList.contains("open"))closeManagerPicksMade();else if($("mockDraftModal")?.classList.contains("open"))closeMockDraft();else if($("archetypeGuideModal")?.classList.contains("open"))closeArchetypeGuide();else if(document.getElementById('mobileManagerSwitcherSheet'))closeMobileManagerSwitcher();else if(document.getElementById('mobileProfileInfoSheet')?.classList.contains('open'))closeMobileProfileInfo();else if(document.querySelector('[data-manager-switcher].open'))closeManagerSwitchers();else if($("headlinesModal")?.classList.contains("open"))closeHeadlines();else if($("playerHistoryModal")?.classList.contains("open"))closePlayerHistory();else if($("managerProfileModal")?.classList.contains("open"))closeManagerProfile();else if($("managerDirectoryModal")?.classList.contains("open"))closeManagerDirectory()});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshHeadToHeadData()});
 window.addEventListener("popstate",openManagerFromHash);
 load().then?.(()=>openManagerFromHash());
