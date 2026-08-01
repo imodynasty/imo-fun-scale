@@ -1511,3 +1511,10 @@ body.manager-picks-open{overflow:hidden}
 .gm-weaknesses>.eyebrow{color:#f87171}
 .gm-trait.gm-weakness{color:#fee2e2;background:rgba(239,68,68,.08);border-color:rgba(248,113,113,.25)}
 .gm-trait.gm-weakness:hover{background:rgba(239,68,68,.13);border-color:rgba(248,113,113,.4)}
+
+/* V3.3.7 — guaranteed visible behavioural weaknesses */
+.gm-profile-card .gm-profile-character{display:grid!important;grid-template-columns:1fr!important;gap:16px!important;min-width:0!important}
+.gm-profile-card .gm-weaknesses{display:flex!important;visibility:visible!important;opacity:1!important;min-height:62px!important;margin-top:2px!important;padding:14px!important;border:1px solid rgba(248,113,113,.28)!important;border-radius:12px!important;background:rgba(127,29,29,.12)!important}
+.gm-profile-card .gm-weaknesses>.eyebrow{display:block!important;flex-basis:100%!important;color:#fb7185!important}
+.gm-profile-card .gm-trait.gm-weakness{display:inline-flex!important;visibility:visible!important;opacity:1!important;color:#ffe4e6!important;background:rgba(239,68,68,.12)!important;border:1px solid rgba(248,113,113,.32)!important}
+@media(max-width:760px){.gm-profile-card .gm-profile-bottom{display:grid!important;grid-template-columns:1fr!important}.gm-profile-card .gm-weaknesses{margin-top:0!important}}
