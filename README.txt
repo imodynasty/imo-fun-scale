@@ -379,3 +379,5 @@ V3.2.2 — Bulk Sleeper Season Averages
 - Loads exact averages before the initial dashboard render.
 - Removes the local season-averages.json dependency from runtime.
 - Console diagnostics include the number of bulk averages loaded and Kevin Porter Jr's 2025 result.
+
+V3.3.0 adds on-demand manager-specific Trade Return Trees, startup-draft origin labels, and rookie pick-to-player lineage.

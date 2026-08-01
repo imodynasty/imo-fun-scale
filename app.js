@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.2.9 — Draft Star + Compact Mock Draft */
+/* IMO DYNASTY V3.3.0 — Trade Return Trees */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -19,7 +19,7 @@ const CANONICAL_DRAFT_COLUMNS={
 function normaliseTeamKey(name){return String(name||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
 function canonicalDraftSlot(season,teamName){return CANONICAL_DRAFT_COLUMNS[String(season)]?.[normaliseTeamKey(teamName)]??null}
 
-const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,draftSelections:[],oddsMovement:null,computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null,managerGrades:null}};
+const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,draftSelections:[],allDraftSelections:[],oddsMovement:null,computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null,managerGrades:null}};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
 function resetComputedCaches(){state.computedCache.seasonAverages.clear();state.computedCache.managerTrades.clear();state.computedCache.tradeSide.clear();state.computedCache.completedMatchups.clear();state.computedCache.tendencyLeague=null;state.computedCache.managerGrades=null;state.profileHTMLCache.clear()}
 async function getJSON(url,optional=false){try{const r=await fetch(url);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){if(optional)return null;throw e}}
@@ -871,7 +871,71 @@ function playerInterestRows(){const now=Date.now();let rows=[];try{rows=JSON.par
 function isPlayerStarred(playerId){return playerInterestRows().some(x=>String(x.playerId)===String(playerId))}
 function togglePlayerInterest(playerId){const id=String(playerId),rows=playerInterestRows(),existing=rows.find(x=>String(x.playerId)===id);let next;if(existing)next=rows.filter(x=>String(x.playerId)!==id);else next=[...rows,{playerId:id,created:Date.now(),expires:Date.now()+48*3600*1000,template:Math.floor(Math.random()*3),managerId:[...state.managers.keys()][Math.floor(Math.random()*Math.max(1,state.managers.size))]||null}];state.playerInterest=next;try{localStorage.setItem("imoPlayerInterest",JSON.stringify(next))}catch{}const modal=$("playerHistoryModal");if(modal?.classList.contains("open"))openPlayerHistory(id);renderTicker()}
 function playerCurrentAverage(playerId){const current=state.bundles.find(b=>String(b.league?.league_id)===CONFIG.currentLeagueId),season=String(current?.league?.season||"2026"),weeks=current?meaningfulWeeks(current):[],avg=Number((state.gameLogAverages?.[season]?.[playerId]??state.seasonTotalAverages?.[season]?.[playerId]??(current&&weeks.length?buildPlayerAverages(current,weeks.at(-1))[playerId]:0))||0);return {season,avg,games:Number(state.gameLogMeta?.[season]?.[playerId]?.gamesPlayed||state.seasonTotalMeta?.[season]?.[playerId]?.gamesPlayed||0)}}
-function playerHistoryHTML(playerId){const id=String(playerId),name=playerName(id),trades=playerTrades(id),avatar=`https://sleepercdn.com/content/nba/players/${id}.jpg`,seasonAvg=playerCurrentAverage(id),starred=isPlayerStarred(id);return `<div class="player-history-hero"><span class="player-history-avatar"><img src="${esc(avatar)}" alt="" onerror="this.style.display='none'"></span><div class="player-history-main"><span class="eyebrow">PLAYER TRANSACTION FILE</span><div class="player-title-row"><h2 id="playerHistoryTitle">${esc(name)}</h2><div class="player-interest-control"><button type="button" class="player-star-btn ${starred?'active':''}" data-star-player="${esc(id)}" aria-pressed="${starred}" title="${starred?'Remove trade interest':'Signal trade interest'}">${starred?'★':'☆'}</button><small>Tap the star if you're interested in acquiring this player</small></div></div><p>${trades.length} all-time trade${trades.length===1?'':'s'} recorded across loaded IMO Dynasty seasons.</p></div><div class="player-current-average"><span>${esc(seasonAvg.season)} FANTASY AVG</span><strong>${seasonAvg.avg>0?seasonAvg.avg.toFixed(2):'—'}</strong><small>${seasonAvg.games?`${seasonAvg.games} games`:'Season not started'}</small></div></div><div class="player-history-timeline">${trades.length?trades.map((t,i)=>`<details class="player-history-trade" ${i===0?'open':''}><summary><span class="player-history-index">${trades.length-i}</span><span><strong>${mids(t).map(mid=>esc(managerName(mid,t))).join(' ↔ ')}</strong><small>${fmt(t.created)} · ${esc(t.season_label||'')}</small></span><span class="player-history-view">View trade</span></summary><div class="trade-detail-body">${tradeDetailsHTML(t)}</div></details>`).join(''):'<div class="profile-empty">No trades involving this player were found in the loaded league history.</div>'}</div>`}
+
+function playerDraftOrigin(playerId){
+  const rows=(state.allDraftSelections||[]).filter(x=>String(x.playerId)===String(playerId)).sort((a,b)=>Number(a.created||0)-Number(b.created||0)||Number(a.season)-Number(b.season));
+  const row=rows[0];if(!row)return null;
+  const slot=Number(row.draftSlot)||(((Number(row.pickNo)||1)-1)%Math.max(1,Number(row.teamCount)||8))+1;
+  const pick=`${Number(row.round)}.${String(slot).padStart(2,'0')}`;
+  return {...row,pick,label:row.isRookieDraft?`${row.season} ${pick} rookie draft`:`${pick} startup draft`};
+}
+function returnTreeManagers(playerId){
+  const id=String(playerId),seen=new Map();
+  state.trades.forEach(t=>{const roster=(t.drops||{})[id];if(roster==null)return;const mid=t.roster_owner_map?.[String(roster)];if(!mid)return;const key=String(mid),old=seen.get(key);if(!old||Number(t.created)>Number(old.trade.created))seen.set(key,{id:key,name:managerName(key,t),trade:t})});
+  return [...seen.values()].sort((a,b)=>Number(b.trade.created)-Number(a.trade.created));
+}
+function pickAssetKey(p){return `${String(p.season||'Future')}|${String(p.roster_id??p.original_roster_id??'')}|${String(Number(p.round)||1)}`}
+function pickAssetLabel(p){const original=pickOriginalOwner(p,p._trade||null);return `${String(p.season||'Future')} Round ${Number(p.round)||1} Pick${original?` (${original}'s pick)`:''}`}
+function returnAssetsForManager(t,managerId){
+  const id=String(managerId),out=[];
+  Object.entries(t.adds||{}).forEach(([pid,rid])=>{if(String(t.roster_owner_map?.[String(rid)]||'')===id)out.push({type:'player',id:String(pid),name:playerName(pid),after:Number(t.created)||0})});
+  (t.draft_picks||[]).forEach(p=>{if(String(t.roster_owner_map?.[String(p.owner_id)]||'')!==id)return;const copy={...p,_trade:t};out.push({type:'pick',id:pickAssetKey(p),pick:p,name:pickAssetLabel(copy),after:Number(t.created)||0})});
+  return out;
+}
+function laterAssetTrade(asset,managerId){
+  const id=String(managerId),after=Number(asset.after)||0;
+  return [...state.trades].sort((a,b)=>Number(a.created)-Number(b.created)).find(t=>{
+    if(Number(t.created)<=after)return false;
+    if(asset.type==='player'){
+      const rid=(t.drops||{})[String(asset.id)];return rid!=null&&String(t.roster_owner_map?.[String(rid)]||'')===id;
+    }
+    return (t.draft_picks||[]).some(p=>pickAssetKey(p)===String(asset.id)&&String(t.roster_owner_map?.[String(p.previous_owner_id)]||'')===id);
+  })||null;
+}
+function currentPlayerOwnerName(playerId){
+  const bundle=state.bundles.find(b=>String(b.league?.league_id)===CONFIG.currentLeagueId)||state.bundles[0];
+  const roster=(bundle?.rosters||[]).find(r=>(r.players||[]).map(String).includes(String(playerId))||(r.reserve||[]).map(String).includes(String(playerId))||(r.taxi||[]).map(String).includes(String(playerId)));
+  const mid=roster?bundle?.ownerByRoster?.[String(roster.roster_id)]:null;return mid?managerName(mid):'Not currently rostered';
+}
+function returnAssetHTML(asset,managerId,depth=0,seen=new Set()){
+  const token=`${asset.type}|${asset.id}|${managerId}|${asset.after}`;
+  if(seen.has(token)||depth>6)return `<div class="return-tree-stop">Further chain hidden</div>`;
+  const nextSeen=new Set(seen);nextSeen.add(token);
+  const icon=asset.type==='player'?`<span class="return-tree-avatar"><img src="https://sleepercdn.com/content/nba/players/${esc(asset.id)}.jpg" alt="" loading="lazy" onerror="this.style.display='none'"></span>`:'<span class="return-tree-pick-icon">◆</span>';
+  const title=asset.type==='player'?playerLink(asset.id,asset.name,'return-tree-player'):esc(asset.name);
+  const later=laterAssetTrade(asset,managerId);
+  let continuation='';
+  if(later){
+    const received=returnAssetsForManager(later,managerId);
+    continuation=`<div class="return-tree-event"><span>${fmt(later.created)}</span><strong>${esc(managerName(managerId,later))} traded ${asset.type==='player'?esc(asset.name):'this pick'}</strong><small>Received ${received.length} asset${received.length===1?'':'s'}</small></div>${received.length?`<div class="return-tree-children">${received.map(x=>returnAssetHTML(x,managerId,depth+1,nextSeen)).join('')}</div>`:'<div class="return-tree-stop">No incoming assets resolved.</div>'}`;
+  }else if(asset.type==='pick'){
+    const drafted=state.draftPickMap?.[String(asset.id)]||null;
+    if(drafted){
+      const origin=playerDraftOrigin(drafted),label=origin?.label||'completed rookie pick';
+      continuation=`<div class="return-tree-conversion"><span>BECAME</span><strong>${playerLink(drafted,playerName(drafted),'return-tree-player')}</strong><small>${esc(label)}</small></div>${returnAssetHTML({type:'player',id:String(drafted),name:playerName(drafted),after:Number(origin?.created)||Number(asset.after)||0},managerId,depth+1,nextSeen)}`;
+    }else continuation=`<div class="return-tree-status">Awaiting draft · currently held as a future pick</div>`;
+  }else continuation=`<div class="return-tree-status">Current status: ${esc(currentPlayerOwnerName(asset.id))}</div>`;
+  return `<div class="return-tree-branch"><div class="return-tree-asset ${asset.type}">${icon}<div><strong>${title}</strong><small>${asset.type==='player'?'Player':'Draft capital'}</small></div></div>${continuation}</div>`;
+}
+function returnTreeHTML(playerId,managerId){
+  const id=String(playerId),mid=String(managerId),managerRow=returnTreeManagers(id).find(x=>String(x.id)===mid),trade=managerRow?.trade;
+  if(!trade)return '<div class="profile-empty">No completed return tree is available for this manager.</div>';
+  const origin=playerDraftOrigin(id),received=returnAssetsForManager(trade,mid),manager=managerName(mid,trade);
+  return `<header class="return-tree-header"><span class="eyebrow">TRADE RETURN TREE</span><h2 id="tradeReturnTreeTitle">${esc(manager)} — ${esc(playerName(id))}</h2><p>Tracks what ${esc(manager)} received when they traded ${esc(playerName(id))}, and what those assets later became.</p></header><div class="return-tree-origin"><span>STARTING ASSET</span><strong>${playerLink(id,playerName(id),'return-tree-player')}</strong><small>${origin?`Selected at ${esc(origin.label)}`:'Acquired before the loaded draft history'}</small></div><div class="return-tree-root-event"><span>${fmt(trade.created)}</span><strong>${esc(manager)} traded ${esc(playerName(id))}</strong><small>${mids(trade).map(x=>managerName(x,trade)).filter(x=>x!==manager).join(' · ')||'League trade'}</small></div><div class="return-tree-received"><span class="eyebrow">RETURN RECEIVED</span>${received.length?received.map(x=>returnAssetHTML(x,mid)).join(''):'<div class="profile-empty">No incoming assets could be resolved for this side of the trade.</div>'}</div>`;
+}
+function openTradeReturnTree(playerId,managerId){const modal=$("tradeReturnTreeModal"),content=$("tradeReturnTreeContent");if(!modal||!content)return;content.innerHTML=returnTreeHTML(playerId,managerId);modal.classList.add('open');modal.setAttribute('aria-hidden','false');document.body.classList.add('trade-return-tree-open')}
+function closeTradeReturnTree(){const modal=$("tradeReturnTreeModal");if(!modal)return;modal.classList.remove('open');modal.setAttribute('aria-hidden','true');document.body.classList.remove('trade-return-tree-open')}
+function playerHistoryHTML(playerId){const id=String(playerId),name=playerName(id),trades=playerTrades(id),avatar=`https://sleepercdn.com/content/nba/players/${id}.jpg`,seasonAvg=playerCurrentAverage(id),starred=isPlayerStarred(id),treeManagers=returnTreeManagers(id),treeControl=treeManagers.length?`<div class="return-tree-launch"><div><span class="eyebrow">ASSET LINEAGE</span><strong>See what this player became for a former owner</strong></div>${treeManagers.length>1?`<select data-return-tree-manager aria-label="Choose manager return tree">${treeManagers.map(x=>`<option value="${esc(x.id)}">${esc(x.name)} · traded ${fmt(x.trade.created,true)}</option>`).join('')}</select>`:`<input type="hidden" data-return-tree-manager value="${esc(treeManagers[0].id)}">`}<button type="button" data-open-return-tree="${esc(id)}">View Trade Return Tree</button></div>`:'';return `<div class="player-history-hero"><span class="player-history-avatar"><img src="${esc(avatar)}" alt="" onerror="this.style.display='none'"></span><div class="player-history-main"><span class="eyebrow">PLAYER TRANSACTION FILE</span><div class="player-title-row"><h2 id="playerHistoryTitle">${esc(name)}</h2><div class="player-interest-control"><button type="button" class="player-star-btn ${starred?'active':''}" data-star-player="${esc(id)}" aria-pressed="${starred}" title="${starred?'Remove trade interest':'Signal trade interest'}">${starred?'★':'☆'}</button><small>Tap the star if you're interested in acquiring this player</small></div></div><p>${trades.length} all-time trade${trades.length===1?'':'s'} recorded across loaded IMO Dynasty seasons.</p></div><div class="player-current-average"><span>${esc(seasonAvg.season)} FANTASY AVG</span><strong>${seasonAvg.avg>0?seasonAvg.avg.toFixed(2):'—'}</strong><small>${seasonAvg.games?`${seasonAvg.games} games`:'Season not started'}</small></div></div>${treeControl}<div class="player-history-timeline">${trades.length?trades.map((t,i)=>`<details class="player-history-trade" ${i===0?'open':''}><summary><span class="player-history-index">${trades.length-i}</span><span><strong>${mids(t).map(mid=>esc(managerName(mid,t))).join(' ↔ ')}</strong><small>${fmt(t.created)} · ${esc(t.season_label||'')}</small></span><span class="player-history-view">View trade</span></summary><div class="trade-detail-body">${tradeDetailsHTML(t)}</div></details>`).join(''):'<div class="profile-empty">No trades involving this player were found in the loaded league history.</div>'}</div>`}
 function openPlayerHistory(playerId){const modal=$("playerHistoryModal"),content=$("playerHistoryContent");if(!modal||!content)return;content.innerHTML=playerHistoryHTML(playerId);modal.classList.add("open");modal.setAttribute("aria-hidden","false");modal.dataset.playerId=String(playerId);document.body.classList.add("player-history-open")}
 function closePlayerHistory(){const modal=$("playerHistoryModal");if(!modal)return;modal.classList.remove("open");modal.setAttribute("aria-hidden","true");document.body.classList.remove("player-history-open")}
 
@@ -1387,6 +1451,28 @@ async function loadSeason(id){
   const draftResults=await Promise.all((drafts||[]).map(async draft=>({
     draft,picks:(await getJSON(`${CONFIG.api}/draft/${draft.draft_id}/picks`,true))||[]
   })));
+  // Preserve every completed draft selection for player-origin labels and
+  // return-tree lineage. Rookie-only grading continues to use draftSelections.
+  const allDraftSelections=[];
+  draftResults.forEach(({draft,picks})=>{
+    const draftName=String(draft?.metadata?.name||draft?.name||'').toLowerCase();
+    const configuredRounds=Number(draft?.settings?.rounds)||0;
+    const observedRounds=Math.max(0,...picks.map(p=>Number(p.round)||0));
+    const isRookieDraft=draftName.includes('rookie')||((configuredRounds||observedRounds)>0&&(configuredRounds||observedRounds)<=5);
+    const season=String(draft?.season||league.season);
+    const teamCount=Number(draft?.settings?.teams)||Number(league?.total_rosters)||rosters.length||8;
+    picks.forEach(p=>{
+      if(p.player_id==null||p.round==null)return;
+      const round=Number(p.round),pickNo=Number(p.pick_no);
+      const overallPick=Number.isFinite(pickNo)&&pickNo>0?pickNo:(round-1)*teamCount+Number(p.draft_slot||0);
+      const slot=Number.isFinite(pickNo)&&pickNo>0?((pickNo-1)%teamCount)+1:Number(p.draft_slot||0);
+      allDraftSelections.push({
+        season,draftId:String(draft?.draft_id||''),playerId:String(p.player_id),pickedBy:p.picked_by!=null?String(p.picked_by):'',
+        overallPick,pickNo:Number.isFinite(pickNo)&&pickNo>0?pickNo:overallPick,round,draftSlot:slot||null,teamCount,
+        isRookieDraft,draftKind:isRookieDraft?'rookie':'startup',created:Number(draft?.created||draft?.start_time||0)
+      });
+    });
+  });
   // Prefer true rookie drafts (short drafts or explicitly named rookie drafts).
   // This prevents a startup/supplemental draft in the same league from
   // overwriting the rookie-slot attribution.
@@ -1489,7 +1575,7 @@ async function loadSeason(id){
     });
     return{trades,transactions:completedTransactions.map(t=>({...t,week:wk})),matchups:(match||[]).map(x=>({...x,week:wk}))}
   });
-  return{league,users,rosters,ownerByRoster,draftPickMap,draftSelections,tradedPicks:tradedPicks||[],winnersBracket:winnersBracket||[],trades:weeks.flatMap(x=>x?.trades||[]),transactions:weeks.flatMap(x=>x?.transactions||[]),matchups:weeks.flatMap(x=>x?.matchups||[])}
+  return{league,users,rosters,ownerByRoster,draftPickMap,draftSelections,allDraftSelections,tradedPicks:tradedPicks||[],winnersBracket:winnersBracket||[],trades:weeks.flatMap(x=>x?.trades||[]),transactions:weeks.flatMap(x=>x?.transactions||[]),matchups:weeks.flatMap(x=>x?.matchups||[])}
 }
 async function load(){
   const status=$("statusText");
@@ -1510,6 +1596,7 @@ async function load(){
     state.players=players||{};
     state.draftPickMap=Object.assign({},...valid.map(b=>b.draftPickMap||{}));
     state.draftSelections=valid.flatMap(b=>b.draftSelections||[]);
+    state.allDraftSelections=valid.flatMap(b=>b.allDraftSelections||[]);
     buildManagers();
     const unique=new Map();
     valid.flatMap(x=>x.trades||[]).forEach(t=>unique.set(t.transaction_id||`${t.league_id}-${t.created}`,t));
@@ -1603,7 +1690,9 @@ document.addEventListener("click",e=>{
   if(e.target.closest("#headlinesBtn")){openHeadlines();return}
   if(e.target.closest("[data-close-headlines]")||e.target.closest("#headlinesClose")){closeHeadlines();return}
   const starEl=e.target.closest("[data-star-player]");if(starEl){togglePlayerInterest(starEl.dataset.starPlayer);return}
-  const playerLinkEl=e.target.closest(".player-history-link");if(playerLinkEl){if(playerLinkEl.closest("#managerPicksMadeModal"))closeManagerPicksMade();openPlayerHistory(playerLinkEl.dataset.playerId);return}
+  const returnTreeBtn=e.target.closest("[data-open-return-tree]");if(returnTreeBtn){const launch=returnTreeBtn.closest(".return-tree-launch"),managerId=launch?.querySelector("[data-return-tree-manager]")?.value;if(managerId)openTradeReturnTree(returnTreeBtn.dataset.openReturnTree,managerId);return}
+  if(e.target.closest("[data-close-return-tree]")||e.target.closest("#tradeReturnTreeClose")){closeTradeReturnTree();return}
+  const playerLinkEl=e.target.closest(".player-history-link");if(playerLinkEl){if(playerLinkEl.closest("#managerPicksMadeModal"))closeManagerPicksMade();if(playerLinkEl.closest("#tradeReturnTreeModal"))closeTradeReturnTree();openPlayerHistory(playerLinkEl.dataset.playerId);return}
   if(e.target.closest("[data-close-player-history]")||e.target.closest("#playerHistoryClose")){closePlayerHistory();return}
   if(e.target.closest("#managerDirectoryBtn")){openManagerDirectory();return}
   if(e.target.closest("[data-close-manager-directory]")||e.target.closest("#managerDirectoryClose")){closeManagerDirectory();return}
@@ -1624,6 +1713,6 @@ document.addEventListener('change',e=>{
 document.addEventListener('pointerdown',e=>{if(!e.target.closest('[data-manager-switcher]')&&!e.target.closest('#mobileManagerSwitcherSheet'))closeManagerSwitchers()},{passive:true});
 document.addEventListener("pointerover",e=>{const link=e.target.closest?.(".manager-profile-link");if(link)queueManagerProfilePrewarm(link.dataset.managerId)},{passive:true});
 document.addEventListener("focusin",e=>{const link=e.target.closest?.(".manager-profile-link");if(link)queueManagerProfilePrewarm(link.dataset.managerId)});
-document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("managerPicksMadeModal")?.classList.contains("open"))closeManagerPicksMade();else if($("mockDraftModal")?.classList.contains("open"))closeMockDraft();else if($("archetypeGuideModal")?.classList.contains("open"))closeArchetypeGuide();else if(document.getElementById('mobileManagerSwitcherSheet'))closeMobileManagerSwitcher();else if(document.getElementById('mobileProfileInfoSheet')?.classList.contains('open'))closeMobileProfileInfo();else if(document.querySelector('[data-manager-switcher].open'))closeManagerSwitchers();else if($("headlinesModal")?.classList.contains("open"))closeHeadlines();else if($("playerHistoryModal")?.classList.contains("open"))closePlayerHistory();else if($("managerProfileModal")?.classList.contains("open"))closeManagerProfile();else if($("managerDirectoryModal")?.classList.contains("open"))closeManagerDirectory()});
+document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("tradeReturnTreeModal")?.classList.contains("open"))closeTradeReturnTree();else if($("managerPicksMadeModal")?.classList.contains("open"))closeManagerPicksMade();else if($("mockDraftModal")?.classList.contains("open"))closeMockDraft();else if($("archetypeGuideModal")?.classList.contains("open"))closeArchetypeGuide();else if(document.getElementById('mobileManagerSwitcherSheet'))closeMobileManagerSwitcher();else if(document.getElementById('mobileProfileInfoSheet')?.classList.contains('open'))closeMobileProfileInfo();else if(document.querySelector('[data-manager-switcher].open'))closeManagerSwitchers();else if($("headlinesModal")?.classList.contains("open"))closeHeadlines();else if($("playerHistoryModal")?.classList.contains("open"))closePlayerHistory();else if($("managerProfileModal")?.classList.contains("open"))closeManagerProfile();else if($("managerDirectoryModal")?.classList.contains("open"))closeManagerDirectory()});
 window.addEventListener("popstate",openManagerFromHash);
 load().then?.(()=>openManagerFromHash());
