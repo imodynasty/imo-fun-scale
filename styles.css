@@ -1481,3 +1481,18 @@ body.manager-picks-open{overflow:hidden}
 .return-chain-full-trade{border-top:1px solid rgba(255,255,255,.09)}.return-chain-full-trade>summary{padding:13px 18px;color:var(--muted);font-size:12px;font-weight:850;cursor:pointer;list-style:none}.return-chain-full-trade>summary::-webkit-details-marker{display:none}.return-chain-full-trade>summary:after{content:'+';float:right;color:var(--green)}.return-chain-full-trade[open]>summary:after{content:'−'}.return-chain-full-trade .trade-detail-body{padding:0 18px 18px}
 @media(max-width:780px){.return-tree-launch{grid-template-columns:1fr}.return-tree-launch select,.return-tree-launch button{width:100%}.trade-return-tree-sheet{inset:0;border-radius:0}.trade-return-tree-content{padding:24px 13px 38px}.return-tree-header{padding-right:48px}.return-chain-package-grid{grid-template-columns:1fr}.return-chain-side+.return-chain-side{border-left:0;border-top:1px solid rgba(255,255,255,.09)}.return-chain-transaction-head{display:block}.return-chain-back{margin-top:12px}.return-chain-followed-badge{font-size:7px!important}}
 @media(max-width:460px){.return-chain-package-asset{align-items:flex-start}.return-chain-followed-badge{position:absolute;right:8px;top:7px}.return-chain-package-asset.followed>div{padding-right:74px}.return-chain-side{padding:14px}.return-chain-transaction-head{padding:15px}.return-chain-breadcrumbs{font-size:11px}}
+
+/* V3.3.2 — manager-specific acquisition origin and completed pick outcomes */
+.return-tree-origin em{display:block;margin-top:8px;color:var(--muted,#9aa6ba);font-style:normal;font-size:.9rem;line-height:1.4}
+.return-chain-inline-outcome{margin-top:9px;padding-top:8px;border-top:1px solid rgba(168,139,250,.24);display:grid;gap:2px}
+.return-chain-inline-outcome span{font-size:.66rem;letter-spacing:.14em;font-weight:900;color:#c4b5fd}
+.return-chain-inline-outcome strong{font-size:.94rem}
+.return-chain-inline-outcome small{font-size:.8rem;color:var(--muted,#9aa6ba)}
+.return-chain-package-copy{min-width:0;flex:1}
+.return-chain-acquisition{margin:18px 0 24px;border:1px solid rgba(46,230,145,.23);border-radius:20px;overflow:hidden;background:rgba(8,15,25,.72)}
+.return-chain-acquisition-head{padding:18px 20px;border-bottom:1px solid rgba(148,163,184,.18);background:linear-gradient(110deg,rgba(46,230,145,.08),rgba(59,130,246,.05))}
+.return-chain-acquisition-head span{display:block;color:#37ef9b;font-size:.68rem;font-weight:900;letter-spacing:.15em;margin-bottom:6px}
+.return-chain-acquisition-head h3{margin:0;font-size:1.05rem}
+.return-chain-acquisition .return-chain-package-grid{border:0;border-radius:0}
+.return-chain-acquisition .return-chain-full-trade{border-top:1px solid rgba(148,163,184,.16)}
+@media(max-width:760px){.return-chain-inline-outcome{padding-right:0}.return-chain-acquisition-head{padding:15px}.return-chain-acquisition{border-radius:16px}}

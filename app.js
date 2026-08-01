@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.1 — Simplified Trade Return Chains */
+/* IMO DYNASTY V3.3.2 — Manager Acquisition Origins + Draft Pick Outcomes */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -934,8 +934,33 @@ function returnChainAssetTitle(asset,className='return-chain-player'){
   return asset.type==='player'?playerLink(asset.id,returnChainAssetName(asset),className):esc(returnChainAssetName(asset));
 }
 function returnChainPackageAssetHTML(asset,followed){
-  const active=returnChainAssetMatches(asset,followed);
-  return `<div class="return-chain-package-asset ${asset.type} ${active?'followed':''}">${returnChainAssetIcon(asset)}<div><strong>${returnChainAssetTitle(asset)}</strong><small>${asset.type==='player'?'Player':'Draft capital'}</small></div>${active?'<span class="return-chain-followed-badge">FOLLOWED ASSET</span>':''}</div>`;
+  const active=returnChainAssetMatches(asset,followed),conversion=returnChainPickConversion(asset);
+  const outcome=conversion?`<div class="return-chain-inline-outcome"><span>BECAME</span><strong>${playerLink(conversion.player.id,returnChainAssetName(conversion.player),'return-chain-player')}</strong><small>${esc(conversion.label)}</small></div>`:'';
+  return `<div class="return-chain-package-asset ${asset.type} ${active?'followed':''}">${returnChainAssetIcon(asset)}<div class="return-chain-package-copy"><strong>${returnChainAssetTitle(asset)}</strong><small>${asset.type==='player'?'Player':'Draft capital'}</small>${outcome}</div>${active?'<span class="return-chain-followed-badge">FOLLOWED ASSET</span>':''}</div>`;
+}
+function playerAcquisitionTrade(playerId,managerId,beforeCreated){
+  const id=String(playerId),mid=String(managerId),before=Number(beforeCreated)||Infinity;
+  return [...state.trades].filter(t=>{
+    if(Number(t.created)>=before)return false;
+    const rid=(t.adds||{})[id];
+    return rid!=null&&String(t.roster_owner_map?.[String(rid)]||'')===mid;
+  }).sort((a,b)=>Number(b.created)-Number(a.created))[0]||null;
+}
+function returnChainAcquisitionHTML(session,origin){
+  const mid=String(session.managerId),manager=managerName(mid,session.rootTrade),root={type:'player',id:String(session.rootPlayerId),name:playerName(session.rootPlayerId)},draftedBy=origin?.pickedBy?String(origin.pickedBy):'',draftedByName=draftedBy?managerName(draftedBy):'',draftedByManager=draftedBy&&draftedBy===mid,acquisition=playerAcquisitionTrade(session.rootPlayerId,mid,session.rootTrade?.created);
+  let originLine='Acquired before the loaded draft history';
+  if(origin){
+    originLine=draftedByManager?`Drafted by ${esc(manager)} at ${esc(origin.label)}`:`Originally drafted by ${esc(draftedByName||'another manager')} at ${esc(origin.label)}`;
+  }
+  if(draftedByManager&&!acquisition){
+    return `<div class="return-tree-origin"><span>STARTING ASSET</span><strong>${playerLink(session.rootPlayerId,playerName(session.rootPlayerId),'return-chain-player')}</strong><small>${originLine}</small></div>`;
+  }
+  if(!acquisition){
+    return `<div class="return-tree-origin"><span>STARTING ASSET</span><strong>${playerLink(session.rootPlayerId,playerName(session.rootPlayerId),'return-chain-player')}</strong><small>${originLine}</small><em>How ${esc(manager)} acquired this player is not available in the loaded trade history.</em></div>`;
+  }
+  const sent=sentAssetsForManager(acquisition,mid),received=returnAssetsForManager(acquisition,mid),tradeManagerIds=[...new Set((acquisition.manager_ids||[]).map(String))],others=tradeManagerIds.filter(x=>x!==mid).map(x=>managerName(x,acquisition));
+  return `<div class="return-tree-origin"><span>STARTING ASSET</span><strong>${playerLink(session.rootPlayerId,playerName(session.rootPlayerId),'return-chain-player')}</strong><small>Acquired by ${esc(manager)} via trade on ${esc(fmt(acquisition.created))}</small>${origin?`<em>${originLine}</em>`:''}</div>
+  <section class="return-chain-acquisition"><div class="return-chain-acquisition-head"><span>HOW ${esc(manager.toUpperCase())} ACQUIRED ${esc(playerName(session.rootPlayerId).toUpperCase())}</span><h3>${esc(fmt(acquisition.created))} trade with ${esc(others.join(' and ')||'another manager')}</h3></div><div class="return-chain-package-grid"><section class="return-chain-side sent"><div class="return-chain-side-heading"><span>PACKAGE SENT</span><h4>${esc(manager)} sent</h4><small>${sent.length} asset${sent.length===1?'':'s'}</small></div><div class="return-chain-side-assets">${sent.length?sent.map(a=>returnChainPackageAssetHTML(a,null)).join(''):'<div class="profile-empty">No outgoing assets resolved.</div>'}</div></section><section class="return-chain-side received"><div class="return-chain-side-heading"><span>PACKAGE RECEIVED</span><h4>${esc(manager)} received</h4><small>${received.length} asset${received.length===1?'':'s'}</small></div><div class="return-chain-side-assets">${received.length?received.map(a=>returnChainPackageAssetHTML(a,root)).join(''):'<div class="profile-empty">No incoming assets resolved.</div>'}</div></section></div><details class="return-chain-full-trade"><summary>View complete acquisition trade</summary><div class="trade-detail-body">${tradeDetailsHTML(acquisition)}</div></details></section>`;
 }
 function returnChainReceivedAssetHTML(asset,index,managerId){
   const next=returnChainNext(asset,managerId),conversion=returnChainPickConversion(asset);
@@ -963,7 +988,7 @@ function returnChainHTML(){
   const conversionNotice=step.conversion?`<div class="return-chain-step-conversion"><span>PICK CONVERSION</span><strong>${esc(returnChainAssetName(step.sourceAsset))} became ${playerLink(step.asset.id,assetName,'return-chain-player')}</strong><small>${esc(step.conversion.label)}</small></div>`:'';
   return `<header class="return-tree-header"><span class="eyebrow">TRADE RETURN CHAIN</span><h2 id="tradeReturnTreeTitle">${esc(manager)} — ${esc(playerName(session.rootPlayerId))}</h2><p>Shows the full trade package at each step. Follow one returned asset at a time to see what happened next.</p></header>
   ${returnChainBreadcrumbHTML(session)}
-  <div class="return-tree-origin"><span>STARTING ASSET</span><strong>${playerLink(session.rootPlayerId,playerName(session.rootPlayerId),'return-chain-player')}</strong><small>${origin?`Selected at ${esc(origin.label)}`:'Acquired before the loaded draft history'}</small></div>
+  ${returnChainAcquisitionHTML(session,origin)}
   ${conversionNotice}
   <section class="return-chain-transaction">
     <div class="return-chain-transaction-head"><div><span>${esc(fmt(trade.created))}</span><h3>${esc(assetName)} was included in a ${teamCount}-team trade package</h3><p>${esc(manager)} traded with ${esc(otherManagers.join(' and ')||'another manager')}.</p></div>${session.steps.length>1?'<button type="button" class="return-chain-back" data-return-chain-back>← Previous step</button>':''}</div>

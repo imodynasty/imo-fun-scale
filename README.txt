@@ -380,7 +380,7 @@ V3.2.2 — Bulk Sleeper Season Averages
 - Removes the local season-averages.json dependency from runtime.
 - Console diagnostics include the number of bulk averages loaded and Kevin Porter Jr's 2025 result.
 
-V3.3.1 — Simplified Trade Return Chains
+V3.3.2 — Simplified Trade Return Chains
 - Replaces the deeply nested tree with one complete transaction at a time.
 - Shows the full package the selected manager sent and received, so bundled trades are not presented as one-for-one swaps.
 - Highlights the followed asset inside the outgoing package.
