@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.10 — Visible Behavioural Manager Weaknesses */
+/* IMO DYNASTY V3.3.11 — Canonical Current Draft Pick Ownership */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -539,12 +539,10 @@ function championManagerIds(){
   return ids
 }
 function upcomingFirstCount(managerId){
-  const bundle=state.bundles.find(b=>String(b.league?.league_id)===CONFIG.currentLeagueId)||state.bundles[0];
-  if(!bundle)return 0;
-  const currentSeason=Number(bundle.league?.season)||new Date().getFullYear(),seasons=[currentSeason,currentSeason+1,currentSeason+2],rosters=bundle.rosters||[],traded=bundle.tradedPicks||[];
-  let count=0;
-  seasons.forEach(season=>rosters.forEach(r=>{let ownerRoster=String(r.roster_id);const moved=traded.find(p=>String(p.season)===String(season)&&Number(p.round)===1&&String(p.roster_id)===String(r.roster_id));if(moved?.owner_id!=null)ownerRoster=String(moved.owner_id);const ownerUser=bundle.ownerByRoster?.[ownerRoster];if(String(ownerUser)===String(managerId))count++}));
-  return count
+  // Use the same canonical current-ownership list shown in the manager profile.
+  // This prevents original picks that have already been traded away from being
+  // counted as if the original manager still owns them.
+  return managerCurrentDraftPicks(managerId).filter(p=>Number(p.round)===1).length
 }
 function managerBadges(managerId){
   const id=String(managerId),badges=[],trades=managerTrades(id),cutoff=Date.now()-28*864e5,recent28=trades.filter(t=>(t.created||0)>=cutoff).length;
@@ -644,18 +642,21 @@ function playerFormMini(rows,positive){return rows.length?rows.map(x=>`<div clas
 function currentRosterIds(managerId){return (state.managers.get(String(managerId))?.roster?.players||[]).map(String)}
 function currentBundle(){return state.bundles.find(b=>String(b.league?.league_id)===CONFIG.currentLeagueId)||state.bundles[0]||null}
 function managerFuturePickCounts(managerId){
-  const bundle=currentBundle();if(!bundle)return{firsts:0,seconds:0,totalValue:0};
-  const start=Number(bundle.league?.season)||2026,seasons=[start,start+1,start+2],counts={1:0,2:0};
-  seasons.forEach(season=>(bundle.rosters||[]).forEach(r=>{[1,2].forEach(round=>{let ownerRoster=String(r.roster_id);const moved=(bundle.tradedPicks||[]).find(p=>String(p.season)===String(season)&&Number(p.round)===round&&String(p.roster_id)===String(r.roster_id));if(moved?.owner_id!=null)ownerRoster=String(moved.owner_id);const ownerUser=bundle.ownerByRoster?.[ownerRoster];if(String(ownerUser)===String(managerId))counts[round]++})}));
-  return{firsts:counts[1],seconds:counts[2],totalValue:counts[1]*17.5+counts[2]*2.5}
+  const picks=managerCurrentDraftPicks(managerId),firsts=picks.filter(p=>Number(p.round)===1).length,seconds=picks.filter(p=>Number(p.round)===2).length;
+  return{firsts,seconds,totalValue:firsts*17.5+seconds*2.5}
 }
 function managerCurrentDraftPicks(managerId){
   const bundle=currentBundle();if(!bundle)return[];
   const currentSeason=Number(bundle.league?.season)||2026,moved=bundle.tradedPicks||[],maxMovedSeason=Math.max(currentSeason+3,...moved.map(p=>Number(p.season)||0)),seasons=[];
   for(let season=currentSeason+1;season<=maxMovedSeason;season++)seasons.push(season);
   const maxMovedRound=Math.max(0,...moved.map(p=>Number(p.round)||0)),rounds=Math.max(4,Number(bundle.league?.settings?.draft_rounds)||0,maxMovedRound),out=[];
+  // Sleeper identifies a pick by season + round + its original roster slot.
+  // Build one canonical current-owner lookup and let the latest duplicate entry
+  // win if the API ever returns the same pick more than once.
+  const currentOwnerByPick=new Map();
+  moved.forEach(p=>{const originalRosterId=String(p.roster_id??p.original_roster_id??'');if(!originalRosterId)return;currentOwnerByPick.set(`${String(p.season)}|${Number(p.round)}|${originalRosterId}`,String(p.owner_id??originalRosterId))});
   seasons.forEach(season=>(bundle.rosters||[]).forEach(originalRoster=>{for(let round=1;round<=rounds;round++){
-    const originalRosterId=String(originalRoster.roster_id),transfer=moved.find(p=>String(p.season)===String(season)&&Number(p.round)===round&&String(p.roster_id??p.original_roster_id)===originalRosterId),ownerRoster=String(transfer?.owner_id??originalRosterId),ownerUser=String(bundle.ownerByRoster?.[ownerRoster]||'');
+    const originalRosterId=String(originalRoster.roster_id),pickKey=`${String(season)}|${round}|${originalRosterId}`,ownerRoster=currentOwnerByPick.get(pickKey)||originalRosterId,ownerUser=String(bundle.ownerByRoster?.[ownerRoster]||'');
     if(ownerUser!==String(managerId))continue;
     const originalUser=String(bundle.ownerByRoster?.[originalRosterId]||''),originalName=managerName(originalUser),pick={season:String(season),round,roster_id:originalRosterId,original_roster_id:originalRosterId,owner_id:ownerRoster},key=pickAssetKey(pick),label=`${season} Round ${round} Pick (${originalName}'s pick)`;
     out.push({season,round,key,label,originalName});
@@ -1165,7 +1166,7 @@ function closeManagerDirectory(){const modal=$("managerDirectoryModal");if(!moda
 
 function managerProfileCacheKey(managerId){return `${String(managerId)}|${String(state.profileAverageSeason||"")}`}
 function managerProfileDataFingerprint(){const latest=state.trades?.[0]?.created||0,current=state.modelBundle?.league?.season||'';return `${CONFIG.currentLeagueId}|${current}|${latest}|${state.trades.length}|${state.managers.size}|${state.draftSelections.length}`}
-function managerProfileSessionKey(key){return `imo-profile-v338-picks-weakness-polish|${managerProfileDataFingerprint()}|${key}`}
+function managerProfileSessionKey(key){return `imo-profile-v3311-canonical-pick-ownership|${managerProfileDataFingerprint()}|${key}`}
 function cachedManagerProfileHTML(managerId){
   const key=managerProfileCacheKey(managerId);
   if(state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
