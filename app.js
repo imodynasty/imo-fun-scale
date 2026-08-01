@@ -431,13 +431,22 @@ function rivalryLabel(managerA,managerB){
   const leader=r.a>r.b?nameA:nameB,wins=Math.max(r.a,r.b),losses=Math.min(r.a,r.b);
   return `${leader} leads ${wins}–${losses} all-time${r.d?` · ${r.d} draw${r.d===1?'':'s'}`:''}`
 }
+function h2hPlayerLastFiveAverage(playerId,bundle){
+  const id=String(playerId),scores=[];
+  (bundle?.matchups||[]).forEach(row=>{const value=Number(row?.players_points?.[id]);if(Number.isFinite(value)&&value>0)scores.push({week:Number(row.week)||0,value})});
+  scores.sort((a,b)=>a.week-b.week);const last=scores.slice(-5).map(x=>x.value);
+  if(last.length)return last.reduce((a,b)=>a+b,0)/last.length;
+  const season=String(bundle?.league?.season||h2hAverageSeason()),seasonAvg=Number(seasonAverageMap(season)?.[id]||0);
+  if(seasonAvg>0)return seasonAvg;
+  return Number(seasonAverageMap(h2hAverageSeason())?.[id]||latestKnownAverage(id)||0)
+}
 function keyMatchupPlayer(managerId,row){
-  const rosterIds=new Set((state.managers.get(String(managerId))?.roster?.players||[]).map(String));
-  const form=allGameLogFormRows().filter(x=>rosterIds.has(String(x.id))).sort((a,b)=>Number(b.recentAvg)-Number(a.recentAvg));
-  const fallback=managerRosterPlayers(managerId,String(currentLeagueBundle()?.league?.season||'2026'))[0]||managerRosterPlayers(managerId,'2025')[0]||null;
-  const chosen=form[0]||fallback;if(!chosen)return null;
-  const id=String(chosen.id),recentAvg=Number(chosen.recentAvg??chosen.avg??0),live=Number(row?.players_points?.[id]||0),player=state.players[id]||{};
-  return{id,name:chosen.name||playerName(id),recentAvg,live,position:player.position||player.fantasy_positions?.[0]||chosen.position||'',avatar:`https://sleepercdn.com/content/nba/players/${id}.jpg`}
+  const bundle=currentLeagueBundle(),rosterIds=(state.managers.get(String(managerId))?.roster?.players||[]).map(String);
+  const ranked=rosterIds.map(id=>({id,name:playerName(id),recentAvg:h2hPlayerLastFiveAverage(id,bundle)})).filter(x=>x.recentAvg>0).sort((a,b)=>b.recentAvg-a.recentAvg);
+  const fallback=managerRosterPlayers(managerId,String(bundle?.league?.season||'2026'))[0]||managerRosterPlayers(managerId,'2025')[0]||null;
+  const chosen=ranked[0]||fallback;if(!chosen)return null;
+  const id=String(chosen.id),recentAvg=Number(chosen.recentAvg??chosen.avg??0),live=Number(row?.players_points?.[id]||0),player=state.players[id]||{},positions=[...(player.fantasy_positions||[]),player.position].filter(Boolean).map(String);
+  return{id,name:chosen.name||playerName(id),recentAvg,live,position:positions[0]||chosen.position||'',positions,avatar:`https://sleepercdn.com/content/nba/players/${id}.jpg`}
 }
 function h2hManagerAvatar(managerId){
   const manager=state.managers.get(String(managerId));return manager?.avatar?`<img src="${esc(manager.avatar)}" alt="" loading="lazy">`:`<span>${esc(manager?.initials||'—')}</span>`
@@ -461,17 +470,15 @@ function h2hOutPlayers(managerId){
   const season=h2hAverageSeason();
   return managerRosterPlayers(managerId,season).filter(x=>Number(x.avg)>0).slice(0,5).filter(x=>sleeperListsPlayerOut(x.id)).map(x=>({id:String(x.id),name:x.name,avg:Number(x.avg)||0}))
 }
-function h2hInjuryHTML(idA,idB,injuriesA,injuriesB){
-  const side=(id,rows)=>rows.length?`<div class="h2h-injury-side"><strong>${esc(managerName(id))}</strong>${rows.map(p=>`<span>${playerLink(p.id,p.name,'h2h-injury-player')} <small>OUT</small></span>`).join('')}</div>`:`<div class="h2h-injury-side clear"><strong>${esc(managerName(id))}</strong><span>No top-five player listed OUT</span></div>`;
-  return `<div class="h2h-injuries"><div class="h2h-detail-heading"><span>INJURY WATCH</span><small>Top-five average players only</small></div><div class="h2h-injury-grid">${side(idA,injuriesA)}${side(idB,injuriesB)}</div></div>`
-}
 function h2hNarrative(data){
   const {idA,idB,keyA,keyB,odds,injuriesA,injuriesB,formA,formB}=data,nameA=managerName(idA),nameB=managerName(idB),gap=Math.abs(odds.a-odds.b),aFav=odds.a<=odds.b,fav=aFav?nameA:nameB,dog=aFav?nameB:nameA,favOdds=aFav?odds.a:odds.b;
-  const bothBigs=[keyA?.position,keyB?.position].every(pos=>/C|PF/i.test(String(pos||'')));
+  const isCentre=p=>Array.isArray(p?.positions)&&p.positions.some(pos=>/^(c|center)$/i.test(String(pos).trim()));
+  const bothBigs=isCentre(keyA)&&isCentre(keyB),bothGuards=[keyA,keyB].every(p=>Array.isArray(p?.positions)&&p.positions.some(pos=>/^(pg|sg|g|guard)$/i.test(String(pos).trim())));
+  const tag=bothBigs?'Battle of the Bigs':bothGuards?'Guard Showdown':'Top Performers';
   let first;
-  if(bothBigs&&keyA&&keyB)first=`The Battle of the Bigs: ${keyA.name} and ${keyB.name} headline a matchup built around frontcourt star power.`;
-  else if(gap<=.20)first=`A genuine coin flip: ${nameA} and ${nameB} enter the week with almost nothing separating their markets.`;
-  else if(keyA&&keyB)first=`${fav} opens as the $${favOdds.toFixed(2)} favourite, with ${keyA.name} and ${keyB.name} shaping the key individual battle.`;
+  if(bothBigs&&keyA&&keyB)first=`${tag}: ${keyA.name} and ${keyB.name} headline a matchup built around true centre play.`;
+  else if(gap<=.20)first=`${tag}: ${nameA} and ${nameB} enter the week with almost nothing separating their markets.`;
+  else if(keyA&&keyB)first=`${tag}: ${fav} opens as the $${favOdds.toFixed(2)} favourite, with ${keyA.name} and ${keyB.name} shaping the key individual battle.`;
   else first=`${fav} enters as the favourite, but ${dog} remains close enough to turn this into a live underdog opportunity.`;
   const injuryRows=[...injuriesA.map(p=>`${p.name} (${nameA})`),...injuriesB.map(p=>`${p.name} (${nameB})`)];
   let second='';
@@ -487,9 +494,8 @@ function h2hMatchupDetailsHTML(data,mode){
       <div class="h2h-line"><span>Market line</span><strong>${esc(managerName(favouriteA?idA:idB))} −${line.toFixed(1)} <small>·</small> ${esc(managerName(favouriteA?idB:idA))} +${line.toFixed(1)}</strong></div>
       <div class="h2h-rivalry"><span>Rivalry record</span><strong>${esc(rivalryLabel(idA,idB))}</strong></div>
     </div>
-    <div class="h2h-key-heading"><span>KEY MATCHUP</span><small>Top last-five performer</small></div>
-    <div class="h2h-key-grid">${h2hKeyPlayerHTML(keyA,mode==='live')}${h2hKeyPlayerHTML(keyB,mode==='live')}</div>
-    ${h2hInjuryHTML(idA,idB,injuriesA,injuriesB)}
+    <div class="h2h-key-heading"><span>MAIN EVENT</span><small>Top last-five performer</small></div>
+    <div class="h2h-main-event"><div class="h2h-main-event-player">${h2hKeyPlayerHTML(keyA,mode==='live')}</div><span class="h2h-main-event-vs">VS</span><div class="h2h-main-event-player right">${h2hKeyPlayerHTML(keyB,mode==='live')}</div></div>
     <div class="h2h-expanded-form"><span>Recent form</span><div>${esc(managerName(idA))}${h2hFormHTML(formA)}</div><div>${esc(managerName(idB))}${h2hFormHTML(formB)}</div></div>`
 }
 function buildHeadToHeadMatchup(group,bundle,week,mode){
