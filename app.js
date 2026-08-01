@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.7 — Visible Behavioural Manager Weaknesses */
+/* IMO DYNASTY V3.3.8 — Visible Behavioural Manager Weaknesses */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -632,6 +632,23 @@ function managerFuturePickCounts(managerId){
   seasons.forEach(season=>(bundle.rosters||[]).forEach(r=>{[1,2].forEach(round=>{let ownerRoster=String(r.roster_id);const moved=(bundle.tradedPicks||[]).find(p=>String(p.season)===String(season)&&Number(p.round)===round&&String(p.roster_id)===String(r.roster_id));if(moved?.owner_id!=null)ownerRoster=String(moved.owner_id);const ownerUser=bundle.ownerByRoster?.[ownerRoster];if(String(ownerUser)===String(managerId))counts[round]++})}));
   return{firsts:counts[1],seconds:counts[2],totalValue:counts[1]*17.5+counts[2]*2.5}
 }
+function managerCurrentDraftPicks(managerId){
+  const bundle=currentBundle();if(!bundle)return[];
+  const currentSeason=Number(bundle.league?.season)||2026,moved=bundle.tradedPicks||[],maxMovedSeason=Math.max(currentSeason+3,...moved.map(p=>Number(p.season)||0)),seasons=[];
+  for(let season=currentSeason+1;season<=maxMovedSeason;season++)seasons.push(season);
+  const maxMovedRound=Math.max(0,...moved.map(p=>Number(p.round)||0)),rounds=Math.max(4,Number(bundle.league?.settings?.draft_rounds)||0,maxMovedRound),out=[];
+  seasons.forEach(season=>(bundle.rosters||[]).forEach(originalRoster=>{for(let round=1;round<=rounds;round++){
+    const originalRosterId=String(originalRoster.roster_id),transfer=moved.find(p=>String(p.season)===String(season)&&Number(p.round)===round&&String(p.roster_id??p.original_roster_id)===originalRosterId),ownerRoster=String(transfer?.owner_id??originalRosterId),ownerUser=String(bundle.ownerByRoster?.[ownerRoster]||'');
+    if(ownerUser!==String(managerId))continue;
+    const originalUser=String(bundle.ownerByRoster?.[originalRosterId]||''),originalName=managerName(originalUser),pick={season:String(season),round,roster_id:originalRosterId,original_roster_id:originalRosterId,owner_id:ownerRoster},key=pickAssetKey(pick),label=`${season} Round ${round} Pick (${originalName}'s pick)`;
+    out.push({season,round,key,label,originalName});
+  }}));
+  return out.sort((a,b)=>a.round-b.round||a.season-b.season||a.originalName.localeCompare(b.originalName))
+}
+function managerDraftPicksHTML(managerId){
+  const picks=managerCurrentDraftPicks(managerId),firsts=picks.filter(p=>p.round===1),later=picks.filter(p=>p.round!==1),rows=list=>list.map(p=>`<div class="manager-future-pick-row"><span class="manager-future-pick-icon">◆</span>${pickHistoryLink(p.key,p.label,'pick-history-link manager-future-pick-link')}</div>`).join('');
+  return `<section class="manager-profile-card profile-draft-picks-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">DRAFT CAPITAL</span><h3>Current Draft Picks</h3></div><span class="period-pill">${picks.length} assets</span></div><div class="manager-future-picks-primary">${rows(firsts)||'<div class="profile-empty">No future first-round picks currently held.</div>'}</div>${later.length?`<details class="manager-future-picks-more"><summary>Show ${later.length} later-round pick${later.length===1?'':'s'}</summary><div class="manager-future-picks-list">${rows(later)}</div></details>`:''}</section>`
+}
 function managerWaiverMoves(managerId){
   const bundle=currentBundle();if(!bundle)return 0;const rosterId=String(state.managers.get(String(managerId))?.roster?.roster_id||'');
   return (bundle.transactions||[]).filter(t=>['waiver','free_agent'].includes(t.type)&&(!t.status||t.status==='complete')).filter(t=>{
@@ -735,7 +752,7 @@ function managerWeaknesses(managerId,r,picks,avgAge){
   add(top8.length&&top8MoveRate+0.08<leagueTop8Avg?62+(leagueTop8Avg-top8MoveRate)*70:0,'Values own assets too much');
   add(seasonAvg>0&&seasonCount>seasonAvg*1.75?58+Math.min(35,(seasonCount/seasonAvg-1.75)*25):0,'Too quick to reshuffle');
   add(r.waiver<55?55+(55-r.waiver)*.7+(waiverAvg>waivers?10:0):0,'Leaves value on the waiver wire');
-  add(picks.firsts<=1?84:picks.totalValue<20?70:Math.max(0,58-r.draft*.35),'Short on future flexibility');
+  add(picks.firsts<2&&avgAge>24?82+Math.min(12,(avgAge-24)*3):0,'Short on future flexibility');
   add(avgAge>=29&&picks.firsts<=2?82+(avgAge-29)*5:avgAge>=28.5?68+(avgAge-28.5)*6:0,'Too veteran-heavy');
   add(avgAge<=24.5&&r.winNow<55?76+(55-r.winNow)*.35:0,'Youth has not converted yet');
   add(avgAge>25.5&&avgAge<28.5&&r.winNow<58&&r.draft<58?72+(58-Math.max(r.winNow,r.draft))*.35:0,'Caught between timelines');
@@ -750,7 +767,6 @@ function managerWeaknesses(managerId,r,picks,avgAge){
   const fallback=[
     {score:64+(100-r.trade)*.18,label:'Needs to trade more'},
     {score:63+(100-r.waiver)*.16,label:'Leaves value on the waiver wire'},
-    {score:62+(100-r.draft)*.15,label:'Short on future flexibility'},
     {score:61+(100-r.star)*.14,label:'Roster lacks a clear centrepiece'},
     {score:60+(100-r.asset)*.13,label:'Asset value leaks through trades'},
     {score:59+(100-r.winNow)*.12,label:'Needs more reliable production'}
@@ -945,6 +961,7 @@ function managerProfileHTML(managerId){
   <div class="manager-profile-grid">
     ${gmProfileHTML(gm)}
     <section class="manager-profile-card profile-roster-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">CURRENT TEAM</span><h3>Roster</h3></div><div class="roster-season-toggle"><button type="button" class="${state.profileAverageSeason==="2025"?"active":""}" data-profile-season="2025">2025 averages</button><button type="button" class="${state.profileAverageSeason==="2026"?"active":""}" data-profile-season="2026">2026 season averages</button></div></div><div class="profile-roster-list">${rosterRows}</div></section>
+    ${managerDraftPicksHTML(id)}
     <section class="manager-profile-card profile-form-guide-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">FORM GUIDE</span><h3>Last Five</h3></div></div><div class="profile-form-strip interactive">${formPills}</div></section>
     <section class="manager-profile-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">LAST FIVE WATCH</span><h3>Poor Form</h3></div></div>${playerFormMini(teamForm.poor,false)}</section>
     <section class="manager-profile-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">LAST FIVE WATCH</span><h3>Good Form</h3></div></div>${playerFormMini(teamForm.good,true)}</section>
@@ -1131,7 +1148,7 @@ function closeManagerDirectory(){const modal=$("managerDirectoryModal");if(!moda
 
 function managerProfileCacheKey(managerId){return `${String(managerId)}|${String(state.profileAverageSeason||"")}`}
 function managerProfileDataFingerprint(){const latest=state.trades?.[0]?.created||0,current=state.modelBundle?.league?.season||'';return `${CONFIG.currentLeagueId}|${current}|${latest}|${state.trades.length}|${state.managers.size}|${state.draftSelections.length}`}
-function managerProfileSessionKey(key){return `imo-profile-v337-behavioural-weaknesses|${managerProfileDataFingerprint()}|${key}`}
+function managerProfileSessionKey(key){return `imo-profile-v338-picks-weakness-polish|${managerProfileDataFingerprint()}|${key}`}
 function cachedManagerProfileHTML(managerId){
   const key=managerProfileCacheKey(managerId);
   if(state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
