@@ -380,4 +380,12 @@ V3.2.2 — Bulk Sleeper Season Averages
 - Removes the local season-averages.json dependency from runtime.
 - Console diagnostics include the number of bulk averages loaded and Kevin Porter Jr's 2025 result.
 
-V3.3.0 adds on-demand manager-specific Trade Return Trees, startup-draft origin labels, and rookie pick-to-player lineage.
+V3.3.1 — Simplified Trade Return Chains
+- Replaces the deeply nested tree with one complete transaction at a time.
+- Shows the full package the selected manager sent and received, so bundled trades are not presented as one-for-one swaps.
+- Highlights the followed asset inside the outgoing package.
+- Lets users follow one received player or pick at a time through a breadcrumb drill-down.
+- Uses “became” only for direct rookie pick-to-player conversions.
+- Preserves startup draft labels such as 12.06 startup draft.
+- Preserves original pick identity across multiple trades before resolving the pick to its drafted player.
+- Includes an expandable complete-trade view for multi-team deals.

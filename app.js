@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.0 — Trade Return Trees */
+/* IMO DYNASTY V3.3.1 — Simplified Trade Return Chains */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -892,6 +892,12 @@ function returnAssetsForManager(t,managerId){
   (t.draft_picks||[]).forEach(p=>{if(String(t.roster_owner_map?.[String(p.owner_id)]||'')!==id)return;const copy={...p,_trade:t};out.push({type:'pick',id:pickAssetKey(p),pick:p,name:pickAssetLabel(copy),after:Number(t.created)||0})});
   return out;
 }
+function sentAssetsForManager(t,managerId){
+  const id=String(managerId),out=[];
+  Object.entries(t.drops||{}).forEach(([pid,rid])=>{if(String(t.roster_owner_map?.[String(rid)]||'')===id)out.push({type:'player',id:String(pid),name:playerName(pid),after:Number(t.created)||0})});
+  (t.draft_picks||[]).forEach(p=>{if(String(t.roster_owner_map?.[String(p.previous_owner_id)]||'')!==id)return;const copy={...p,_trade:t};out.push({type:'pick',id:pickAssetKey(p),pick:p,name:pickAssetLabel(copy),after:Number(t.created)||0})});
+  return out;
+}
 function laterAssetTrade(asset,managerId){
   const id=String(managerId),after=Number(asset.after)||0;
   return [...state.trades].sort((a,b)=>Number(a.created)-Number(b.created)).find(t=>{
@@ -907,35 +913,83 @@ function currentPlayerOwnerName(playerId){
   const roster=(bundle?.rosters||[]).find(r=>(r.players||[]).map(String).includes(String(playerId))||(r.reserve||[]).map(String).includes(String(playerId))||(r.taxi||[]).map(String).includes(String(playerId)));
   const mid=roster?bundle?.ownerByRoster?.[String(roster.roster_id)]:null;return mid?managerName(mid):'Not currently rostered';
 }
-function returnAssetHTML(asset,managerId,depth=0,seen=new Set()){
-  const token=`${asset.type}|${asset.id}|${managerId}|${asset.after}`;
-  if(seen.has(token)||depth>6)return `<div class="return-tree-stop">Further chain hidden</div>`;
-  const nextSeen=new Set(seen);nextSeen.add(token);
-  const icon=asset.type==='player'?`<span class="return-tree-avatar"><img src="https://sleepercdn.com/content/nba/players/${esc(asset.id)}.jpg" alt="" loading="lazy" onerror="this.style.display='none'"></span>`:'<span class="return-tree-pick-icon">◆</span>';
-  const title=asset.type==='player'?playerLink(asset.id,asset.name,'return-tree-player'):esc(asset.name);
-  const later=laterAssetTrade(asset,managerId);
-  let continuation='';
-  if(later){
-    const received=returnAssetsForManager(later,managerId);
-    continuation=`<div class="return-tree-event"><span>${fmt(later.created)}</span><strong>${esc(managerName(managerId,later))} traded ${asset.type==='player'?esc(asset.name):'this pick'}</strong><small>Received ${received.length} asset${received.length===1?'':'s'}</small></div>${received.length?`<div class="return-tree-children">${received.map(x=>returnAssetHTML(x,managerId,depth+1,nextSeen)).join('')}</div>`:'<div class="return-tree-stop">No incoming assets resolved.</div>'}`;
-  }else if(asset.type==='pick'){
-    const drafted=state.draftPickMap?.[String(asset.id)]||null;
-    if(drafted){
-      const origin=playerDraftOrigin(drafted),label=origin?.label||'completed rookie pick';
-      continuation=`<div class="return-tree-conversion"><span>BECAME</span><strong>${playerLink(drafted,playerName(drafted),'return-tree-player')}</strong><small>${esc(label)}</small></div>${returnAssetHTML({type:'player',id:String(drafted),name:playerName(drafted),after:Number(origin?.created)||Number(asset.after)||0},managerId,depth+1,nextSeen)}`;
-    }else continuation=`<div class="return-tree-status">Awaiting draft · currently held as a future pick</div>`;
-  }else continuation=`<div class="return-tree-status">Current status: ${esc(currentPlayerOwnerName(asset.id))}</div>`;
-  return `<div class="return-tree-branch"><div class="return-tree-asset ${asset.type}">${icon}<div><strong>${title}</strong><small>${asset.type==='player'?'Player':'Draft capital'}</small></div></div>${continuation}</div>`;
+function returnChainAssetName(asset){return asset?.type==='player'?playerName(asset.id):String(asset?.name||'Draft pick')}
+function returnChainAssetToken(asset){return `${String(asset?.type||'')}|${String(asset?.id||'')}|${Number(asset?.after)||0}`}
+function returnChainAssetMatches(a,b){return Boolean(a&&b&&String(a.type)===String(b.type)&&String(a.id)===String(b.id))}
+function returnChainPickConversion(asset){
+  if(asset?.type!=='pick')return null;
+  const drafted=state.draftPickMap?.[String(asset.id)]||null;if(!drafted)return null;
+  const origin=playerDraftOrigin(drafted),player={type:'player',id:String(drafted),name:playerName(drafted),after:Number(origin?.created)||Number(asset.after)||0};
+  return{player,origin,label:origin?.label||'completed rookie draft pick'};
 }
-function returnTreeHTML(playerId,managerId){
-  const id=String(playerId),mid=String(managerId),managerRow=returnTreeManagers(id).find(x=>String(x.id)===mid),trade=managerRow?.trade;
-  if(!trade)return '<div class="profile-empty">No completed return tree is available for this manager.</div>';
-  const origin=playerDraftOrigin(id),received=returnAssetsForManager(trade,mid),manager=managerName(mid,trade);
-  return `<header class="return-tree-header"><span class="eyebrow">TRADE RETURN TREE</span><h2 id="tradeReturnTreeTitle">${esc(manager)} — ${esc(playerName(id))}</h2><p>Tracks what ${esc(manager)} received when they traded ${esc(playerName(id))}, and what those assets later became.</p></header><div class="return-tree-origin"><span>STARTING ASSET</span><strong>${playerLink(id,playerName(id),'return-tree-player')}</strong><small>${origin?`Selected at ${esc(origin.label)}`:'Acquired before the loaded draft history'}</small></div><div class="return-tree-root-event"><span>${fmt(trade.created)}</span><strong>${esc(manager)} traded ${esc(playerName(id))}</strong><small>${mids(trade).map(x=>managerName(x,trade)).filter(x=>x!==manager).join(' · ')||'League trade'}</small></div><div class="return-tree-received"><span class="eyebrow">RETURN RECEIVED</span>${received.length?received.map(x=>returnAssetHTML(x,mid)).join(''):'<div class="profile-empty">No incoming assets could be resolved for this side of the trade.</div>'}</div>`;
+function returnChainNext(asset,managerId){
+  const direct=laterAssetTrade(asset,managerId);if(direct)return{asset,trade:direct,conversion:null};
+  const conversion=returnChainPickConversion(asset);if(!conversion)return null;
+  const next=laterAssetTrade(conversion.player,managerId);return next?{asset:conversion.player,trade:next,conversion,sourceAsset:asset}:null;
 }
-function openTradeReturnTree(playerId,managerId){const modal=$("tradeReturnTreeModal"),content=$("tradeReturnTreeContent");if(!modal||!content)return;content.innerHTML=returnTreeHTML(playerId,managerId);modal.classList.add('open');modal.setAttribute('aria-hidden','false');document.body.classList.add('trade-return-tree-open')}
-function closeTradeReturnTree(){const modal=$("tradeReturnTreeModal");if(!modal)return;modal.classList.remove('open');modal.setAttribute('aria-hidden','true');document.body.classList.remove('trade-return-tree-open')}
-function playerHistoryHTML(playerId){const id=String(playerId),name=playerName(id),trades=playerTrades(id),avatar=`https://sleepercdn.com/content/nba/players/${id}.jpg`,seasonAvg=playerCurrentAverage(id),starred=isPlayerStarred(id),treeManagers=returnTreeManagers(id),treeControl=treeManagers.length?`<div class="return-tree-launch"><div><span class="eyebrow">ASSET LINEAGE</span><strong>See what this player became for a former owner</strong></div>${treeManagers.length>1?`<select data-return-tree-manager aria-label="Choose manager return tree">${treeManagers.map(x=>`<option value="${esc(x.id)}">${esc(x.name)} · traded ${fmt(x.trade.created,true)}</option>`).join('')}</select>`:`<input type="hidden" data-return-tree-manager value="${esc(treeManagers[0].id)}">`}<button type="button" data-open-return-tree="${esc(id)}">View Trade Return Tree</button></div>`:'';return `<div class="player-history-hero"><span class="player-history-avatar"><img src="${esc(avatar)}" alt="" onerror="this.style.display='none'"></span><div class="player-history-main"><span class="eyebrow">PLAYER TRANSACTION FILE</span><div class="player-title-row"><h2 id="playerHistoryTitle">${esc(name)}</h2><div class="player-interest-control"><button type="button" class="player-star-btn ${starred?'active':''}" data-star-player="${esc(id)}" aria-pressed="${starred}" title="${starred?'Remove trade interest':'Signal trade interest'}">${starred?'★':'☆'}</button><small>Tap the star if you're interested in acquiring this player</small></div></div><p>${trades.length} all-time trade${trades.length===1?'':'s'} recorded across loaded IMO Dynasty seasons.</p></div><div class="player-current-average"><span>${esc(seasonAvg.season)} FANTASY AVG</span><strong>${seasonAvg.avg>0?seasonAvg.avg.toFixed(2):'—'}</strong><small>${seasonAvg.games?`${seasonAvg.games} games`:'Season not started'}</small></div></div>${treeControl}<div class="player-history-timeline">${trades.length?trades.map((t,i)=>`<details class="player-history-trade" ${i===0?'open':''}><summary><span class="player-history-index">${trades.length-i}</span><span><strong>${mids(t).map(mid=>esc(managerName(mid,t))).join(' ↔ ')}</strong><small>${fmt(t.created)} · ${esc(t.season_label||'')}</small></span><span class="player-history-view">View trade</span></summary><div class="trade-detail-body">${tradeDetailsHTML(t)}</div></details>`).join(''):'<div class="profile-empty">No trades involving this player were found in the loaded league history.</div>'}</div>`}
+function returnChainAssetIcon(asset){
+  return asset.type==='player'?`<span class="return-chain-avatar"><img src="https://sleepercdn.com/content/nba/players/${esc(asset.id)}.jpg" alt="" loading="lazy" onerror="this.style.display='none'"></span>`:'<span class="return-chain-pick-icon">◆</span>';
+}
+function returnChainAssetTitle(asset,className='return-chain-player'){
+  return asset.type==='player'?playerLink(asset.id,returnChainAssetName(asset),className):esc(returnChainAssetName(asset));
+}
+function returnChainPackageAssetHTML(asset,followed){
+  const active=returnChainAssetMatches(asset,followed);
+  return `<div class="return-chain-package-asset ${asset.type} ${active?'followed':''}">${returnChainAssetIcon(asset)}<div><strong>${returnChainAssetTitle(asset)}</strong><small>${asset.type==='player'?'Player':'Draft capital'}</small></div>${active?'<span class="return-chain-followed-badge">FOLLOWED ASSET</span>':''}</div>`;
+}
+function returnChainReceivedAssetHTML(asset,index,managerId){
+  const next=returnChainNext(asset,managerId),conversion=returnChainPickConversion(asset);
+  let status='';
+  if(next){
+    if(next.conversion)status=`<div class="return-chain-conversion"><span>BECAME</span><strong>${playerLink(next.asset.id,returnChainAssetName(next.asset),'return-chain-player')}</strong><small>${esc(next.conversion.label)} · later included in another trade package</small></div>`;
+    else if(asset.type==='pick'&&conversion)status=`<div class="return-chain-conversion"><span>EVENTUAL DRAFT OUTCOME</span><strong>${playerLink(conversion.player.id,returnChainAssetName(conversion.player),'return-chain-player')}</strong><small>${esc(conversion.label)} · this pick changed hands before the draft</small></div><div class="return-chain-status">${esc(managerName(managerId,next.trade))} later included this pick in another trade package on ${esc(fmt(next.trade.created))}.</div>`;
+    else status=`<div class="return-chain-status">Later included in another trade package on ${esc(fmt(next.trade.created))}.</div>`;
+  }else if(conversion){
+    status=`<div class="return-chain-conversion"><span>BECAME</span><strong>${playerLink(conversion.player.id,returnChainAssetName(conversion.player),'return-chain-player')}</strong><small>${esc(conversion.label)} · Current status: ${esc(currentPlayerOwnerName(conversion.player.id))}</small></div>`;
+  }else if(asset.type==='player')status=`<div class="return-chain-status">Current status: ${esc(currentPlayerOwnerName(asset.id))}</div>`;
+  else status='<div class="return-chain-status">Awaiting draft or still held as future draft capital.</div>';
+  const followLabel=next?(next.conversion?`Follow ${returnChainAssetName(next.asset)}`:asset.type==='player'?`Follow ${returnChainAssetName(asset)}`:'Follow this pick'):'';
+  return `<article class="return-chain-received-card"><div class="return-chain-package-asset ${asset.type}">${returnChainAssetIcon(asset)}<div><strong>${returnChainAssetTitle(asset)}</strong><small>${asset.type==='player'?'Player':'Draft capital'}</small></div></div>${status}${next?`<button type="button" class="return-chain-follow-btn" data-follow-return-chain="${index}">${esc(followLabel)} <span>→</span></button>`:''}</article>`;
+}
+function returnChainTradeKey(t){return String(t?.transaction_id||`${t?.league_id||''}|${t?.created||''}`)}
+let returnChainSession=null;
+function returnChainBreadcrumbHTML(session){
+  return `<nav class="return-chain-breadcrumbs" aria-label="Trade return chain">${session.steps.map((step,index)=>{const label=returnChainAssetName(step.asset);return `${index?'<span>›</span>':''}${index===session.steps.length-1?`<b>${esc(label)}</b>`:`<button type="button" data-return-chain-step="${index}">${esc(label)}</button>`}`}).join('')}</nav>`;
+}
+function returnChainHTML(){
+  const session=returnChainSession;if(!session)return '<div class="profile-empty">Trade return chain unavailable.</div>';
+  const step=session.steps.at(-1),trade=step.trade,mid=session.managerId,manager=managerName(mid,trade),sent=sentAssetsForManager(trade,mid),received=returnAssetsForManager(trade,mid),origin=playerDraftOrigin(session.rootPlayerId),tradeManagerIds=[...new Set((trade.manager_ids||[]).map(String))],otherManagers=tradeManagerIds.filter(x=>String(x)!==String(mid)).map(x=>managerName(x,trade)),teamCount=Math.max(2,tradeManagerIds.length),assetName=returnChainAssetName(step.asset);
+  session.currentReceived=received;
+  const conversionNotice=step.conversion?`<div class="return-chain-step-conversion"><span>PICK CONVERSION</span><strong>${esc(returnChainAssetName(step.sourceAsset))} became ${playerLink(step.asset.id,assetName,'return-chain-player')}</strong><small>${esc(step.conversion.label)}</small></div>`:'';
+  return `<header class="return-tree-header"><span class="eyebrow">TRADE RETURN CHAIN</span><h2 id="tradeReturnTreeTitle">${esc(manager)} — ${esc(playerName(session.rootPlayerId))}</h2><p>Shows the full trade package at each step. Follow one returned asset at a time to see what happened next.</p></header>
+  ${returnChainBreadcrumbHTML(session)}
+  <div class="return-tree-origin"><span>STARTING ASSET</span><strong>${playerLink(session.rootPlayerId,playerName(session.rootPlayerId),'return-chain-player')}</strong><small>${origin?`Selected at ${esc(origin.label)}`:'Acquired before the loaded draft history'}</small></div>
+  ${conversionNotice}
+  <section class="return-chain-transaction">
+    <div class="return-chain-transaction-head"><div><span>${esc(fmt(trade.created))}</span><h3>${esc(assetName)} was included in a ${teamCount}-team trade package</h3><p>${esc(manager)} traded with ${esc(otherManagers.join(' and ')||'another manager')}.</p></div>${session.steps.length>1?'<button type="button" class="return-chain-back" data-return-chain-back>← Previous step</button>':''}</div>
+    <div class="return-chain-package-grid">
+      <section class="return-chain-side sent"><div class="return-chain-side-heading"><span>PACKAGE SENT</span><h4>${esc(manager)} sent</h4><small>${sent.length} asset${sent.length===1?'':'s'}</small></div><div class="return-chain-side-assets">${sent.length?sent.map(a=>returnChainPackageAssetHTML(a,step.asset)).join(''):'<div class="profile-empty">No outgoing assets resolved.</div>'}</div></section>
+      <section class="return-chain-side received"><div class="return-chain-side-heading"><span>RETURN RECEIVED</span><h4>${esc(manager)} received</h4><small>${received.length} asset${received.length===1?'':'s'}</small></div><div class="return-chain-received-list">${received.length?received.map((a,i)=>returnChainReceivedAssetHTML(a,i,mid)).join(''):'<div class="profile-empty">No incoming assets resolved.</div>'}</div></section>
+    </div>
+    <details class="return-chain-full-trade"><summary>View complete ${teamCount}-team trade</summary><div class="trade-detail-body">${tradeDetailsHTML(trade)}</div></details>
+  </section>`;
+}
+function renderTradeReturnChain(){const html=returnChainHTML(),content=$("tradeReturnTreeContent");if(content)content.innerHTML=html;return html}
+function openTradeReturnTree(playerId,managerId){
+  const id=String(playerId),mid=String(managerId),managerRow=returnTreeManagers(id).find(x=>String(x.id)===mid),trade=managerRow?.trade,modal=$("tradeReturnTreeModal");if(!modal||!trade)return;
+  returnChainSession={rootPlayerId:id,managerId:mid,rootTrade:trade,currentReceived:[],steps:[{asset:{type:'player',id,name:playerName(id),after:Number(trade.created)||0},trade,conversion:null,sourceAsset:null}]};
+  renderTradeReturnChain();modal.classList.add('open');modal.setAttribute('aria-hidden','false');document.body.classList.add('trade-return-tree-open');
+}
+function followTradeReturnChainAsset(index){
+  const session=returnChainSession,asset=session?.currentReceived?.[Number(index)];if(!session||!asset||session.steps.length>=8)return;
+  const next=returnChainNext(asset,session.managerId);if(!next)return;
+  const token=`${returnChainAssetToken(next.asset)}|${returnChainTradeKey(next.trade)}`;
+  if(session.steps.some(step=>`${returnChainAssetToken(step.asset)}|${returnChainTradeKey(step.trade)}`===token))return;
+  session.steps.push({asset:next.asset,trade:next.trade,conversion:next.conversion||null,sourceAsset:next.sourceAsset||asset});renderTradeReturnChain();$("tradeReturnTreeModal")?.querySelector?.(".trade-return-tree-sheet")?.scrollTo?.({top:0,behavior:'smooth'});
+}
+function goToReturnChainStep(index){if(!returnChainSession)return;const n=Math.max(0,Math.min(Number(index)||0,returnChainSession.steps.length-1));returnChainSession.steps=returnChainSession.steps.slice(0,n+1);renderTradeReturnChain();$("tradeReturnTreeModal")?.querySelector?.(".trade-return-tree-sheet")?.scrollTo?.({top:0,behavior:'smooth'})}
+function closeTradeReturnTree(){const modal=$("tradeReturnTreeModal");if(!modal)return;modal.classList.remove('open');modal.setAttribute('aria-hidden','true');document.body.classList.remove('trade-return-tree-open');returnChainSession=null}
+function playerHistoryHTML(playerId){const id=String(playerId),name=playerName(id),trades=playerTrades(id),avatar=`https://sleepercdn.com/content/nba/players/${id}.jpg`,seasonAvg=playerCurrentAverage(id),starred=isPlayerStarred(id),treeManagers=returnTreeManagers(id),treeControl=treeManagers.length?`<div class="return-tree-launch"><div><span class="eyebrow">TRADE RETURN CHAIN</span><strong>Follow a former owner's return one asset at a time</strong></div>${treeManagers.length>1?`<select data-return-tree-manager aria-label="Choose manager return chain">${treeManagers.map(x=>`<option value="${esc(x.id)}">${esc(x.name)} · traded ${fmt(x.trade.created,true)}</option>`).join('')}</select>`:`<input type="hidden" data-return-tree-manager value="${esc(treeManagers[0].id)}">`}<button type="button" data-open-return-tree="${esc(id)}">View Trade Return Chain</button></div>`:'';return `<div class="player-history-hero"><span class="player-history-avatar"><img src="${esc(avatar)}" alt="" onerror="this.style.display='none'"></span><div class="player-history-main"><span class="eyebrow">PLAYER TRANSACTION FILE</span><div class="player-title-row"><h2 id="playerHistoryTitle">${esc(name)}</h2><div class="player-interest-control"><button type="button" class="player-star-btn ${starred?'active':''}" data-star-player="${esc(id)}" aria-pressed="${starred}" title="${starred?'Remove trade interest':'Signal trade interest'}">${starred?'★':'☆'}</button><small>Tap the star if you're interested in acquiring this player</small></div></div><p>${trades.length} all-time trade${trades.length===1?'':'s'} recorded across loaded IMO Dynasty seasons.</p></div><div class="player-current-average"><span>${esc(seasonAvg.season)} FANTASY AVG</span><strong>${seasonAvg.avg>0?seasonAvg.avg.toFixed(2):'—'}</strong><small>${seasonAvg.games?`${seasonAvg.games} games`:'Season not started'}</small></div></div>${treeControl}<div class="player-history-timeline">${trades.length?trades.map((t,i)=>`<details class="player-history-trade" ${i===0?'open':''}><summary><span class="player-history-index">${trades.length-i}</span><span><strong>${mids(t).map(mid=>esc(managerName(mid,t))).join(' ↔ ')}</strong><small>${fmt(t.created)} · ${esc(t.season_label||'')}</small></span><span class="player-history-view">View trade</span></summary><div class="trade-detail-body">${tradeDetailsHTML(t)}</div></details>`).join(''):'<div class="profile-empty">No trades involving this player were found in the loaded league history.</div>'}</div>`}
 function openPlayerHistory(playerId){const modal=$("playerHistoryModal"),content=$("playerHistoryContent");if(!modal||!content)return;content.innerHTML=playerHistoryHTML(playerId);modal.classList.add("open");modal.setAttribute("aria-hidden","false");modal.dataset.playerId=String(playerId);document.body.classList.add("player-history-open")}
 function closePlayerHistory(){const modal=$("playerHistoryModal");if(!modal)return;modal.classList.remove("open");modal.setAttribute("aria-hidden","true");document.body.classList.remove("player-history-open")}
 
@@ -1691,6 +1745,9 @@ document.addEventListener("click",e=>{
   if(e.target.closest("[data-close-headlines]")||e.target.closest("#headlinesClose")){closeHeadlines();return}
   const starEl=e.target.closest("[data-star-player]");if(starEl){togglePlayerInterest(starEl.dataset.starPlayer);return}
   const returnTreeBtn=e.target.closest("[data-open-return-tree]");if(returnTreeBtn){const launch=returnTreeBtn.closest(".return-tree-launch"),managerId=launch?.querySelector("[data-return-tree-manager]")?.value;if(managerId)openTradeReturnTree(returnTreeBtn.dataset.openReturnTree,managerId);return}
+  const followReturnChain=e.target.closest("[data-follow-return-chain]");if(followReturnChain){followTradeReturnChainAsset(followReturnChain.dataset.followReturnChain);return}
+  const returnChainStep=e.target.closest("[data-return-chain-step]");if(returnChainStep){goToReturnChainStep(returnChainStep.dataset.returnChainStep);return}
+  if(e.target.closest("[data-return-chain-back]")){goToReturnChainStep((returnChainSession?.steps.length||1)-2);return}
   if(e.target.closest("[data-close-return-tree]")||e.target.closest("#tradeReturnTreeClose")){closeTradeReturnTree();return}
   const playerLinkEl=e.target.closest(".player-history-link");if(playerLinkEl){if(playerLinkEl.closest("#managerPicksMadeModal"))closeManagerPicksMade();if(playerLinkEl.closest("#tradeReturnTreeModal"))closeTradeReturnTree();openPlayerHistory(playerLinkEl.dataset.playerId);return}
   if(e.target.closest("[data-close-player-history]")||e.target.closest("#playerHistoryClose")){closePlayerHistory();return}
