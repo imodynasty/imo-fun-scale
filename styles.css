@@ -2131,3 +2131,5 @@ body.manager-picks-open{overflow:hidden}
 .player-spotlight-empty small{font-size:9px}
 @media(max-width:900px){.v26-summary-grid.summary-grid-two{grid-template-columns:1fr 1fr}}
 @media(max-width:650px){.v26-summary-grid.summary-grid-two{grid-template-columns:1fr}.player-spotlight-card{grid-template-columns:46px minmax(0,1fr) auto}.player-spotlight-avatar{width:46px;height:46px}.player-spotlight-name{font-size:16px}.player-spotlight-average strong{font-size:21px}}
+
+/* V3.3.40 — living Front Office highlights */

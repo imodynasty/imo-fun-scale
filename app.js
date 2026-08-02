@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.39 — Markets, Persistent Movement & Player Spotlight */
+/* IMO DYNASTY V3.3.41 — Player Spotlight offseason fallback */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,h2hHouseMargin:1.05,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -263,14 +263,22 @@ function tradeDetailsHTML(raw){
 }
 function safeTradeEditorialHTML(raw,compact=false){try{return tradeEditorialHTML(normaliseTrade(raw),compact)}catch(error){console.warn('Trade grading unavailable',raw?.transaction_id||raw?.created,error);return '<div class="trade-editorial compact"><div class="trade-grade-row"><span class="trade-grade-comment">Trade grades are temporarily unavailable; full transaction details are shown above.</span></div></div>'}}
 
+function spotlightSeasonHasPlayedGames(logs){
+  return Object.values(logs||{}).some(playerLogs=>safeArray(playerLogs).some(game=>gameWasPlayed(game)));
+}
 function playerSpotlightContext(){
-  const preferred=[String(tradeTargetAverageContext().season||''),String(currentLeagueBundle()?.league?.season||''),String(state.modelBundle?.league?.season||''),'2025'].filter((value,index,array)=>value&&array.indexOf(value)===index);
-  for(const season of preferred){
+  const currentCandidates=[String(tradeTargetAverageContext().season||''),String(currentLeagueBundle()?.league?.season||''),String(state.modelBundle?.league?.season||'')].filter((value,index,array)=>value&&array.indexOf(value)===index&&value!=='2025');
+  // The active season can already exist in Sleeper before any NBA games have
+  // been played. Do not let empty/preseason log shells suppress the daily
+  // spotlight: only use the active season once at least one real game exists.
+  for(const season of currentCandidates){
     const averages=seasonAverageMap(season),logs=state.gameLogs?.[season]||{};
-    if(Object.values(averages).some(value=>Number(value)>0)&&Object.keys(logs).length)return{season,averages,logs};
+    if(Object.values(averages).some(value=>Number(value)>0)&&spotlightSeasonHasPlayedGames(logs))return{season,averages,logs,isFallback:false};
   }
-  const season=preferred[0]||'2025';
-  return{season,averages:seasonAverageMap(season),logs:state.gameLogs?.[season]||{}}
+  const fallbackSeason='2025',fallbackAverages=seasonAverageMap(fallbackSeason),fallbackLogs=state.gameLogs?.[fallbackSeason]||{};
+  if(Object.values(fallbackAverages).some(value=>Number(value)>0)&&spotlightSeasonHasPlayedGames(fallbackLogs))return{season:fallbackSeason,averages:fallbackAverages,logs:fallbackLogs,isFallback:true};
+  const season=currentCandidates[0]||fallbackSeason;
+  return{season,averages:seasonAverageMap(season),logs:state.gameLogs?.[season]||{},isFallback:season===fallbackSeason}
 }
 function playerSpotlightCandidates(){
   const context=playerSpotlightContext(),bundle=seasonBundleForStats(context.season)||state.modelBundle,scoring=bundle?.league?.scoring_settings||{};
@@ -285,7 +293,7 @@ function playerSpotlightCandidates(){
 }
 function dailyPlayerSpotlight(){
   const candidates=playerSpotlightCandidates();if(!candidates.length)return null;
-  const bucket=Math.floor(Date.now()/864e5),key='imoPlayerSpotlightV1',stored=readStoredJSON(key);
+  const bucket=Math.floor(Date.now()/864e5),key='imoPlayerSpotlightV2',stored=readStoredJSON(key);
   let selected=stored?.bucket===bucket?candidates.find(player=>String(player.id)===String(stored.playerId)&&String(player.season)===String(stored.season)):null;
   if(!selected){const ordered=[...candidates].sort((a,b)=>String(a.id).localeCompare(String(b.id))),index=stableIndex(`spotlight|${bucket}|${ordered.map(player=>player.id).join('|')}`,ordered.length);selected=ordered[index]||ordered[0];try{localStorage.setItem(key,JSON.stringify({bucket,playerId:selected.id,season:selected.season,savedAt:Date.now()}))}catch(_){ }}
   return selected
@@ -1299,10 +1307,79 @@ function managerGradesLeague(){
   return state.computedCache.managerGrades={raw,ratings,grades,draftResumes}
 }
 function rookiePickLabel(pick){const teams=Math.max(1,Number(pick?.teamCount)||8),overall=Math.max(1,Number(pick?.overallPick)||1),round=Math.floor((overall-1)/teams)+1,slot=((overall-1)%teams)+1;return`${round}.${String(slot).padStart(2,'0')}`}
-function managerGradePlayerHTML(label,pick){
-  if(!pick)return`<div class="manager-draft-highlight empty"><span>${esc(label)}</span><small>—</small></div>`;
-  const id=String(pick.playerId),name=playerName(id),avatar=`https://sleepercdn.com/content/nba/players/${id}.jpg`;
-  return`<div class="manager-draft-highlight"><span>${esc(label)}</span><div><span class="manager-grade-player-avatar"><img src="${esc(avatar)}" alt="" loading="lazy" onerror="this.style.display='none'"></span>${playerLink(id,name,'manager-grade-player-name')}<small class="manager-grade-pick-label">${esc(rookiePickLabel(pick))}</small></div></div>`
+function managerGradePlayerHTML(label,item){
+  if(!item)return`<div class="manager-draft-highlight empty"><span>${esc(label)}</span><small>—</small></div>`;
+  const id=String(item.playerId||item.id||''),name=playerName(id),avatar=`https://sleepercdn.com/content/nba/players/${id}.jpg`;
+  return`<div class="manager-draft-highlight"><span>${esc(label)}</span><div><span class="manager-grade-player-avatar"><img src="${esc(avatar)}" alt="" loading="lazy" onerror="this.style.display='none'"></span>${playerLink(id,name,'manager-grade-player-name')}</div></div>`
+}
+function transactionSeason(raw){
+  const t=raw||{},bundle=bundleForTrade(t)||state.bundles.find(b=>String(b.league?.league_id||'')===String(t.league_id||''));
+  if(bundle?.league?.season)return String(bundle.league.season);
+  const labelled=String(t.season_label||'').match(/20\d{2}/)?.[0];
+  if(labelled)return labelled;
+  const date=new Date(Number(t.created)||Date.now()),year=date.getFullYear();
+  return String(date.getMonth()<7?year-1:year)
+}
+function averageAtAcquisition(playerId,raw){
+  const id=String(playerId),t=raw||{},season=transactionSeason(t),cutoff=Number(t.created)||Date.now(),scoring=bundleForSeason(season)?.league?.scoring_settings||state.modelBundle?.league?.scoring_settings||{},rows=safeArray(state.gameLogs?.[season]?.[id]);
+  const played=rows.map(row=>({date:gameDateValue(row),fpts:rawFantasyPoints(row,scoring),row})).filter(x=>x.date&&x.date.getTime()<=cutoff&&gameWasPlayed(x.row)&&Number.isFinite(x.fpts));
+  if(played.length>=3)return played.reduce((sum,x)=>sum+x.fpts,0)/played.length;
+  const snapshot=Number(t.player_averages?.[id]??t.metadata?.player_averages?.[id]??t.settings?.player_averages?.[id]);
+  if(Number.isFinite(snapshot)&&snapshot>0)return snapshot;
+  return Number(tradeSeasonAverage(id,t)||playerSeasonAverage(id,season)||latestKnownAverage(id)||0)
+}
+function currentPlayerIMOValue(playerId){
+  const id=String(playerId),current=playerCurrentAverage(id),avg=Number(current.avg||latestKnownAverage(id)||0);
+  return{average:avg,value:avg>0?playerDynastyValue(id,avg,Date.now()):0,season:current.season}
+}
+function transactionManagerForRoster(raw,rosterId){
+  const t=raw||{},rid=String(rosterId??''),direct=t.roster_owner_map?.[rid];
+  if(direct!=null)return String(direct);
+  const bundle=state.bundles.find(b=>String(b.league?.league_id||'')===String(t.league_id||''))||bundleForSeason(transactionSeason(t));
+  return bundle?.ownerByRoster?.[rid]!=null?String(bundle.ownerByRoster[rid]):''
+}
+function managerTradeAcquisitions(managerId){
+  const id=String(managerId),events=[];
+  managerTrades(id).forEach(raw=>{
+    const t=normaliseTrade(raw),created=Number(t.created)||0,season=transactionSeason(t);
+    Object.entries(t.adds||{}).forEach(([playerId,rosterId])=>{
+      const recipient=String(t.roster_owner_map?.[String(rosterId)]||transactionManagerForRoster(t,rosterId));
+      if(recipient!==id||!playerId||playerId==='0')return;
+      const acquisitionAverage=averageAtAcquisition(playerId,t),acquisitionValue=acquisitionAverage>0?playerDynastyValue(String(playerId),acquisitionAverage,created):0,current=currentPlayerIMOValue(playerId);
+      events.push({method:'trade',playerId:String(playerId),created,season,acquisitionAverage,acquisitionValue,currentAverage:current.average,currentValue:current.value,valueChange:current.value-acquisitionValue,ageAtAcquisition:playerAgeAt(String(playerId),created),transaction:t})
+    })
+  });
+  return events
+}
+function managerWaiverAcquisitions(managerId){
+  const id=String(managerId),events=[];
+  allLeagueTransactions().filter(t=>['waiver','free_agent'].includes(String(t.type||''))&&(!t.status||t.status==='complete')).forEach(t=>{
+    const created=Number(t.created)||0,season=transactionSeason(t);
+    Object.entries(t.adds||{}).forEach(([playerId,rosterId])=>{
+      if(transactionManagerForRoster(t,rosterId)!==id||!playerId||playerId==='0')return;
+      const acquisitionAverage=averageAtAcquisition(playerId,t),acquisitionValue=acquisitionAverage>0?playerDynastyValue(String(playerId),acquisitionAverage,created):0,current=currentPlayerIMOValue(playerId);
+      events.push({method:String(t.type||'waiver'),playerId:String(playerId),created,season,acquisitionAverage,acquisitionValue,currentAverage:current.average,currentValue:current.value,valueChange:current.value-acquisitionValue,ageAtAcquisition:playerAgeAt(String(playerId),created),transaction:t})
+    })
+  });
+  return events
+}
+function managerFrontOfficeHighlights(managerId){
+  const now=Date.now(),day=864e5,id=String(managerId),draftStar=managerAllRookiePicks(id).map(p=>{const current=playerCurrentAverage(String(p.playerId));return{...p,currentAverage:Number(current.avg||0)}}).filter(p=>p.currentAverage>0).sort((a,b)=>b.currentAverage-a.currentAverage||Number(a.overallPick||999)-Number(b.overallPick||999))[0]||null;
+  const trades=managerTradeAcquisitions(id),waivers=managerWaiverAcquisitions(id),bestTrade=trades.filter(x=>now-x.created>=30*day&&x.acquisitionAverage>=15&&x.valueChange>=3).sort((a,b)=>b.valueChange-a.valueChange||a.created-b.created)[0]||null;
+  const bestDiscovery=[...trades,...waivers].filter(x=>now-x.created>=30*day&&x.valueChange>=3).sort((a,b)=>b.valueChange-a.valueChange||a.created-b.created)[0]||null;
+  const tradeMiss=trades.filter(x=>now-x.created>=100*day&&x.acquisitionAverage>=15&&Number(x.ageAtAcquisition)<=35&&x.acquisitionValue-x.currentValue>=3).sort((a,b)=>(b.acquisitionValue-b.currentValue)-(a.acquisitionValue-a.currentValue)||a.created-b.created)[0]||null;
+  return{draftStar,bestTrade,bestDiscovery,tradeMiss}
+}
+async function hydrateManagerAcquisitionGameLogs(managerId){
+  const id=String(managerId),pairs=new Map();
+  managerTrades(id).forEach(t=>Object.entries(t.adds||{}).forEach(([playerId,rosterId])=>{const recipient=String(t.roster_owner_map?.[String(rosterId)]||transactionManagerForRoster(t,rosterId));if(recipient===id&&playerId&&playerId!=='0')pairs.set(`${transactionSeason(t)}|${playerId}`,{playerId:String(playerId),season:transactionSeason(t)})}));
+  const waiverCandidates=[];
+  allLeagueTransactions().filter(t=>['waiver','free_agent'].includes(String(t.type||''))&&(!t.status||t.status==='complete')).forEach(t=>Object.entries(t.adds||{}).forEach(([playerId,rosterId])=>{if(transactionManagerForRoster(t,rosterId)!==id||!playerId||playerId==='0')return;waiverCandidates.push({playerId:String(playerId),season:transactionSeason(t),currentValue:currentPlayerIMOValue(playerId).value})}));
+  waiverCandidates.sort((a,b)=>b.currentValue-a.currentValue).slice(0,12).forEach(x=>pairs.set(`${x.season}|${x.playerId}`,{playerId:x.playerId,season:x.season}));
+  const missing=[...pairs.values()].filter(x=>!safeArray(state.gameLogs?.[x.season]?.[x.playerId]).length);
+  if(!missing.length)return;
+  const rows=await limitedMap(missing,6,async x=>{const scoring=bundleForSeason(x.season)?.league?.scoring_settings||state.modelBundle?.league?.scoring_settings||{},result=await loadPlayerGameLogAverage(x.playerId,x.season,scoring);return result?{...x,result}:null});
+  rows.filter(Boolean).forEach(({playerId,season,result})=>{state.gameLogs[season]??={};state.gameLogAverages[season]??={};state.gameLogMeta[season]??={};state.gameLogs[season][playerId]=result.rows||[];state.gameLogAverages[season][playerId]=Number(result.average||0);state.gameLogMeta[season][playerId]={gamesPlayed:Number(result.games||0),totalFantasyPoints:Number(result.points||0),average:Number(result.average||0)}})
 }
 function managerAllRookiePicks(managerId){
   const id=String(managerId),seen=new Set();
@@ -1316,8 +1393,8 @@ function managerPicksMadeHTML(managerId){
   return`<div class="manager-draft-highlight manager-picks-made"><span>Picks Made</span><button type="button" class="manager-picks-total" data-open-manager-picks="${esc(String(managerId))}" aria-label="View all ${total} rookie draft picks">${total}</button></div>`
 }
 function managerGradesHTML(managerId){
-  const league=managerGradesLeague(),id=String(managerId),grades=league.grades[id]||{},resume=league.draftResumes[id]||managerDraftResume(id),items=[['Trading',grades.trading],['Drafting',grades.drafting],['Player Development',grades.development],['Team Building',grades.building]];
-  return`<section class="manager-grades-row" aria-label="Manager grades"><div class="manager-grades-title"><span class="eyebrow">MANAGER GRADES</span></div><div class="manager-grade-items">${items.map(([label,grade])=>`<div class="manager-grade-item"><span>${esc(label)}</span><strong class="manager-grade-badge ${gradeClass(grade||'F')}">${esc(grade||'—')}</strong></div>`).join('')}</div><div class="manager-draft-highlights">${managerGradePlayerHTML('Draft Star',resume.draftStar)}${managerGradePlayerHTML('Draft Steal',resume.biggestSteal)}${managerGradePlayerHTML('Draft Bust',resume.biggestBust)}${managerPicksMadeHTML(id)}</div></section>`
+  const league=managerGradesLeague(),id=String(managerId),grades=league.grades[id]||{},highlights=managerFrontOfficeHighlights(id),items=[['Trading',grades.trading],['Drafting',grades.drafting],['Player Development',grades.development],['Team Building',grades.building]];
+  return`<section class="manager-grades-row" aria-label="Manager grades"><div class="manager-grades-title"><span class="eyebrow">MANAGER GRADES</span></div><div class="manager-grade-items">${items.map(([label,grade])=>`<div class="manager-grade-item"><span>${esc(label)}</span><strong class="manager-grade-badge ${gradeClass(grade||'F')}">${esc(grade||'—')}</strong></div>`).join('')}</div><div class="manager-draft-highlights">${managerGradePlayerHTML('Draft Star',highlights.draftStar)}${managerGradePlayerHTML('Best Trade',highlights.bestTrade)}${managerGradePlayerHTML('Best Discovery',highlights.bestDiscovery)}${managerGradePlayerHTML('Trade Miss',highlights.tradeMiss)}</div></section>`
 }
 function managerPicksMadeModalHTML(managerId){
   const picks=managerAllRookiePicks(managerId);
@@ -1333,7 +1410,7 @@ function ensureManagerGradeStyles(){
   .manager-grades-title{white-space:nowrap}.manager-grade-items{display:grid;grid-template-columns:repeat(4,minmax(86px,1fr));gap:8px}.manager-grade-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;border-radius:10px;background:rgba(255,255,255,.035)}
   .manager-grade-item>span{font-size:11px;line-height:1.2;color:var(--muted,#94a3b8)}.manager-grade-badge{display:grid;place-items:center;min-width:34px;height:28px;padding:0 7px;border-radius:8px;font-size:14px;line-height:1;font-weight:900}
   .manager-grade-badge.grade-a{color:#052e16;background:#4ade80}.manager-grade-badge.grade-b{color:#172554;background:#60a5fa}.manager-grade-badge.grade-c{color:#422006;background:#facc15}.manager-grade-badge.grade-d{color:#431407;background:#fb923c}.manager-grade-badge.grade-f{color:#450a0a;background:#f87171}
-  .manager-draft-highlights{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;grid-auto-rows:minmax(58px,auto);gap:8px;width:100%;height:auto!important;max-height:none!important;overflow:visible!important}.manager-draft-highlight{display:block!important;visibility:visible!important;opacity:1!important;min-width:0;min-height:58px;height:auto!important;max-height:none!important;overflow:visible!important;padding:6px 9px;border-left:1px solid rgba(148,163,184,.18)}.manager-draft-highlight>span{display:block;margin-bottom:4px;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#94a3b8)}.manager-draft-highlight>div{display:flex;align-items:center;gap:7px}.manager-grade-player-avatar{width:26px;height:26px;border-radius:50%;overflow:hidden;background:rgba(148,163,184,.15);flex:0 0 auto}.manager-grade-player-avatar img{width:100%;height:100%;object-fit:cover}.manager-grade-player-name{padding:0;border:0;background:none;color:inherit;font:inherit;font-size:11px;font-weight:800;text-align:left}.manager-grade-pick-label{margin-left:auto;padding:3px 5px;border:1px solid rgba(148,163,184,.18);border-radius:6px;color:var(--muted,#94a3b8);font-size:9px;font-weight:900;letter-spacing:.04em;white-space:nowrap}.manager-draft-highlight.empty small{font-size:16px}
+  .manager-draft-highlights{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;grid-auto-rows:minmax(58px,auto);gap:8px;width:100%;height:auto!important;max-height:none!important;overflow:visible!important}.manager-draft-highlight{display:block!important;visibility:visible!important;opacity:1!important;min-width:0;min-height:58px;height:auto!important;max-height:none!important;overflow:visible!important;padding:6px 9px;border-left:1px solid rgba(148,163,184,.18)}.manager-draft-highlight>span{display:block;margin-bottom:4px;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#94a3b8)}.manager-draft-highlight>div{display:flex;align-items:center;gap:8px;min-width:0}.manager-grade-player-avatar{width:26px;height:26px;border-radius:50%;overflow:hidden;background:rgba(148,163,184,.15);flex:0 0 auto}.manager-grade-player-avatar img{width:100%;height:100%;object-fit:cover}.manager-grade-player-name{padding:0;border:0;background:none;color:inherit;font:inherit;font-size:11px;font-weight:800;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.manager-grade-pick-label{margin-left:auto;padding:3px 5px;border:1px solid rgba(148,163,184,.18);border-radius:6px;color:var(--muted,#94a3b8);font-size:9px;font-weight:900;letter-spacing:.04em;white-space:nowrap}.manager-draft-highlight.empty small{font-size:16px}
   @media(max-width:900px){.manager-grades-title{display:none}.manager-draft-highlights{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-rows:minmax(64px,auto)}.manager-draft-highlight{border-left:0;border-top:1px solid rgba(148,163,184,.18);padding-top:9px}}
   @media(max-width:620px){.manager-grades-row{padding:10px;gap:10px;height:auto!important;max-height:none!important;overflow:visible!important}.manager-grade-items{grid-template-columns:repeat(2,1fr)}.manager-grade-item{padding:8px}.manager-draft-highlights{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-flow:row!important;height:auto!important;max-height:none!important;overflow:visible!important}.manager-grade-player-name{font-size:10px}}
   .manager-picks-made{display:flex!important;visibility:visible!important;opacity:1!important;flex-direction:column;justify-content:center}.manager-picks-total{width:max-content;padding:0;border:0;background:none;color:#fff;font:inherit;font-size:28px;font-weight:1000;line-height:1;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(143,115,255,.7);text-underline-offset:5px}.manager-picks-total:hover{color:#c9bbff}
@@ -1651,7 +1728,7 @@ function closeManagerDirectory(){const modal=$("managerDirectoryModal");if(!moda
 
 function managerProfileCacheKey(managerId){return `${String(managerId)}|${String(state.profileAverageSeason||"")}`}
 function managerProfileDataFingerprint(){const latest=state.trades?.[0]?.created||0,current=state.modelBundle?.league?.season||'';return `${CONFIG.currentLeagueId}|${current}|${latest}|${state.trades.length}|${state.managers.size}|${state.draftSelections.length}`}
-function managerProfileSessionKey(key){return `imo-profile-v3338-profile-tags-roster-toggle|${managerProfileDataFingerprint()}|${key}`}
+function managerProfileSessionKey(key){return `imo-profile-v3340-front-office-highlights|${managerProfileDataFingerprint()}|${key}`}
 function cachedManagerProfileHTML(managerId){
   const key=managerProfileCacheKey(managerId);
   if(state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
@@ -1707,6 +1784,8 @@ async function openManagerProfile(managerId,pushState=true){
   modal.dataset.managerId=id;
   const requestedSeason=String(state.profileAverageSeason||'2026'),rosterIds=safeArray(state.managers.get(id)?.roster?.players).map(String);
   try{await ensurePlayerEfficiencyData(rosterIds,requestedSeason)}catch(error){console.warn('Manager roster efficiency hydration failed:',error)}
+  try{await hydrateManagerAcquisitionGameLogs(id)}catch(error){console.warn('Manager acquisition history hydration failed:',error)}
+  state.computedCache.managerGrades=null;
   state.profileHTMLCache.delete(managerProfileCacheKey(id));
   try{sessionStorage.removeItem(managerProfileSessionKey(managerProfileCacheKey(id)))}catch(_){ }
   if(modal.dataset.managerId!==id)return;
