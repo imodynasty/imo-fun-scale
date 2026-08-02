@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.24 — Recent Trades Layout + Potential Trade Targets */
+/* IMO DYNASTY V3.3.25 — Realistic & Diverse Potential Trade Targets */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -826,17 +826,51 @@ function managerPositionalNeed(managerId,context){
   const clearlyThin=weakest.depth<=2,clearlyWeaker=next&&weakest.score<next.score*.76;
   return clearlyThin||clearlyWeaker?weakest:null
 }
+function deterministicTargetSeed(value){
+  let hash=2166136261;
+  for(const char of String(value||'')){hash^=char.charCodeAt(0);hash=Math.imul(hash,16777619)}
+  return hash>>>0
+}
+function seededTargetOrder(rows,managerId){
+  const seed=deterministicTargetSeed(managerId);
+  return [...rows].sort((a,b)=>{
+    const aKey=deterministicTargetSeed(`${seed}|${a.id}|${a.ownerId}`),bKey=deterministicTargetSeed(`${seed}|${b.id}|${b.ownerId}`);
+    return aKey-bKey||b.score-a.score||a.name.localeCompare(b.name)
+  })
+}
+function managerTradePower(managerId,context){
+  const ids=currentRosterIds(managerId),assets=ids.map(playerId=>{
+    const avg=Number(context.averages[String(playerId)]||latestKnownAverage(playerId)||0),rank=Number(context.ranks[String(playerId)]||0),value=playerDynastyValue(String(playerId),avg,Date.now());
+    return{playerId:String(playerId),avg,rank:rank||null,value}
+  }).filter(asset=>asset.value>0).sort((a,b)=>b.value-a.value||a.rank-b.rank),best=assets[0]||{value:0,rank:null,avg:0},picks=managerFuturePickCounts(managerId),eliteDraftCapital=picks.firsts>=2;
+  return{bestAsset:best,maxTargetValue:best.value>0?best.value*1.25:Infinity,futureFirsts:picks.firsts,eliteDraftCapital}
+}
 function getPotentialTradeTargets(managerId,gmProfile=null){
-  const id=String(managerId),context=tradeTargetAverageContext(),recentFirsts=recentFirstRoundDraftMap(),need=managerPositionalNeed(id,context),gm=gmProfile||managerGMProfile(id),primary=String(gm?.primary?.name||''),youthArchetypes=new Set(['The Rebuilder','Prospect Hunter','Draft Capital King']),winNowArchetypes=new Set(['The Contender','The Veteran Chaser','The Talent Collector']),mode=youthArchetypes.has(primary)?'youth':winNowArchetypes.has(primary)?'win-now':'balanced',weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,powerRows=state.modelBundle?modelRows(state.modelBundle,through,'power'):[],powerBy=Object.fromEntries(powerRows.map(row=>[String(row.id),row])),leagueMidpoint=Math.ceil(Math.max(1,state.managers.size)/2),candidates=[];
-  safeArray(state.currentRosters).forEach(roster=>{const ownerId=String(roster?.owner_id||'');if(!ownerId||ownerId===id||!state.managers.has(ownerId))return;const owner=state.managers.get(ownerId);safeArray(roster?.players).forEach(rawId=>{const playerId=String(rawId),avg=Number(context.averages[playerId]||0),rank=Number(context.ranks[playerId]||0),firstRound=recentFirsts.get(playerId)||null;if(!(rank>0&&rank<=120)&&!firstRound)return;const age=currentPlayerAge(playerId),position=playerPositionProfile(playerId),fillsNeed=Boolean(need&&position.groups.includes(need.key));let score=0,badge='Value Target',badgeType='value';
+  const id=String(managerId),context=tradeTargetAverageContext(),recentFirsts=recentFirstRoundDraftMap(),need=managerPositionalNeed(id,context),gm=gmProfile||managerGMProfile(id),primary=String(gm?.primary?.name||''),youthArchetypes=new Set(['The Rebuilder','Prospect Hunter','Draft Capital King']),winNowArchetypes=new Set(['The Contender','The Veteran Chaser','The Talent Collector']),mode=youthArchetypes.has(primary)?'youth':winNowArchetypes.has(primary)?'win-now':'balanced',weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,powerRows=state.modelBundle?modelRows(state.modelBundle,through,'power'):[],powerBy=Object.fromEntries(powerRows.map(row=>[String(row.id),row])),leagueMidpoint=Math.ceil(Math.max(1,state.managers.size)/2),tradePower=managerTradePower(id,context),candidates=[];
+  safeArray(state.currentRosters).forEach(roster=>{const ownerId=String(roster?.owner_id||'');if(!ownerId||ownerId===id||!state.managers.has(ownerId))return;const owner=state.managers.get(ownerId);safeArray(roster?.players).forEach(rawId=>{const playerId=String(rawId),avg=Number(context.averages[playerId]||0),rank=Number(context.ranks[playerId]||0),firstRound=recentFirsts.get(playerId)||null;if(!(rank>0&&rank<=120)&&!firstRound)return;const age=currentPlayerAge(playerId),position=playerPositionProfile(playerId),fillsNeed=Boolean(need&&position.groups.includes(need.key)),tradeValue=playerDynastyValue(playerId,avg||latestKnownAverage(playerId)||0,Date.now());
+    // Realism ceiling: managers without multiple future firsts cannot target an asset
+    // worth more than 125% of their best current player. This removes implausible
+    // Jokic/Luka/SGA-style recommendations for teams without comparable trade power.
+    if(!tradePower.eliteDraftCapital&&Number.isFinite(tradePower.maxTargetValue)&&tradeValue>tradePower.maxTargetValue)return;
+    let score=0,badge='Value Match',badgeType='value';
     if(rank>0)score+=(121-rank)*.72+Math.min(avg,45)*1.1;if(firstRound)score+=32;
-    if(fillsNeed){score+=42;badge=`Positional Need: ${need.short}`;badgeType='need'}
+    const valueRatio=tradePower.bestAsset.value>0?tradeValue/tradePower.bestAsset.value:1;
+    if(valueRatio>=.72&&valueRatio<=1.25){score+=26;badge='Value Match';badgeType='value'}
+    else if(valueRatio<.72)score+=10;
+    if(fillsNeed){score+=48;badge=`Positional Need: ${need.short}`;badgeType='need'}
     if(mode==='youth'){if(age!=null&&age<=23)score+=58;else if(age!=null&&age<=25)score+=24;if(firstRound)score+=34;if(!fillsNeed&&(age!=null&&age<=23||firstRound)){badge='Youth Target';badgeType='youth'}}
     else if(mode==='win-now'){if(rank>0&&rank<=50)score+=58;else if(rank>0&&rank<=100)score+=25;if(age!=null&&age>=27)score+=28;if(!fillsNeed&&age!=null&&age>=27&&rank>0&&rank<=100){badge='Win-Now Veteran';badgeType='veteran'}}
     else{if(rank>0&&rank<=60)score+=36;if(age!=null&&age>=22&&age<=27)score+=13;if(Number(powerBy[ownerId]?.rank||0)>leagueMidpoint)score+=18;if(!fillsNeed&&firstRound){badge='Upside Asset';badgeType='youth'}}
-    candidates.push({id:playerId,name:playerName(playerId),age,avg,rank:rank||null,season:context.season,position:position.label,ownerId,ownerName:owner.name,avatar:`https://sleepercdn.com/content/nba/players/${playerId}.jpg`,badge,badgeType,score,firstRound})
+    candidates.push({id:playerId,name:playerName(playerId),age,avg,rank:rank||null,season:context.season,position:position.label,ownerId,ownerName:owner.name,avatar:`https://sleepercdn.com/content/nba/players/${playerId}.jpg`,badge,badgeType,score,firstRound,tradeValue,valueRatio})
   })});
-  return candidates.sort((a,b)=>b.score-a.score||(a.rank||999)-(b.rank||999)||a.name.localeCompare(b.name)).slice(0,3)
+  const rankedPool=candidates.sort((a,b)=>b.score-a.score||(a.rank||999)-(b.rank||999)||a.name.localeCompare(b.name)).slice(0,10),diverse=seededTargetOrder(rankedPool,id),selected=[],usedOwners=new Set();
+  // Prefer recommendations from different opposing rosters where the candidate pool allows it.
+  diverse.forEach(candidate=>{if(selected.length>=3)return;if(!usedOwners.has(candidate.ownerId)){selected.push(candidate);usedOwners.add(candidate.ownerId)}});
+  diverse.forEach(candidate=>{if(selected.length>=3||selected.some(row=>row.id===candidate.id))return;selected.push(candidate)});
+  // Graceful fallback keeps the same quality floor and realism ceiling; it only relaxes
+  // archetype/positional weighting by taking the next best qualifying candidates.
+  if(selected.length<3)candidates.sort((a,b)=>(a.rank||999)-(b.rank||999)||b.score-a.score).forEach(candidate=>{if(selected.length<3&&!selected.some(row=>row.id===candidate.id))selected.push(candidate)});
+  return selected.slice(0,3)
 }
 function potentialTradeTargetsHTML(managerId,gmProfile=null){
   const targets=getPotentialTradeTargets(managerId,gmProfile),cards=targets.map(target=>{const initials=target.name.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]).join('').toUpperCase();return `<article class="potential-target-card"><div class="potential-target-card-top"><span class="potential-target-avatar"><img src="${esc(target.avatar)}" alt="${esc(target.name)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><span>${esc(initials)}</span></span><span class="potential-target-reason"><small>Why this target?</small><span class="potential-target-badge ${esc(target.badgeType)}">${esc(target.badge)}</span></span></div><div class="potential-target-identity"><h4>${esc(target.name)}</h4><p>${target.age?`Age ${target.age}`:'Age —'} · ${esc(target.position)}</p></div><div class="potential-target-average"><span>${esc(target.season)} season average</span><strong>${target.avg>0?target.avg.toFixed(2):'—'}</strong><small>${target.rank?`#${target.rank} by average`:target.firstRound?`${esc(String(target.firstRound.season))} first-round selection`:'Qualified target'}</small></div><div class="potential-target-owner"><span>Current team</span><strong>${esc(target.ownerName)}</strong></div></article>`}).join('');
