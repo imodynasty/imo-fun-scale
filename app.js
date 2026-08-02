@@ -1576,7 +1576,7 @@ function followTradeReturnChainAsset(index){
 }
 function goToReturnChainStep(index){if(!returnChainSession)return;const n=Math.max(0,Math.min(Number(index)||0,returnChainSession.steps.length-1));returnChainSession.steps=returnChainSession.steps.slice(0,n+1);renderTradeReturnChain();$("tradeReturnTreeModal")?.querySelector?.(".trade-return-tree-sheet")?.scrollTo?.({top:0,behavior:'smooth'})}
 function closeTradeReturnTree(){const modal=$("tradeReturnTreeModal");if(!modal)return;modal.classList.remove('open');modal.setAttribute('aria-hidden','true');document.body.classList.remove('trade-return-tree-open');returnChainSession=null}
-function playerHistoryHTML(playerId){const id=String(playerId),name=playerName(id),trades=playerTrades(id),avatar=`https://sleepercdn.com/content/nba/players/${id}.jpg`,seasonAvg=playerCurrentAverage(id),efficiency=playerFptsPer36(id,seasonAvg.season,seasonAvg.avg),starred=isPlayerStarred(id),treeManagers=returnTreeManagers(id),treeControl=treeManagers.length?`<div class="return-tree-launch"><div><span class="eyebrow">TRADE RETURN CHAIN</span><strong>Follow a former owner's return one asset at a time</strong></div>${treeManagers.length>1?`<select data-return-tree-manager aria-label="Choose manager return chain">${treeManagers.map(x=>`<option value="${esc(x.id)}">${esc(x.name)} · traded ${fmt(x.trade.created,true)}</option>`).join('')}</select>`:`<input type="hidden" data-return-tree-manager value="${esc(treeManagers[0].id)}">`}<button type="button" data-open-return-tree="${esc(id)}">View Trade Return Chain</button></div>`:'';return `<div class="player-history-hero"><span class="player-history-avatar"><img src="${esc(avatar)}" alt="" onerror="this.style.display='none'"></span><div class="player-history-main"><span class="eyebrow">PLAYER TRANSACTION FILE</span><div class="player-title-row"><h2 id="playerHistoryTitle">${esc(name)}</h2><div class="player-interest-control"><button type="button" class="player-star-btn ${starred?'active':''}" data-star-player="${esc(id)}" aria-pressed="${starred}" title="${starred?'Remove trade interest':'Signal trade interest'}">${starred?'★':'☆'}</button><small>Tap the star if you're interested in acquiring this player</small></div></div><p>${trades.length} all-time trade${trades.length===1?'':'s'} recorded across loaded IMO Dynasty seasons.</p></div><div class="player-current-average player-efficiency-stats"><div><span>FPTS/G</span><strong>${seasonAvg.avg>0?seasonAvg.avg.toFixed(2):'—'}</strong></div><div><span>MPG</span><strong>${efficiency.mpg>0?efficiency.mpg.toFixed(1):'—'}</strong></div><div><span>FPTS-PER-36</span><strong>${fpts36Display(efficiency)}</strong></div><small>${seasonAvg.games?`${seasonAvg.games} games · ${esc(seasonAvg.season)}`:'Season not started'}</small>${efficiency.monster?'<em class="per-minute-monster">PER-MINUTE MONSTER</em>':''}</div></div>${treeControl}<div class="player-history-timeline">${trades.length?trades.map((t,i)=>`<details class="player-history-trade" ${i===0?'open':''}><summary><span class="player-history-index">${trades.length-i}</span><span><strong>${mids(t).map(mid=>esc(managerName(mid,t))).join(' ↔ ')}</strong><small>${fmt(t.created)} · ${esc(t.season_label||'')}</small></span><span class="player-history-view">View trade</span></summary><div class="trade-detail-body">${tradeDetailsHTML(t)}</div></details>`).join(''):'<div class="profile-empty">No trades involving this player were found in the loaded league history.</div>'}</div>`}
+function playerHistoryHTML(playerId){const id=String(playerId),name=playerName(id),trades=playerTrades(id),avatar=`https://sleepercdn.com/content/nba/players/${id}.jpg`,seasonAvg=playerCurrentAverage(id),efficiency=playerFptsPer36(id,seasonAvg.season,seasonAvg.avg),starred=isPlayerStarred(id),treeManagers=returnTreeManagers(id),treeControl=treeManagers.length?`<div class="return-tree-launch"><div><span class="eyebrow">TRADE RETURN CHAIN</span><strong>Follow a former owner's return one asset at a time</strong></div>${treeManagers.length>1?`<select data-return-tree-manager aria-label="Choose manager return chain">${treeManagers.map(x=>`<option value="${esc(x.id)}">${esc(x.name)} · traded ${fmt(x.trade.created,true)}</option>`).join('')}</select>`:`<input type="hidden" data-return-tree-manager value="${esc(treeManagers[0].id)}">`}<button type="button" data-open-return-tree="${esc(id)}">View Trade Return Chain</button></div>`:'';return `<div class="player-history-hero"><span class="player-history-avatar"><img src="${esc(avatar)}" alt="" onerror="this.style.display='none'"></span><div class="player-history-main"><span class="eyebrow">PLAYER TRANSACTION FILE</span><div class="player-title-row"><h2 id="playerHistoryTitle">${esc(name)}</h2><div class="player-interest-control"><button type="button" class="player-star-btn ${starred?'active':''}" data-star-player="${esc(id)}" aria-pressed="${starred}" title="${starred?'Remove trade interest':'Signal trade interest'}">${starred?'★':'☆'}</button><small>Tap the star if you're interested in acquiring this player</small></div></div><p>${trades.length} all-time trade${trades.length===1?'':'s'} recorded across loaded IMO Dynasty seasons.</p></div><div class="player-current-average player-efficiency-stats"><div><span>FPTS/G</span><strong>${seasonAvg.avg>0?seasonAvg.avg.toFixed(2):'—'}</strong></div><div class="player-efficiency-secondary"><span>MPG</span><strong>${efficiency.mpg>0?efficiency.mpg.toFixed(1):'—'}</strong></div><div class="player-efficiency-secondary"><span>FPTS/36</span><strong>${fpts36Display(efficiency)}</strong></div><small>${seasonAvg.games?`${seasonAvg.games} games · ${esc(seasonAvg.season)}`:'Season not started'}</small>${efficiency.monster?'<em class="per-minute-monster">PER-MINUTE MONSTER</em>':''}</div></div>${treeControl}<div class="player-history-timeline">${trades.length?trades.map((t,i)=>`<details class="player-history-trade" ${i===0?'open':''}><summary><span class="player-history-index">${trades.length-i}</span><span><strong>${mids(t).map(mid=>esc(managerName(mid,t))).join(' ↔ ')}</strong><small>${fmt(t.created)} · ${esc(t.season_label||'')}</small></span><span class="player-history-view">View trade</span></summary><div class="trade-detail-body">${tradeDetailsHTML(t)}</div></details>`).join(''):'<div class="profile-empty">No trades involving this player were found in the loaded league history.</div>'}</div>`}
 async function openPlayerHistory(playerId){
   const modal=$("playerHistoryModal"),content=$("playerHistoryContent");if(!modal||!content)return;
   const id=String(playerId);modal.classList.add("open");modal.setAttribute("aria-hidden","false");modal.dataset.playerId=id;document.body.classList.add("player-history-open");
@@ -1919,15 +1919,28 @@ function gameLogRows(payload){
   }
   return [];
 }
+function parsedStatNumber(value){
+  if(typeof value==='string'&&value.includes(':')){
+    const parts=value.trim().split(':').map(Number);
+    if(parts.length===2&&parts.every(Number.isFinite))return parts[0]+(parts[1]/60);
+  }
+  const n=Number(value);
+  return Number.isFinite(n)?n:null;
+}
+function statSources(row){
+  return [row,row?.stats,row?.stat,row?.player_stats,row?.game_stats].filter(source=>source&&typeof source==='object');
+}
 function numericValue(row,keys){
-  for(const key of keys){
-    const n=Number(row?.[key]);
-    if(Number.isFinite(n))return n;
+  for(const source of statSources(row)){
+    for(const key of keys){
+      const n=parsedStatNumber(source?.[key]);
+      if(n!==null)return n;
+    }
   }
   return null;
 }
 function gameWasPlayed(row){
-  const minutes=numericValue(row,["min","mins","minutes","minutes_played"]);
+  const minutes=numericValue(row,["min","mins","minutes","minutes_played","mp"]);
   if(minutes!==null)return minutes>0;
   const status=String(row?.status||row?.game_status||"").toLowerCase();
   return !(status.includes("dnp")||status.includes("inactive")||status.includes("did not play"));
@@ -2000,11 +2013,8 @@ async function loadGameLogAverages(){
 
 
 function statNumber(stats,keys){
-  for(const key of keys){
-    const n=Number(stats?.[key]);
-    if(Number.isFinite(n))return n;
-  }
-  return 0;
+  const value=numericValue(stats,keys);
+  return value===null?0:value;
 }
 function seasonStatsObject(payload){
   if(!payload)return null;

@@ -2085,3 +2085,8 @@ body.manager-picks-open{overflow:hidden}
 .profile-per36-more summary::-webkit-details-marker{display:none}
 .profile-per36-more[open] summary{margin-bottom:.35rem}
 @media(max-width:700px){.profile-per36-row{padding:.45rem .5rem}}
+
+/* Player profile hierarchy: FPTS/G remains the hero metric. */
+.player-efficiency-stats .player-efficiency-secondary span,
+.player-efficiency-stats .player-efficiency-secondary strong{color:var(--muted,#a7afc2);opacity:.72}
+.player-efficiency-stats .player-efficiency-secondary strong{font-weight:750}
