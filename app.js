@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.42 — Player Spotlight offseason fallback */
+/* IMO DYNASTY V3.3.43 — Player Spotlight offseason fallback */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,h2hHouseMargin:1.05,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -1312,6 +1312,11 @@ function managerGradePlayerHTML(label,item){
   const id=String(item.playerId||item.id||''),name=playerName(id),avatar=`https://sleepercdn.com/content/nba/players/${id}.jpg`;
   return`<div class="manager-draft-highlight"><span>${esc(label)}</span><div><span class="manager-grade-player-avatar"><img src="${esc(avatar)}" alt="" loading="lazy" onerror="this.style.display='none'"></span>${playerLink(id,name,'manager-grade-player-name')}</div></div>`
 }
+function managerGradePackageHTML(label,item){
+  if(!item)return`<div class="manager-draft-highlight manager-trade-package-highlight empty"><span>${esc(label)}</span><small>—</small></div>`;
+  const names=(item.assetNames||[]).slice(0,5),extra=Math.max(0,(item.assetNames||[]).length-names.length),lead=String(item.leadPlayerId||''),avatar=lead?`https://sleepercdn.com/content/nba/players/${lead}.jpg`:'';
+  return`<div class="manager-draft-highlight manager-trade-package-highlight"><span>${esc(label)}</span><div class="manager-package-summary">${lead?`<span class="manager-grade-player-avatar"><img src="${esc(avatar)}" alt="" loading="lazy" onerror="this.style.display='none'"></span>`:''}<div class="manager-package-names">${names.map(name=>`<small>${esc(name)}</small>`).join('')}${extra?`<small>+${extra} more</small>`:''}</div></div></div>`
+}
 function transactionSeason(raw){
   const t=raw||{},bundle=bundleForTrade(t)||state.bundles.find(b=>String(b.league?.league_id||'')===String(t.league_id||''));
   if(bundle?.league?.season)return String(bundle.league.season);
@@ -1363,58 +1368,91 @@ function managerWaiverAcquisitions(managerId){
   });
   return events
 }
+function currentAssetValue(asset){
+  if(!asset)return 0;
+  if(asset.type==='player'&&asset.id)return currentPlayerIMOValue(String(asset.id)).value;
+  if(asset.type==='pick'){
+    if(asset.id){const current=currentPlayerIMOValue(String(asset.id));if(current.value>0)return current.value}
+    return Number(asset.value)||0
+  }
+  return Number(asset.value)||0
+}
+function compactTradeAssetName(asset){
+  if(!asset)return'Unknown asset';
+  if(asset.type==='player'&&asset.id)return playerName(String(asset.id));
+  if(asset.type==='pick'){
+    if(asset.id)return playerName(String(asset.id));
+    return String(asset.name||'Draft pick').replace(/\s*\([^)]*pick[^)]*\)\s*$/i,'').trim()||'Draft pick'
+  }
+  return String(asset.name||'Unknown asset')
+}
+function managerTradePackages(managerId){
+  const id=String(managerId),now=Date.now(),rows=[];
+  managerTrades(id).forEach(raw=>{
+    const t=normaliseTrade(raw),created=Number(t.created)||0;
+    const received=tradeAssets(t)[id]||[];
+    let sent=tradeOutgoingAssets(t)[id]||[];
+    if(!sent.length&&mids(t).length===2){const other=mids(t).find(x=>String(x)!==id);sent=tradeAssets(t)[other]||[]}
+    const receivedCurrent=received.reduce((sum,a)=>sum+currentAssetValue(a),0);
+    const sentCurrent=sent.reduce((sum,a)=>sum+currentAssetValue(a),0);
+    const receivedAtTrade=received.reduce((sum,a)=>sum+(Number(a.value)||0),0);
+    const sentAtTrade=sent.reduce((sum,a)=>sum+(Number(a.value)||0),0);
+    const currentNet=receivedCurrent-sentCurrent;
+    const valueSwing=(receivedCurrent-receivedAtTrade)-(sentCurrent-sentAtTrade);
+    rows.push({method:'trade-package',created,ageDays:(now-created)/864e5,transaction:t,received,sent,receivedCurrent,sentCurrent,receivedAtTrade,sentAtTrade,currentNet,valueSwing,
+      assetNames:received.map(compactTradeAssetName).filter(Boolean),
+      leadPlayerId:String(received.find(a=>a.type==='player'&&a.id)?.id||received.find(a=>a.id)?.id||'')
+    })
+  });
+  return rows
+}
+function playerDepartureAfter(managerId,playerId,created){
+  const id=String(managerId),pid=String(playerId),events=[];
+  allLeagueTransactions().forEach(raw=>{
+    const t=normaliseTrade(raw),ts=Number(t.created)||0;if(ts<=created)return;
+    const rid=t.drops?.[pid];if(rid==null)return;
+    if(transactionManagerForRoster(t,rid)===id)events.push(t)
+  });
+  return events.sort((a,b)=>(Number(a.created)||0)-(Number(b.created)||0))[0]||null
+}
+function valueAtTransactionDate(playerId,transaction){
+  const avg=averageAtAcquisition(String(playerId),transaction);
+  return avg>0?playerDynastyValue(String(playerId),avg,Number(transaction.created)||Date.now()):0
+}
+function discoveryOwnershipResult(managerId,event){
+  const departure=playerDepartureAfter(managerId,event.playerId,event.created);
+  const endValue=departure?valueAtTransactionDate(event.playerId,departure):event.currentValue;
+  const endAverage=departure?averageAtAcquisition(event.playerId,departure):event.currentAverage;
+  return{...event,departure,endValue,endAverage,capturedValueChange:endValue-event.acquisitionValue,stillOwned:!departure}
+}
 function managerFrontOfficeHighlights(managerId){
   const now=Date.now(),day=864e5,id=String(managerId),draftStar=managerAllRookiePicks(id).map(p=>{const current=playerCurrentAverage(String(p.playerId));return{...p,currentAverage:Number(current.avg||0)}}).filter(p=>p.currentAverage>0).sort((a,b)=>b.currentAverage-a.currentAverage||Number(a.overallPick||999)-Number(b.overallPick||999))[0]||null;
-  const trades=managerTradeAcquisitions(id),waivers=managerWaiverAcquisitions(id);
+  const trades=managerTradeAcquisitions(id),waivers=managerWaiverAcquisitions(id),packages=managerTradePackages(id);
 
-  // Best Trade should reflect a genuinely strong fantasy outcome, not merely a
-  // small dynasty-value fluctuation. Require the player to be useful now and
-  // to have improved in both production and IMO Value since acquisition.
-  const bestTrade=trades.filter(x=>
+  // Trades are judged as complete packages, including players and draft picks.
+  // A single declining player cannot condemn a package that also delivered a
+  // valuable rookie or future pick.
+  const bestTrade=packages.filter(x=>x.ageDays>=30&&x.currentNet>=5&&x.valueSwing>=3)
+    .sort((a,b)=>b.currentNet-a.currentNet||b.valueSwing-a.valueSwing||a.created-b.created)[0]||null;
+
+  const tradeMiss=packages.filter(x=>x.ageDays>100&&x.currentNet<=-5&&x.valueSwing<=-3)
+    .sort((a,b)=>a.currentNet-b.currentNet||a.valueSwing-b.valueSwing||a.created-b.created)[0]||null;
+
+  // Discoveries are player-based and only credit value captured while the
+  // manager actually owned the player. Growth after the player was traded away
+  // is excluded. Rookie-draft selections remain excluded.
+  const bestTradePlayerIds=new Set((bestTrade?.received||[]).filter(a=>a.type==='player'&&a.id).map(a=>String(a.id)));
+  const bestDiscovery=[...trades,...waivers].map(x=>discoveryOwnershipResult(id,x)).filter(x=>
+    !bestTradePlayerIds.has(String(x.playerId))&&
     now-x.created>=30*day&&
-    x.acquisitionAverage>=15&&
-    x.currentAverage>=20&&
-    x.currentAverage-x.acquisitionAverage>=3&&
-    x.valueChange>=3
-  ).sort((a,b)=>
-    ((b.currentAverage-b.acquisitionAverage)+(b.valueChange))-
-    ((a.currentAverage-a.acquisitionAverage)+(a.valueChange))||
-    b.valueChange-a.valueChange||a.created-b.created
-  )[0]||null;
+    x.endAverage>=18&&
+    x.endAverage-x.acquisitionAverage>=4&&
+    x.capturedValueChange>=4
+  ).sort((a,b)=>b.capturedValueChange-a.capturedValueChange||(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||a.created-b.created)[0]||null;
 
-  // Best Discovery excludes rookie-draft selections by construction and must
-  // be a meaningful fantasy player. Do not repeat the same player selected as
-  // Best Trade; if no separate qualifying discovery exists, render a dash.
-  const bestTradePlayerId=String(bestTrade?.playerId||'');
-  const bestDiscovery=[...trades,...waivers].filter(x=>
-    String(x.playerId)!==bestTradePlayerId&&
-    now-x.created>=30*day&&
-    x.currentAverage>=18&&
-    x.currentAverage-x.acquisitionAverage>=4&&
-    x.valueChange>=4
-  ).sort((a,b)=>
-    ((b.currentAverage-b.acquisitionAverage)+(b.valueChange))-
-    ((a.currentAverage-a.acquisitionAverage)+(a.valueChange))||
-    b.valueChange-a.valueChange||a.created-b.created
-  )[0]||null;
-
-  // Trade Miss is reserved for a real on-court and asset-value decline. This
-  // prevents elite players such as Giannis from appearing solely because age
-  // softened their dynasty value while production remained excellent.
-  const tradeMiss=trades.filter(x=>
-    now-x.created>=100*day&&
-    x.acquisitionAverage>=15&&
-    Number(x.ageAtAcquisition)<=35&&
-    x.currentAverage<22&&
-    x.acquisitionAverage-x.currentAverage>=5&&
-    x.acquisitionValue-x.currentValue>=5
-  ).sort((a,b)=>
-    ((b.acquisitionAverage-b.currentAverage)+(b.acquisitionValue-b.currentValue))-
-    ((a.acquisitionAverage-a.currentAverage)+(a.acquisitionValue-a.currentValue))||
-    a.created-b.created
-  )[0]||null;
   return{draftStar,bestTrade,bestDiscovery,tradeMiss}
 }
+
 async function hydrateManagerAcquisitionGameLogs(managerId){
   const id=String(managerId),pairs=new Map();
   managerTrades(id).forEach(t=>Object.entries(t.adds||{}).forEach(([playerId,rosterId])=>{const recipient=String(t.roster_owner_map?.[String(rosterId)]||transactionManagerForRoster(t,rosterId));if(recipient===id&&playerId&&playerId!=='0')pairs.set(`${transactionSeason(t)}|${playerId}`,{playerId:String(playerId),season:transactionSeason(t)})}));
@@ -1439,7 +1477,7 @@ function managerPicksMadeHTML(managerId){
 }
 function managerGradesHTML(managerId){
   const league=managerGradesLeague(),id=String(managerId),grades=league.grades[id]||{},highlights=managerFrontOfficeHighlights(id),items=[['Trading',grades.trading],['Drafting',grades.drafting],['Player Development',grades.development],['Team Building',grades.building]];
-  return`<section class="manager-grades-row" aria-label="Manager grades"><div class="manager-grades-title"><span class="eyebrow">MANAGER GRADES</span></div><div class="manager-grade-items">${items.map(([label,grade])=>`<div class="manager-grade-item"><span>${esc(label)}</span><strong class="manager-grade-badge ${gradeClass(grade||'F')}">${esc(grade||'—')}</strong></div>`).join('')}</div><div class="manager-draft-highlights">${managerGradePlayerHTML('Draft Star',highlights.draftStar)}${managerGradePlayerHTML('Best Trade',highlights.bestTrade)}${managerGradePlayerHTML('Best Discovery',highlights.bestDiscovery)}${managerGradePlayerHTML('Trade Miss',highlights.tradeMiss)}</div></section>`
+  return`<section class="manager-grades-row" aria-label="Manager grades"><div class="manager-grades-title"><span class="eyebrow">MANAGER GRADES</span></div><div class="manager-grade-items">${items.map(([label,grade])=>`<div class="manager-grade-item"><span>${esc(label)}</span><strong class="manager-grade-badge ${gradeClass(grade||'F')}">${esc(grade||'—')}</strong></div>`).join('')}</div><div class="manager-draft-highlights">${managerGradePlayerHTML('Draft Star',highlights.draftStar)}${managerGradePackageHTML('Best Trade',highlights.bestTrade)}${managerGradePlayerHTML('Best Discovery',highlights.bestDiscovery)}${managerGradePackageHTML('Trade Miss',highlights.tradeMiss)}</div></section>`
 }
 function managerPicksMadeModalHTML(managerId){
   const picks=managerAllRookiePicks(managerId);

@@ -2133,3 +2133,12 @@ body.manager-picks-open{overflow:hidden}
 @media(max-width:650px){.v26-summary-grid.summary-grid-two{grid-template-columns:1fr}.player-spotlight-card{grid-template-columns:46px minmax(0,1fr) auto}.player-spotlight-avatar{width:46px;height:46px}.player-spotlight-name{font-size:16px}.player-spotlight-average strong{font-size:21px}}
 
 /* V3.3.40 — living Front Office highlights */
+
+
+/* V3.3.43 package-level front-office highlights */
+.manager-trade-package-highlight .manager-package-summary{display:flex;align-items:flex-start;gap:10px;min-width:0;margin-top:8px}
+.manager-trade-package-highlight .manager-grade-player-avatar{flex:0 0 auto}
+.manager-package-names{display:flex;flex-direction:column;gap:2px;min-width:0}
+.manager-package-names small{display:block;color:#f4f6fb;font-size:13px;font-weight:750;line-height:1.22;white-space:normal;overflow-wrap:anywhere}
+.manager-package-names small+small{color:#aeb7c9;font-size:11px;font-weight:650}
+@media(max-width:620px){.manager-package-names small{font-size:12px}.manager-package-names small+small{font-size:10px}}
