@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.43 — Player Spotlight offseason fallback */
+/* IMO DYNASTY V3.3.44 — Spotlight hydration + clickable package highlights */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,h2hHouseMargin:1.05,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -298,10 +298,29 @@ function dailyPlayerSpotlight(){
   if(!selected){const ordered=[...candidates].sort((a,b)=>String(a.id).localeCompare(String(b.id))),index=stableIndex(`spotlight|${bucket}|${ordered.map(player=>player.id).join('|')}`,ordered.length);selected=ordered[index]||ordered[0];try{localStorage.setItem(key,JSON.stringify({bucket,playerId:selected.id,season:selected.season,savedAt:Date.now()}))}catch(_){ }}
   return selected
 }
+let playerSpotlightHydrationPromise=null;
+async function ensurePlayerSpotlightData(){
+  if(playerSpotlightHydrationPromise)return playerSpotlightHydrationPromise;
+  playerSpotlightHydrationPromise=(async()=>{
+    const activeSeason=String(tradeTargetAverageContext().season||state.modelBundle?.league?.season||'');
+    const activeLogs=state.gameLogs?.[activeSeason]||{};
+    const useActive=activeSeason&&activeSeason!=='2025'&&spotlightSeasonHasPlayedGames(activeLogs);
+    const season=useActive?activeSeason:'2025';
+    const averages=seasonAverageMap(season),scoring=seasonBundleForStats(season)?.league?.scoring_settings||state.modelBundle?.league?.scoring_settings||{};
+    const ids=Object.entries(averages).filter(([,avg])=>Number(avg)>0).sort((a,b)=>Number(b[1])-Number(a[1])).slice(0,125).map(([id])=>String(id));
+    state.gameLogs[season]??={};
+    const missing=ids.filter(id=>!safeArray(state.gameLogs[season][id]).some(gameWasPlayed));
+    if(missing.length){
+      const rows=await limitedMap(missing,8,async id=>{try{const result=await loadPlayerGameLogAverage(id,season,scoring);return result?{id,result}:null}catch(error){console.warn('Spotlight log unavailable',id,season,error);return null}});
+      rows.filter(Boolean).forEach(({id,result})=>{state.gameLogs[season][id]=result.rows||[];state.gameLogAverages[season]??={};state.gameLogMeta[season]??={};state.gameLogAverages[season][id]=Number(result.average||0);state.gameLogMeta[season][id]={gamesPlayed:Number(result.games||0),totalFantasyPoints:Number(result.points||0),average:Number(result.average||0)}})
+    }
+  })().finally(()=>{playerSpotlightHydrationPromise=null});
+  return playerSpotlightHydrationPromise;
+}
 function renderPlayerSpotlight(){
   const target=$('playerSpotlight');if(!target)return;
   const player=dailyPlayerSpotlight();
-  if(!player){target.innerHTML='<div class="player-spotlight-empty"><strong>Form watch is loading</strong><small>The daily spotlight appears after the latest player game logs are ready.</small></div>';return}
+  if(!player){target.innerHTML='<div class="player-spotlight-empty"><strong>Finding today’s standout…</strong><small>Loading 2025 form data for the offseason spotlight.</small></div>';ensurePlayerSpotlightData().then(()=>{const resolved=dailyPlayerSpotlight();if(resolved)renderPlayerSpotlight();else target.innerHTML='<div class="player-spotlight-empty"><strong>No eligible spotlight today</strong><small>No top-125 player outperformed their season average across their final three games.</small></div>'}).catch(error=>{console.warn('Player Spotlight hydration failed',error);target.innerHTML='<div class="player-spotlight-empty"><strong>Spotlight unavailable</strong><small>Please refresh to retry the latest player form data.</small></div>'});return}
   target.innerHTML=`<button type="button" class="player-spotlight-avatar player-history-link" data-player-id="${esc(player.id)}" aria-label="Open ${esc(player.name)} player profile"><img src="${esc(player.avatar)}" alt="" loading="lazy" onerror="this.style.display='none'"></button><div class="player-spotlight-copy"><small>Top-125 player · outperforming last 3</small>${playerLink(player.id,player.name,'player-spotlight-name')}<span>${esc(player.season)} season average · refreshes every 24 hours</span></div><div class="player-spotlight-average"><strong>${player.seasonAverage.toFixed(2)}</strong><small>FPTS/G</small></div>`
 }
 function renderSummary(){
@@ -1312,10 +1331,18 @@ function managerGradePlayerHTML(label,item){
   const id=String(item.playerId||item.id||''),name=playerName(id),avatar=`https://sleepercdn.com/content/nba/players/${id}.jpg`;
   return`<div class="manager-draft-highlight"><span>${esc(label)}</span><div><span class="manager-grade-player-avatar"><img src="${esc(avatar)}" alt="" loading="lazy" onerror="this.style.display='none'"></span>${playerLink(id,name,'manager-grade-player-name')}</div></div>`
 }
+function frontOfficeTradeKey(raw){return String(raw?.transaction_id||raw?.created||'')}
 function managerGradePackageHTML(label,item){
   if(!item)return`<div class="manager-draft-highlight manager-trade-package-highlight empty"><span>${esc(label)}</span><small>—</small></div>`;
-  const names=(item.assetNames||[]).slice(0,5),extra=Math.max(0,(item.assetNames||[]).length-names.length),lead=String(item.leadPlayerId||''),avatar=lead?`https://sleepercdn.com/content/nba/players/${lead}.jpg`:'';
-  return`<div class="manager-draft-highlight manager-trade-package-highlight"><span>${esc(label)}</span><div class="manager-package-summary">${lead?`<span class="manager-grade-player-avatar"><img src="${esc(avatar)}" alt="" loading="lazy" onerror="this.style.display='none'"></span>`:''}<div class="manager-package-names">${names.map(name=>`<small>${esc(name)}</small>`).join('')}${extra?`<small>+${extra} more</small>`:''}</div></div></div>`
+  const names=(item.assetNames||[]).slice(0,5),extra=Math.max(0,(item.assetNames||[]).length-names.length),lead=String(item.leadPlayerId||''),avatar=lead?`https://sleepercdn.com/content/nba/players/${lead}.jpg`:'',key=frontOfficeTradeKey(item.transaction);
+  return`<div class="manager-draft-highlight manager-trade-package-highlight"><span>${esc(label)}</span><button type="button" class="manager-package-summary manager-package-open" data-front-office-trade="${esc(key)}" aria-label="View ${esc(label)} trade package">${lead?`<span class="manager-grade-player-avatar"><img src="${esc(avatar)}" alt="" loading="lazy" onerror="this.style.display='none'"></span>`:''}<span class="manager-package-names">${names.map(name=>`<small>${esc(name)}</small>`).join('')}${extra?`<small>+${extra} more</small>`:''}</span></button></div>`
+}
+function openFrontOfficeTrade(key){
+  const trade=state.trades.find(raw=>frontOfficeTradeKey(raw)===String(key));if(!trade)return;
+  const modal=$("globalSearchModal"),target=$("globalSearchResults"),title=$("globalSearchTitle");if(!modal||!target)return;
+  if(title)title.textContent='Front Office Trade Package';
+  target.innerHTML=`<div class="global-search-trade-view"><span class="global-search-type type-trade">Trade package</span><h3>${esc(mids(trade).map(id=>managerName(id,trade)).join(' ↔ '))}</h3><p>${esc(fmt(trade.created))} · ${esc(trade.season_label||transactionSeason(trade)+' season')}</p><div class="trade-detail-body">${tradeDetailsHTML(trade)}</div></div>`;
+  modal.classList.add('open');modal.setAttribute('aria-hidden','false');document.body.classList.add('global-search-open');
 }
 function transactionSeason(raw){
   const t=raw||{},bundle=bundleForTrade(t)||state.bundles.find(b=>String(b.league?.league_id||'')===String(t.league_id||''));
@@ -1399,7 +1426,11 @@ function managerTradePackages(managerId){
     const sentAtTrade=sent.reduce((sum,a)=>sum+(Number(a.value)||0),0);
     const currentNet=receivedCurrent-sentCurrent;
     const valueSwing=(receivedCurrent-receivedAtTrade)-(sentCurrent-sentAtTrade);
-    rows.push({method:'trade-package',created,ageDays:(now-created)/864e5,transaction:t,received,sent,receivedCurrent,sentCurrent,receivedAtTrade,sentAtTrade,currentNet,valueSwing,
+    const receivedPlayerAverages=received.filter(a=>a.type==='player'&&a.id).map(a=>currentPlayerIMOValue(String(a.id)).average).filter(Number.isFinite);
+    const seasonRanking=Object.values(seasonAverageMap(playerCurrentAverage(String(received.find(a=>a.type==='player'&&a.id)?.id||'')).season)||{}).map(Number).filter(v=>v>0).sort((a,b)=>b-a);
+    const top20Cutoff=seasonRanking.length>=20?seasonRanking[19]:Infinity;
+    const hasTop20Player=receivedPlayerAverages.some(avg=>avg>=top20Cutoff);
+    rows.push({method:'trade-package',created,ageDays:(now-created)/864e5,transaction:t,received,sent,receivedCurrent,sentCurrent,receivedAtTrade,sentAtTrade,currentNet,valueSwing,hasTop20Player,
       assetNames:received.map(compactTradeAssetName).filter(Boolean),
       leadPlayerId:String(received.find(a=>a.type==='player'&&a.id)?.id||received.find(a=>a.id)?.id||'')
     })
@@ -1432,23 +1463,26 @@ function managerFrontOfficeHighlights(managerId){
   // Trades are judged as complete packages, including players and draft picks.
   // A single declining player cannot condemn a package that also delivered a
   // valuable rookie or future pick.
-  const bestTrade=packages.filter(x=>x.ageDays>=30&&x.currentNet>=5&&x.valueSwing>=3)
-    .sort((a,b)=>b.currentNet-a.currentNet||b.valueSwing-a.valueSwing||a.created-b.created)[0]||null;
+  const eligibleBest=packages.filter(x=>x.ageDays>=30);
+  const bestTrade=(eligibleBest.filter(x=>x.currentNet>=5&&x.valueSwing>=3)
+    .sort((a,b)=>b.currentNet-a.currentNet||b.valueSwing-a.valueSwing||a.created-b.created)[0])||
+    eligibleBest.sort((a,b)=>b.currentNet-a.currentNet||b.valueSwing-a.valueSwing||a.created-b.created)[0]||packages.sort((a,b)=>b.currentNet-a.currentNet)[0]||null;
 
-  const tradeMiss=packages.filter(x=>x.ageDays>100&&x.currentNet<=-5&&x.valueSwing<=-3)
-    .sort((a,b)=>a.currentNet-b.currentNet||a.valueSwing-b.valueSwing||a.created-b.created)[0]||null;
+  const eligibleMiss=packages.filter(x=>x.ageDays>100&&!x.hasTop20Player);
+  const tradeMiss=(eligibleMiss.filter(x=>x.currentNet<=-5&&x.valueSwing<=-3)
+    .sort((a,b)=>a.currentNet-b.currentNet||a.valueSwing-b.valueSwing||a.created-b.created)[0])||
+    eligibleMiss.sort((a,b)=>a.currentNet-b.currentNet||a.valueSwing-b.valueSwing||a.created-b.created)[0]||
+    packages.filter(x=>!x.hasTop20Player).sort((a,b)=>a.currentNet-b.currentNet)[0]||packages.sort((a,b)=>a.currentNet-b.currentNet)[0]||null;
 
   // Discoveries are player-based and only credit value captured while the
   // manager actually owned the player. Growth after the player was traded away
   // is excluded. Rookie-draft selections remain excluded.
   const bestTradePlayerIds=new Set((bestTrade?.received||[]).filter(a=>a.type==='player'&&a.id).map(a=>String(a.id)));
-  const bestDiscovery=[...trades,...waivers].map(x=>discoveryOwnershipResult(id,x)).filter(x=>
-    !bestTradePlayerIds.has(String(x.playerId))&&
-    now-x.created>=30*day&&
-    x.endAverage>=18&&
-    x.endAverage-x.acquisitionAverage>=4&&
-    x.capturedValueChange>=4
-  ).sort((a,b)=>b.capturedValueChange-a.capturedValueChange||(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||a.created-b.created)[0]||null;
+  const discoveryPool=[...trades,...waivers].map(x=>discoveryOwnershipResult(id,x)).filter(x=>!bestTradePlayerIds.has(String(x.playerId))&&now-x.created>=30*day&&x.endAverage>=18);
+  const bestDiscovery=(discoveryPool.filter(x=>x.endAverage-x.acquisitionAverage>=4&&x.capturedValueChange>=4)
+    .sort((a,b)=>b.capturedValueChange-a.capturedValueChange||(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||a.created-b.created)[0])||
+    discoveryPool.sort((a,b)=>b.capturedValueChange-a.capturedValueChange||(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||a.created-b.created)[0]||
+    [...trades,...waivers].map(x=>discoveryOwnershipResult(id,x)).filter(x=>!bestTradePlayerIds.has(String(x.playerId))).sort((a,b)=>b.capturedValueChange-a.capturedValueChange)[0]||null;
 
   return{draftStar,bestTrade,bestDiscovery,tradeMiss}
 }
@@ -1493,7 +1527,7 @@ function ensureManagerGradeStyles(){
   .manager-grades-title{white-space:nowrap}.manager-grade-items{display:grid;grid-template-columns:repeat(4,minmax(86px,1fr));gap:8px}.manager-grade-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;border-radius:10px;background:rgba(255,255,255,.035)}
   .manager-grade-item>span{font-size:11px;line-height:1.2;color:var(--muted,#94a3b8)}.manager-grade-badge{display:grid;place-items:center;min-width:34px;height:28px;padding:0 7px;border-radius:8px;font-size:14px;line-height:1;font-weight:900}
   .manager-grade-badge.grade-a{color:#052e16;background:#4ade80}.manager-grade-badge.grade-b{color:#172554;background:#60a5fa}.manager-grade-badge.grade-c{color:#422006;background:#facc15}.manager-grade-badge.grade-d{color:#431407;background:#fb923c}.manager-grade-badge.grade-f{color:#450a0a;background:#f87171}
-  .manager-draft-highlights{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;grid-auto-rows:minmax(58px,auto);gap:8px;width:100%;height:auto!important;max-height:none!important;overflow:visible!important}.manager-draft-highlight{display:block!important;visibility:visible!important;opacity:1!important;min-width:0;min-height:58px;height:auto!important;max-height:none!important;overflow:visible!important;padding:6px 9px;border-left:1px solid rgba(148,163,184,.18)}.manager-draft-highlight>span{display:block;margin-bottom:4px;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#94a3b8)}.manager-draft-highlight>div{display:flex;align-items:center;gap:8px;min-width:0}.manager-grade-player-avatar{width:26px;height:26px;border-radius:50%;overflow:hidden;background:rgba(148,163,184,.15);flex:0 0 auto}.manager-grade-player-avatar img{width:100%;height:100%;object-fit:cover}.manager-grade-player-name{padding:0;border:0;background:none;color:inherit;font:inherit;font-size:11px;font-weight:800;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.manager-grade-pick-label{margin-left:auto;padding:3px 5px;border:1px solid rgba(148,163,184,.18);border-radius:6px;color:var(--muted,#94a3b8);font-size:9px;font-weight:900;letter-spacing:.04em;white-space:nowrap}.manager-draft-highlight.empty small{font-size:16px}
+  .manager-draft-highlights{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;grid-auto-rows:minmax(58px,auto);gap:8px;width:100%;height:auto!important;max-height:none!important;overflow:visible!important}.manager-draft-highlight{display:block!important;visibility:visible!important;opacity:1!important;min-width:0;min-height:58px;height:auto!important;max-height:none!important;overflow:visible!important;padding:6px 9px;border-left:1px solid rgba(148,163,184,.18)}.manager-draft-highlight>span{display:block;margin-bottom:4px;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#94a3b8)}.manager-package-open{width:100%;padding:0;border:0;background:none;color:inherit;text-align:left;cursor:pointer}.manager-package-open:hover .manager-package-names small{text-decoration:underline;color:#fff}.manager-draft-highlight>div{display:flex;align-items:center;gap:8px;min-width:0}.manager-grade-player-avatar{width:26px;height:26px;border-radius:50%;overflow:hidden;background:rgba(148,163,184,.15);flex:0 0 auto}.manager-grade-player-avatar img{width:100%;height:100%;object-fit:cover}.manager-grade-player-name{padding:0;border:0;background:none;color:inherit;font:inherit;font-size:11px;font-weight:800;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.manager-grade-pick-label{margin-left:auto;padding:3px 5px;border:1px solid rgba(148,163,184,.18);border-radius:6px;color:var(--muted,#94a3b8);font-size:9px;font-weight:900;letter-spacing:.04em;white-space:nowrap}.manager-draft-highlight.empty small{font-size:16px}
   @media(max-width:900px){.manager-grades-title{display:none}.manager-draft-highlights{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-rows:minmax(64px,auto)}.manager-draft-highlight{border-left:0;border-top:1px solid rgba(148,163,184,.18);padding-top:9px}}
   @media(max-width:620px){.manager-grades-row{padding:10px;gap:10px;height:auto!important;max-height:none!important;overflow:visible!important}.manager-grade-items{grid-template-columns:repeat(2,1fr)}.manager-grade-item{padding:8px}.manager-draft-highlights{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-flow:row!important;height:auto!important;max-height:none!important;overflow:visible!important}.manager-grade-player-name{font-size:10px}}
   .manager-picks-made{display:flex!important;visibility:visible!important;opacity:1!important;flex-direction:column;justify-content:center}.manager-picks-total{width:max-content;padding:0;border:0;background:none;color:#fff;font:inherit;font-size:28px;font-weight:1000;line-height:1;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(143,115,255,.7);text-underline-offset:5px}.manager-picks-total:hover{color:#c9bbff}
@@ -2735,6 +2769,7 @@ document.addEventListener("click",e=>{
   const returnChainStep=e.target.closest("[data-return-chain-step]");if(returnChainStep){goToReturnChainStep(returnChainStep.dataset.returnChainStep);return}
   if(e.target.closest("[data-return-chain-back]")){goToReturnChainStep((returnChainSession?.steps.length||1)-2);return}
   if(e.target.closest("[data-close-return-tree]")||e.target.closest("#tradeReturnTreeClose")){closeTradeReturnTree();return}
+  const frontOfficeTrade=e.target.closest("[data-front-office-trade]");if(frontOfficeTrade){openFrontOfficeTrade(frontOfficeTrade.dataset.frontOfficeTrade);return}
   const pickLinkEl=e.target.closest("[data-pick-history-key]");if(pickLinkEl){openPickHistory(pickLinkEl.dataset.pickHistoryKey);return}
   if(e.target.closest("[data-close-pick-history]")||e.target.closest("#pickHistoryClose")){closePickHistory();return}
   const playerLinkEl=e.target.closest(".player-history-link");if(playerLinkEl){if(playerLinkEl.closest("#managerPicksMadeModal"))closeManagerPicksMade();if(playerLinkEl.closest("#tradeReturnTreeModal"))closeTradeReturnTree();openPlayerHistory(playerLinkEl.dataset.playerId);return}
