@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.20 — Trade Loading + Live Ticker Fix */
+/* IMO DYNASTY V3.3.21 — Defensive Trade Pipeline + Persistent Ticker */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -30,7 +30,16 @@ function esc(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt
 function fmt(ts,short=false){return ts?new Intl.DateTimeFormat("en-AU",short?{day:"numeric",month:"short"}:{day:"numeric",month:"short",year:"numeric"}).format(new Date(ts)):"Unknown"}
 function buildManagers(){const users=Object.fromEntries(state.currentUsers.map(x=>[String(x.user_id),x]));state.managers.clear();state.currentRosters.forEach(r=>{const u=users[String(r.owner_id)]||{},name=u.metadata?.team_name||u.display_name||`Team ${r.roster_id}`,profileAvatar=u.avatar,avatar=profileAvatar?`https://sleepercdn.com/avatars/${profileAvatar}`:null;state.managers.set(String(r.owner_id),{id:String(r.owner_id),name,roster:r,avatar,initials:name.split(/\s+/).slice(0,2).map(z=>z[0]).join("").toUpperCase()})})}
 function managerName(id,t=null){return state.managers.get(String(id))?.name||t?.manager_name_map?.[String(id)]||"Former manager"}
-function mids(t){return [...new Set((t.manager_ids||[]).map(String))].filter(id=>state.managers.has(id))}
+function safeObject(value){return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}
+function safeArray(value){return Array.isArray(value)?value:[]}
+function normaliseTrade(raw){
+  const t=safeObject(raw),adds=safeObject(t.adds),drops=safeObject(t.drops),draftPicks=safeArray(t.draft_picks),rosterIds=safeArray(t.roster_ids),ownerMap=safeObject(t.roster_owner_map),nameMap=safeObject(t.manager_name_map);
+  const inferredRosterIds=[...rosterIds,Object.values(adds),Object.values(drops),...draftPicks.flatMap(p=>[p?.owner_id,p?.previous_owner_id])].filter(v=>v!=null).map(String);
+  const explicitManagers=safeArray(t.manager_ids).filter(v=>v!=null).map(String);
+  const inferredManagers=inferredRosterIds.map(rid=>ownerMap[rid]).filter(v=>v!=null).map(String);
+  return {...t,adds,drops,draft_picks:draftPicks,roster_ids:rosterIds,roster_owner_map:ownerMap,manager_name_map:nameMap,manager_ids:[...new Set([...explicitManagers,...inferredManagers])]};
+}
+function mids(raw){const t=normaliseTrade(raw);return [...new Set(safeArray(t.manager_ids).map(String))].filter(id=>state.managers.has(id)||Object.prototype.hasOwnProperty.call(t.manager_name_map,id))}
 function tradesFor(w){if(w==="season")return currentSeasonTrades();return w==="all"?state.trades:state.trades.filter(t=>(t.created||0)>=Date.now()-Number(w)*864e5)}
 function currentSeasonTrades(){const current=state.bundles.find(b=>String(b.league.league_id)===CONFIG.currentLeagueId);return current?.trades||[]}
 function activeTradesFor(w){if(w==="season")return currentSeasonTrades();return w==="all"?state.trades:state.trades.filter(t=>(t.created||0)>=Date.now()-Number(w)*864e5)}
@@ -115,7 +124,12 @@ function tradePlayerValue(playerId,average,t){
   const base=playerDynastyValue(playerId,average,t.created);
   return topTenSeasonAverageIds(t).has(String(playerId))?base*1.20:base
 }
-function tradeAssets(t){const by={};mids(t).forEach(id=>by[id]=[]);Object.entries(t.adds||{}).forEach(([pid,rid])=>{const mid=t.roster_owner_map?.[String(rid)];if(!mid||!by[mid])return;const average=tradeSeasonAverage(pid,t);by[mid].push({type:"player",id:pid,name:playerName(pid),value:tradePlayerValue(pid,average,t),average,topTenBonus:topTenSeasonAverageIds(t).has(String(pid))})});(t.draft_picks||[]).forEach(p=>{const mid=t.roster_owner_map?.[String(p.owner_id)];if(!mid||!by[mid])return;const round=Number(p.round),season=p.season||"Future",original=pickOriginalOwner(p,t),drafted=draftedPlayerForPick(p),pickLabel=`${season} ${roundWord(round)} Round Pick${original?` ${original}`:""}`;const value=fixedPickValue(round),average=0;by[mid].push({type:"pick",id:drafted||null,pickKey:pickAssetKey(p),pick:{...p,_trade:t},name:drafted?`${playerName(drafted)} (${pickLabel})`:`${season} Round ${round} Pick`,owner:drafted?null:original,value,average})});return by}
+function tradeAssets(raw){
+  const t=normaliseTrade(raw),by={};mids(t).forEach(id=>by[id]=[]);
+  Object.entries(t.adds).forEach(([pid,rid])=>{try{const mid=t.roster_owner_map?.[String(rid)];if(!mid||!by[mid])return;const average=tradeSeasonAverage(pid,t);by[mid].push({type:"player",id:pid,name:playerName(pid),value:tradePlayerValue(pid,average,t),average,topTenBonus:topTenSeasonAverageIds(t).has(String(pid))})}catch(error){console.warn('Skipped malformed traded player',pid,error)}});
+  t.draft_picks.forEach(p=>{try{if(!p||typeof p!=='object')return;const mid=t.roster_owner_map?.[String(p.owner_id)];if(!mid||!by[mid])return;const round=Number(p.round)||0,season=p.season||"Future",original=pickOriginalOwner(p,t),drafted=draftedPlayerForPick(p),pickLabel=`${season} ${roundWord(round)} Round Pick${original?` ${original}`:""}`;const value=fixedPickValue(round),average=0;by[mid].push({type:"pick",id:drafted||null,pickKey:pickAssetKey(p),pick:{...p,_trade:t},name:drafted?`${playerName(drafted)} (${pickLabel})`:`${season} Round ${round||'—'} Pick`,owner:drafted?null:original,value,average})}catch(error){console.warn('Skipped malformed traded pick',p,error)}});
+  return by
+}
 function tradeValue(t){return Object.values(tradeAssets(t)).flat().reduce((sum,asset)=>sum+(Number(asset.value)||0),0)}
 
 function tradeOutgoingAssets(t){
@@ -600,23 +614,29 @@ function longestTradeDroughtSince(startTs=new Date("2025-10-01T00:00:00Z").getTi
 function renderRecords(){const current=state.bundles.find(b=>String(b.league.league_id)===CONFIG.currentLeagueId)||state.modelBundle,allCounts=managerTradeCounts(state.trades),seasonCounts=managerTradeCounts(current.trades),allTop=topEntry(allCounts),seasonTop=topEntry(seasonCounts),drought=longestTradeDroughtSince();const perDay={};state.trades.forEach(t=>mids(t).forEach(id=>{const key=`${id}|${new Date(t.created).toDateString()}`;perDay[key]=(perDay[key]||0)+1}));const dayTop=topEntry(perDay),[dayOwner,dayDate]=(dayTop?.[0]||'|').split('|'),teamEver=highestTeamScore(state.bundles),teamSeason=highestTeamScore([current]),playerEver=highestPlayerScore(state.bundles),playerSeason=highestPlayerScore([current]);const droughtRange=drought?`${drought.days} days · ${new Date(drought.from).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})} to ${drought.ended?new Date(drought.to).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}):'now'}`:'No data';const cards=[['MOST TRADES (ALL TIME)',allTop?managerName(allTop[0]):'—',allTop?`${allTop[1]} trades`:'No data','record-green'],['MOST TRADES THIS SEASON',seasonTop?managerName(seasonTop[0]):'—',seasonTop?`${seasonTop[1]} trades`:'No trades','record-green'],['LONGEST TRADE DROUGHT',drought?.m.name||'—',droughtRange,'record-grey'],['MOST TRADES IN A DAY',dayOwner?managerName(dayOwner):'—',dayTop?`${dayTop[1]} trades · ${dayDate}`:'No data','record-orange'],['HIGHEST WEEKLY TEAM SCORE EVER',teamEver?managerName(teamEver.owner):'—',teamEver?`${teamEver.pts.toFixed(1)} pts · Week ${teamEver.week}, ${teamEver.season}`:'No data','record-blue'],['HIGHEST WEEKLY TEAM SCORE THIS SEASON',teamSeason?managerName(teamSeason.owner):'—',teamSeason?`${teamSeason.pts.toFixed(1)} pts · Week ${teamSeason.week}`:'Season not started','record-blue'],['HIGHEST PLAYER SCORE EVER',playerEver?playerName(playerEver.id):'—',playerEver?`${playerEver.pts.toFixed(1)} pts · Week ${playerEver.week}, ${playerEver.season}`:'No data','record-gold'],['HIGHEST PLAYER SCORE THIS SEASON',playerSeason?playerName(playerSeason.id):'—',playerSeason?`${playerSeason.pts.toFixed(1)} pts · Week ${playerSeason.week}`:'Season not started','record-gold']];$("leagueRecords").classList.remove("loading");$("leagueRecords").innerHTML=cards.map(x=>`<div class="record ${x[3]}"><span>${esc(x[0])}</span><strong>${esc(x[1])}</strong><small>${esc(x[2])}</small></div>`).join("")}
 
 function safeTradeValue(t){try{const value=Number(tradeValue(t));return Number.isFinite(value)?value:0}catch(error){console.warn("Could not calculate trade value",t?.transaction_id||t?.created,error);return 0}}
+function tradeFallbackHTML(raw,label='Trade details'){
+  const t=normaliseTrade(raw),names=mids(t).map(id=>managerName(id,t)).filter(Boolean),date=fmt(t.created);
+  return `<details><summary><div class="trade-date">${esc(date)} · ${esc(t.season_label||'')}</div><div class="trade-teams">${esc(names.join(' ↔ ')||label)}</div><div class="trade-meta">View available transaction details</div></summary><div class="trade-detail-body"><div class="block-empty">This transaction contains incomplete Sleeper data, but the rest of the trade history remains available.</div></div></details>`
+}
 function renderRecent(){
   const root=$("recentTrades");if(!root)return;
-  root.classList.remove("loading");
-  const trades=Array.isArray(state.trades)?state.trades.slice(0,4):[];
-  if(!trades.length){root.innerHTML='<div class="block-empty">No trades available yet.</div>';return}
-  const rows=trades.map(t=>{try{return `<details><summary><div class="trade-date">${fmt(t?.created)} · ${esc(t?.season_label||'')}</div><div class="trade-teams">${mids(t).map(id=>esc(managerName(id,t))).join(' ↔ ')||'Trade'}</div><div class="trade-meta">${tradeSummaryLinksHTML(t)||'View transaction'}</div></summary><div class="trade-detail-body">${tradeDetailsHTML(t)}${tradeEditorialHTML(t,true)}</div></details>`}catch(error){console.warn("Could not render recent trade",t?.transaction_id||t?.created,error);return `<details><summary><div class="trade-date">${fmt(t?.created)} · ${esc(t?.season_label||'')}</div><div class="trade-teams">Trade details</div></summary><div class="trade-detail-body"><div class="block-empty">Some transaction details are temporarily unavailable.</div></div></details>`}}).join('');
-  root.innerHTML=rows||'<div class="block-empty">No trades available yet.</div>';
+  try{
+    const trades=safeArray(state.trades).filter(Boolean).slice(0,4);
+    if(!trades.length){root.innerHTML='<div class="block-empty">No trades available yet.</div>';return}
+    root.innerHTML=trades.map(raw=>{const t=normaliseTrade(raw);try{return `<details><summary><div class="trade-date">${fmt(t.created)} · ${esc(t.season_label||'')}</div><div class="trade-teams">${mids(t).map(id=>esc(managerName(id,t))).join(' ↔ ')||'Trade'}</div><div class="trade-meta">${tradeSummaryLinksHTML(t)||'View transaction'}</div></summary><div class="trade-detail-body">${tradeDetailsHTML(t)}${tradeEditorialHTML(t,true)}</div></details>`}catch(error){console.warn("Could not render recent trade",t.transaction_id||t.created,error);return tradeFallbackHTML(t)}}).join('')||'<div class="block-empty">No trades available yet.</div>';
+  }catch(error){console.error('Recent Trades render failed',error);root.innerHTML='<div class="block-empty">Trade history could not be fully loaded. Please try again shortly.</div>'}
+  finally{root.classList.remove("loading")}
 }
 function renderBiggestTrades(){
   const root=$("biggestTrades"),toggle=$("biggestTradesToggle");if(!root)return;
-  root.classList.remove("loading");
-  const limit=state.biggestTradesExpanded?10:5;
-  const trades=Array.isArray(state.trades)?state.trades:[];
-  const rows=trades.map(t=>({t,value:safeTradeValue(t)})).sort((a,b)=>b.value-a.value||(Number(b.t?.created)||0)-(Number(a.t?.created)||0)).slice(0,limit);
-  if(!rows.length)root.innerHTML='<div class="block-empty">No completed trades available.</div>';
-  else root.innerHTML=rows.map((row,i)=>{try{return `<details class="big-trade-card"><summary><span class="big-trade-rank">${i+1}</span><div><strong>${mids(row.t).map(id=>esc(managerName(id,row.t))).join(" ↔ ")||'Trade'}</strong><small>${fmt(row.t?.created)} · ${esc(row.t?.season_label||"")}</small></div><span class="big-trade-chevron">View trade</span></summary><div class="trade-detail-body">${tradeDetailsHTML(row.t)}</div></details>`}catch(error){console.warn("Could not render ranked trade",row.t?.transaction_id||row.t?.created,error);return `<div class="block-empty">Trade ${i+1} could not be fully displayed.</div>`}}).join("");
-  if(toggle)toggle.textContent=state.biggestTradesExpanded?"Show top 5":"Show top 10";
+  try{
+    const limit=state.biggestTradesExpanded?10:5;
+    const rows=safeArray(state.trades).filter(Boolean).map(raw=>{const t=normaliseTrade(raw);return{t,value:safeTradeValue(t)}}).filter(row=>row.t&&typeof row.t==='object').sort((a,b)=>b.value-a.value||(Number(b.t?.created)||0)-(Number(a.t?.created)||0)).slice(0,limit);
+    if(!rows.length)root.innerHTML='<div class="block-empty">No completed trades available.</div>';
+    else root.innerHTML=rows.map((row,i)=>{try{return `<details class="big-trade-card"><summary><span class="big-trade-rank">${i+1}</span><div><strong>${mids(row.t).map(id=>esc(managerName(id,row.t))).join(" ↔ ")||'Trade'}</strong><small>${fmt(row.t.created)} · ${esc(row.t.season_label||"")}</small></div><span class="big-trade-chevron">View trade</span></summary><div class="trade-detail-body">${tradeDetailsHTML(row.t)}</div></details>`}catch(error){console.warn("Could not render ranked trade",row.t.transaction_id||row.t.created,error);return `<div class="block-empty">Trade ${i+1} contains incomplete data and was skipped.</div>`}}).join("");
+    if(toggle)toggle.textContent=state.biggestTradesExpanded?"Show top 5":"Show top 10";
+  }catch(error){console.error('Biggest Trades render failed',error);root.innerHTML='<div class="block-empty">Biggest trade rankings are temporarily unavailable.</div>'}
+  finally{root.classList.remove("loading")}
 }
 function currentVoteAverageMap(){const current=state.bundles.find(b=>String(b.league.league_id)===CONFIG.currentLeagueId);if(current&&meaningfulWeeks(current).length)return buildPlayerAverages(current,meaningfulWeeks(current).at(-1));return state.playerAverages}
 function previousSeasonAverageMap(){const sorted=state.bundles.filter(b=>meaningfulWeeks(b).length).sort((a,b)=>Number(b.league.season)-Number(a.league.season));const previous=sorted.find(b=>b!==state.modelBundle)||sorted[1];return previous?buildPlayerAverages(previous,meaningfulWeeks(previous).at(-1)):{} }
@@ -1494,19 +1514,20 @@ function tickerDrought(){const best=longestTradeDroughtSince();return best?`${be
 
 function renderTicker(){
   const root=$("leagueTicker");if(!root)return;
-  const stories=[];
-  const add=value=>{if(Array.isArray(value))stories.push(...value);else if(value)stories.push(value)};
-  try{add(tickerPlayerRumours())}catch(error){console.warn("Ticker rumours unavailable",error)}
-  try{add(tickerTopPerformer())}catch(error){console.warn("Ticker performer unavailable",error)}
-  try{const good=recentPlayerForm()?.good?.slice(0,2)||[];add(good.map(x=>`${x.name} is in good form, averaging ${Number(x.recentAvg||0).toFixed(1)} FPTS over the last 5`))}catch(error){console.warn("Ticker form unavailable",error)}
-  try{add((Array.isArray(state.trades)?state.trades:[]).slice(0,2).map(t=>shortTradeHeadline(t)))}catch(error){console.warn("Ticker trades unavailable",error)}
-  for(const builder of [tickerMatchup,tickerStreak,tickerRankingOrRecord,tickerDrought]){try{add(builder())}catch(error){console.warn("Ticker story unavailable",error)}}
-  add("IMO Awards voting opens 23 February · closes 28 February");
-  const unique=[...new Set(stories.map(text=>{try{return stripTickerEmoji(text)}catch{return String(text||"")}}).filter(Boolean))].slice(0,10);
-  if(!unique.length)unique.push("IMO Dynasty · Live League HQ");
   root.hidden=false;
-  const group=unique.map((text,i)=>`<span class="ticker-item">${esc(text)}</span>${i<unique.length-1?'<span class="ticker-dot">•</span>':''}`).join('');
-  root.innerHTML=`<span class="ticker-live">LIVE</span><div class="ticker-window"><div class="ticker-track"><div class="ticker-group">${group}</div><div class="ticker-group" aria-hidden="true">${group}</div></div></div>`;
+  try{
+    const stories=[],add=value=>{if(Array.isArray(value))stories.push(...value.filter(Boolean));else if(value)stories.push(value)};
+    try{add(tickerPlayerRumours())}catch(error){console.warn("Ticker rumours unavailable",error)}
+    try{add(tickerTopPerformer())}catch(error){console.warn("Ticker performer unavailable",error)}
+    try{const good=recentPlayerForm()?.good?.slice(0,2)||[];add(good.map(x=>`${x?.name||'Player'} is in good form, averaging ${Number(x?.recentAvg||0).toFixed(1)} FPTS over the last 5`))}catch(error){console.warn("Ticker form unavailable",error)}
+    safeArray(state.trades).filter(Boolean).slice(0,2).forEach(raw=>{try{add(shortTradeHeadline(normaliseTrade(raw)))}catch(error){console.warn('Ticker skipped malformed trade',error)}});
+    for(const builder of [tickerMatchup,tickerStreak,tickerRankingOrRecord,tickerDrought]){try{add(builder())}catch(error){console.warn("Ticker story unavailable",error)}}
+    add("IMO Awards voting opens 23 February · closes 28 February");
+    const unique=[...new Set(stories.map(text=>{try{return stripTickerEmoji(text)}catch{return String(text||"")}}).filter(Boolean))].slice(0,10);
+    if(!unique.length)unique.push("IMO Dynasty · Live League HQ");
+    const group=unique.map((text,i)=>`<span class="ticker-item">${esc(text)}</span>${i<unique.length-1?'<span class="ticker-dot">•</span>':''}`).join('');
+    root.innerHTML=`<span class="ticker-live">LIVE</span><div class="ticker-window"><div class="ticker-track"><div class="ticker-group">${group}</div><div class="ticker-group" aria-hidden="true">${group}</div></div></div>`;
+  }catch(error){console.error('Ticker render failed',error);root.innerHTML='<span class="ticker-live">LIVE</span><div class="ticker-window"><div class="ticker-track"><div class="ticker-group"><span class="ticker-item">IMO Dynasty · Live League HQ</span></div></div></div>'}
 }
 async function loadTickerGameLogs(){const season=String(state.modelBundle?.league?.season||'2025'),ids=[...new Set((state.currentRosters||[]).flatMap(r=>(r.players||[]).map(String)))],scoring=state.modelBundle?.league?.scoring_settings||{};if(!ids.length)return;const rows=await limitedMap(ids,8,async id=>{const result=await loadPlayerGameLogAverage(id,season,scoring);return result?{id,...result}:null});state.gameLogs[season]??={};rows.filter(Boolean).forEach(row=>state.gameLogs[season][row.id]=row.rows||[]);renderPlayerForm();renderTicker();renderHeadToHead()}
 
@@ -2108,8 +2129,8 @@ async function load(){
     state.allDraftSelections=valid.flatMap(b=>b.allDraftSelections||[]);
     buildManagers();
     const unique=new Map();
-    valid.flatMap(x=>x.trades||[]).forEach(t=>unique.set(t.transaction_id||`${t.league_id}-${t.created}`,t));
-    state.trades=[...unique.values()].sort((a,b)=>(b.created||0)-(a.created||0));
+    valid.flatMap(x=>safeArray(x?.trades)).filter(Boolean).forEach(raw=>{const t=normaliseTrade(raw);unique.set(t.transaction_id||`${t.league_id||'league'}-${t.created||0}`,t)});
+    state.trades=[...unique.values()].filter(Boolean).sort((a,b)=>(Number(b?.created)||0)-(Number(a?.created)||0));
     if(status)status.textContent='Loading exact Sleeper season averages…';
     await loadSeasonTotalAverages();
     prepareModels();
@@ -2137,7 +2158,7 @@ async function load(){
     // Automatic loading only; manual refresh control intentionally removed.
   }
 }
-document.querySelectorAll('.active-window-btn').forEach(b=>b.addEventListener('click',()=>{state.activeWindow=b.dataset.activeWindow;document.querySelectorAll('.active-window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary();renderLeaderboard()}));$("biggestTradesToggle").addEventListener('click',()=>{state.biggestTradesExpanded=!state.biggestTradesExpanded;renderBiggestTrades()});
+document.querySelectorAll('.active-window-btn').forEach(b=>b.addEventListener('click',()=>{state.activeWindow=b.dataset.activeWindow;document.querySelectorAll('.active-window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary();renderLeaderboard()}));$("biggestTradesToggle")?.addEventListener('click',()=>{state.biggestTradesExpanded=!state.biggestTradesExpanded;renderBiggestTrades()});
 let lastManagerPointerAction=0;
 function closeMobileManagerSwitcher(){
   const sheet=document.getElementById('mobileManagerSwitcherSheet');
