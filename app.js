@@ -1403,7 +1403,7 @@ function playerCurrentAverage(playerId){
 function playerFptsPer36(playerId,season=null,averageOverride=null){
   const id=String(playerId),resolvedSeason=String(season||playerCurrentAverage(id).season),meta=state.seasonTotalMeta?.[resolvedSeason]?.[id]||state.gameLogMeta?.[resolvedSeason]?.[id]||{},average=Number(averageOverride??state.seasonTotalAverages?.[resolvedSeason]?.[id]??state.gameLogAverages?.[resolvedSeason]?.[id]??0),games=Number(meta.gamesPlayed||0);
   let totalMinutes=Number(meta.totalMinutes||0),mpg=Number(meta.averageMinutes||0);
-  if(!(totalMinutes>0)){const rows=safeArray(state.gameLogs?.[resolvedSeason]?.[id]);totalMinutes=rows.reduce((sum,row)=>sum+Math.max(0,Number(numericValue(row,['min','mins','minutes','minutes_played'])||0)),0);if(!games&&rows.length)meta.gamesPlayed=rows.filter(gameWasPlayed).length}
+  if(!(totalMinutes>0)){const rows=safeArray(state.gameLogs?.[resolvedSeason]?.[id]);totalMinutes=rows.reduce((sum,row)=>sum+Math.max(0,statNumber(row,['min','mins','minutes','minutes_played','mp'])),0);if(!games&&rows.length)meta.gamesPlayed=rows.filter(gameWasPlayed).length}
   const resolvedGames=Number(meta.gamesPlayed||games||0);if(!(mpg>0)&&resolvedGames>0&&totalMinutes>0)mpg=totalMinutes/resolvedGames;
   if(!(mpg>0)||!Number.isFinite(average))return{season:resolvedSeason,average,mpg:0,totalMinutes,value:0,eligible:false,monster:false};
   const value=(average/mpg)*36,eligible=mpg>=12||totalMinutes>=100;
@@ -1599,7 +1599,7 @@ function closeManagerDirectory(){const modal=$("managerDirectoryModal");if(!moda
 
 function managerProfileCacheKey(managerId){return `${String(managerId)}|${String(state.profileAverageSeason||"")}`}
 function managerProfileDataFingerprint(){const latest=state.trades?.[0]?.created||0,current=state.modelBundle?.league?.season||'';return `${CONFIG.currentLeagueId}|${current}|${latest}|${state.trades.length}|${state.managers.size}|${state.draftSelections.length}`}
-function managerProfileSessionKey(key){return `imo-profile-v3333-reliable-per36|${managerProfileDataFingerprint()}|${key}`}
+function managerProfileSessionKey(key){return `imo-profile-v3336-sleeper-sp|${managerProfileDataFingerprint()}|${key}`}
 function cachedManagerProfileHTML(managerId){
   const key=managerProfileCacheKey(managerId);
   if(state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
@@ -1940,7 +1940,7 @@ function numericValue(row,keys){
   return null;
 }
 function gameWasPlayed(row){
-  const minutes=numericValue(row,["min","mins","minutes","minutes_played","mp"]);
+  const minutes=numericValue(row,["min","mins","minutes","minutes_played","mp","sp"]);
   if(minutes!==null)return minutes>0;
   const status=String(row?.status||row?.game_status||"").toLowerCase();
   return !(status.includes("dnp")||status.includes("inactive")||status.includes("did not play"));
@@ -1980,7 +1980,7 @@ async function loadPlayerGameLogAverage(playerId,season,scoring){
     if(!gameWasPlayed(row))return;
     const fpts=rawFantasyPoints(row,scoring);
     if(!Number.isFinite(fpts))return;
-    const minutes=Math.max(0,Number(numericValue(row,['min','mins','minutes','minutes_played','mp'])||0));
+    const minutes=Math.max(0,sleeperBasketballMinutes(row,1).totalMinutes);
     points+=fpts;
     totalMinutes+=minutes;
     games+=1;
@@ -2012,9 +2012,47 @@ async function loadGameLogAverages(){
 }
 
 
+function parseMinutesValue(value){
+  if(value===null||value===undefined||value==='')return 0;
+  if(typeof value==='number')return Number.isFinite(value)?value:0;
+  const text=String(value).trim();
+  const clock=text.match(/^(\d{1,3}):(\d{1,2})$/);
+  if(clock)return Number(clock[1])+(Number(clock[2])/60);
+  const parsed=Number(text.replace(/[^0-9.\-]/g,''));
+  return Number.isFinite(parsed)?parsed:0;
+}
 function statNumber(stats,keys){
+  if(!stats||typeof stats!=='object')return 0;
+  for(const key of keys){
+    const direct=stats[key];
+    const parsed=parseMinutesValue(direct);
+    if(parsed>0)return parsed;
+    if(stats.stats&&typeof stats.stats==='object'){
+      const nested=parseMinutesValue(stats.stats[key]);
+      if(nested>0)return nested;
+    }
+  }
   const value=numericValue(stats,keys);
   return value===null?0:value;
+}
+function sleeperBasketballMinutes(stats,gamesPlayed=0){
+  const games=Math.max(0,Number(gamesPlayed||0));
+  const rawMinutes=statNumber(stats,['min','mins','minutes','minutes_played','mp','total_minutes','average_minutes','avg_minutes','minutes_per_game']);
+  if(rawMinutes>0){
+    const minutesArePerGame=rawMinutes<=60;
+    const totalMinutes=minutesArePerGame&&games>0?rawMinutes*games:rawMinutes;
+    const averageMinutes=minutesArePerGame?rawMinutes:(games>0?totalMinutes/games:0);
+    return {totalMinutes,averageMinutes,source:'sleeper-minutes'};
+  }
+  // Sleeper NBA aggregate and game responses expose playing time as `sp`
+  // (seconds played). Convert seconds to minutes before deriving MPG.
+  const secondsPlayed=statNumber(stats,['sp','seconds_played','seconds']);
+  if(secondsPlayed>0){
+    const totalMinutes=secondsPlayed/60;
+    const averageMinutes=games>0?totalMinutes/games:totalMinutes;
+    return {totalMinutes,averageMinutes,source:'sleeper-sp'};
+  }
+  return {totalMinutes:0,averageMinutes:0,source:'sleeper-no-minutes'};
 }
 function seasonStatsObject(payload){
   if(!payload)return null;
@@ -2067,10 +2105,9 @@ async function loadPlayerSeasonAverage(playerId,season,scoring){
   const stats=seasonStatsObject(payload);
   const gamesPlayed=Number(stats?.gp);
   const totalFantasyPoints=scoreSeasonStats(stats,scoring);
-  const rawMinutes=statNumber(stats,['min','mins','minutes','minutes_played','mp','total_minutes','average_minutes','avg_minutes','minutes_per_game']);
-  const minutesArePerGame=rawMinutes>0&&rawMinutes<=60;
-  const totalMinutes=minutesArePerGame?rawMinutes*gamesPlayed:rawMinutes;
-  const averageMinutes=minutesArePerGame?rawMinutes:(gamesPlayed>0&&totalMinutes>0?totalMinutes/gamesPlayed:0);
+  const minuteData=sleeperBasketballMinutes(stats,gamesPlayed);
+  const totalMinutes=minuteData.totalMinutes;
+  const averageMinutes=minuteData.averageMinutes;
   if(Number.isFinite(gamesPlayed)&&gamesPlayed>0&&Number.isFinite(totalFantasyPoints)&&averageMinutes>0){
     return {average:totalFantasyPoints/gamesPlayed,totalFantasyPoints,gamesPlayed,totalMinutes,averageMinutes,source:"league-season-stats"};
   }
@@ -2148,11 +2185,10 @@ async function loadSeasonTotalAverages(){
       // Sleeper bulk basketball data may expose minutes either as a per-game
       // average (normally <= 60) or as a season total. Normalise both shapes so
       // FPTS/36 eligibility is not incorrectly rejected for every player.
-      const rawMinutes=statNumber(stats,['min','mins','minutes','minutes_played','mp','average_minutes','avg_minutes','minutes_per_game']);
-      const minutesArePerGame=rawMinutes>0&&rawMinutes<=60;
-      const averageMinutes=minutesArePerGame?rawMinutes:(gamesPlayed>0?rawMinutes/gamesPlayed:0);
-      const totalMinutes=minutesArePerGame?rawMinutes*gamesPlayed:rawMinutes;
-      seasonMeta[id]={gamesPlayed,totalFantasyPoints,average,totalMinutes,averageMinutes,source:'sleeper-bulk-season'};
+      const minuteData=sleeperBasketballMinutes(stats,gamesPlayed);
+      const averageMinutes=minuteData.averageMinutes;
+      const totalMinutes=minuteData.totalMinutes;
+      seasonMeta[id]={gamesPlayed,totalFantasyPoints,average,totalMinutes,averageMinutes,source:`sleeper-bulk-season+${minuteData.source}`};
     }
     console.info(`[IMO Dynasty] ${season} bulk averages loaded: ${Object.keys(averages).length}`);
     if(season==='2025'){
