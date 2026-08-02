@@ -1405,11 +1405,20 @@ function playerFptsPer36(playerId,season=null,averageOverride=null){
 function fpts36Display(metric){return metric?.eligible?metric.value.toFixed(2):'—'}
 
 function managerPerMinuteMonstersHTML(managerId,season=state.profileAverageSeason){
-  const players=managerRosterPlayers(String(managerId),String(season||state.profileAverageSeason||'2026')).map(player=>({player,metric:playerFptsPer36(player.id,String(season||state.profileAverageSeason||'2026'),player.avg)})).filter(row=>row.metric.eligible).sort((a,b)=>b.metric.value-a.metric.value||b.player.avg-a.player.avg).slice(0,6);
+  const requestedSeason=String(season||state.profileAverageSeason||'2026');
+  const rankedForSeason=seasonKey=>managerRosterPlayers(String(managerId),seasonKey).map(player=>({player,metric:playerFptsPer36(player.id,seasonKey,player.avg)})).filter(row=>row.metric.eligible).sort((a,b)=>b.metric.value-a.metric.value||b.player.avg-a.player.avg).slice(0,6);
+  let displaySeason=requestedSeason,players=rankedForSeason(requestedSeason);
+  // During the offseason or before current-season minutes become available,
+  // retain a useful section by falling back to the completed 2025 season.
+  if(!players.length&&requestedSeason!=='2025'){
+    const fallback=rankedForSeason('2025');
+    if(fallback.length){players=fallback;displaySeason='2025'}
+  }
   const rowHTML=(row,index)=>`<div class="profile-per36-row"><span class="profile-per36-rank">${index+1}</span><span class="profile-per36-player">${playerLink(row.player.id,row.player.name,'profile-player-name')}<small>${esc(row.player.position||'Player')} · ${row.metric.mpg.toFixed(1)} MPG</small></span><strong>${row.metric.value.toFixed(2)}<small>FPTS/36</small></strong></div>`;
-  if(!players.length)return `<section class="manager-profile-card profile-per36-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">EFFICIENCY WATCH</span><h3>Per-Minute Monsters</h3></div><span class="period-pill">Top FPTS/36</span></div><div class="profile-empty">No players currently meet the minutes threshold.</div></section>`;
+  const seasonPill=displaySeason==='2025'&&requestedSeason!=='2025'?'2025 fallback':'Top FPTS/36';
+  if(!players.length)return `<section class="manager-profile-card profile-per36-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">EFFICIENCY WATCH</span><h3>Per-Minute Monsters</h3></div><span class="period-pill">${seasonPill}</span></div><div class="profile-empty">No players currently meet the minutes threshold.</div></section>`;
   const top=players.slice(0,3).map(rowHTML).join(''),more=players.slice(3).map((row,index)=>rowHTML(row,index+3)).join('');
-  return `<section class="manager-profile-card profile-per36-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">EFFICIENCY WATCH</span><h3>Per-Minute Monsters</h3></div><span class="period-pill">Top FPTS/36</span></div><div class="profile-per36-list">${top}</div>${more?`<details class="profile-per36-more"><summary>Show top 6</summary><div class="profile-per36-list">${more}</div></details>`:''}</section>`;
+  return `<section class="manager-profile-card profile-per36-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">EFFICIENCY WATCH</span><h3>Per-Minute Monsters</h3></div><span class="period-pill">${seasonPill}</span></div><div class="profile-per36-list">${top}</div>${more?`<details class="profile-per36-more"><summary>Show top 6</summary><div class="profile-per36-list">${more}</div></details>`:''}</section>`;
 }
 
 function playerDraftOrigin(playerId){
@@ -2078,8 +2087,14 @@ async function loadSeasonTotalAverages(){
       if(!Number.isFinite(gamesPlayed)||gamesPlayed<=0||!Number.isFinite(totalFantasyPoints))continue;
       const average=totalFantasyPoints/gamesPlayed;
       averages[id]=average;
-      const totalMinutes=statNumber(stats,['min','mins','minutes','minutes_played']);
-      seasonMeta[id]={gamesPlayed,totalFantasyPoints,average,totalMinutes,averageMinutes:gamesPlayed>0?totalMinutes/gamesPlayed:0,source:'sleeper-bulk-season'};
+      // Sleeper bulk basketball data may expose minutes either as a per-game
+      // average (normally <= 60) or as a season total. Normalise both shapes so
+      // FPTS/36 eligibility is not incorrectly rejected for every player.
+      const rawMinutes=statNumber(stats,['min','mins','minutes','minutes_played','mp','average_minutes','avg_minutes','minutes_per_game']);
+      const minutesArePerGame=rawMinutes>0&&rawMinutes<=60;
+      const averageMinutes=minutesArePerGame?rawMinutes:(gamesPlayed>0?rawMinutes/gamesPlayed:0);
+      const totalMinutes=minutesArePerGame?rawMinutes*gamesPlayed:rawMinutes;
+      seasonMeta[id]={gamesPlayed,totalFantasyPoints,average,totalMinutes,averageMinutes,source:'sleeper-bulk-season'};
     }
     console.info(`[IMO Dynasty] ${season} bulk averages loaded: ${Object.keys(averages).length}`);
     if(season==='2025'){
