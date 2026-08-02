@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.44 — Spotlight hydration + clickable package highlights */
+/* IMO DYNASTY V3.3.45 — Reliable spotlight + player-based front office highlights */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,h2hHouseMargin:1.05,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -293,7 +293,7 @@ function playerSpotlightCandidates(){
 }
 function dailyPlayerSpotlight(){
   const candidates=playerSpotlightCandidates();if(!candidates.length)return null;
-  const bucket=Math.floor(Date.now()/864e5),key='imoPlayerSpotlightV2',stored=readStoredJSON(key);
+  const bucket=Math.floor(Date.now()/864e5),key='imoPlayerSpotlightV3',stored=readStoredJSON(key);
   let selected=stored?.bucket===bucket?candidates.find(player=>String(player.id)===String(stored.playerId)&&String(player.season)===String(stored.season)):null;
   if(!selected){const ordered=[...candidates].sort((a,b)=>String(a.id).localeCompare(String(b.id))),index=stableIndex(`spotlight|${bucket}|${ordered.map(player=>player.id).join('|')}`,ordered.length);selected=ordered[index]||ordered[0];try{localStorage.setItem(key,JSON.stringify({bucket,playerId:selected.id,season:selected.season,savedAt:Date.now()}))}catch(_){ }}
   return selected
@@ -308,11 +308,15 @@ async function ensurePlayerSpotlightData(){
     const season=useActive?activeSeason:'2025';
     const averages=seasonAverageMap(season),scoring=seasonBundleForStats(season)?.league?.scoring_settings||state.modelBundle?.league?.scoring_settings||{};
     const ids=Object.entries(averages).filter(([,avg])=>Number(avg)>0).sort((a,b)=>Number(b[1])-Number(a[1])).slice(0,125).map(([id])=>String(id));
-    state.gameLogs[season]??={};
+    state.gameLogs[season]??={};state.gameLogAverages[season]??={};state.gameLogMeta[season]??={};
     const missing=ids.filter(id=>!safeArray(state.gameLogs[season][id]).some(gameWasPlayed));
-    if(missing.length){
-      const rows=await limitedMap(missing,8,async id=>{try{const result=await loadPlayerGameLogAverage(id,season,scoring);return result?{id,result}:null}catch(error){console.warn('Spotlight log unavailable',id,season,error);return null}});
-      rows.filter(Boolean).forEach(({id,result})=>{state.gameLogs[season][id]=result.rows||[];state.gameLogAverages[season]??={};state.gameLogMeta[season]??={};state.gameLogAverages[season][id]=Number(result.average||0);state.gameLogMeta[season][id]={gamesPlayed:Number(result.games||0),totalFantasyPoints:Number(result.points||0),average:Number(result.average||0)}})
+    // Hydrate in small batches and stop as soon as a useful daily pool exists.
+    // This avoids 125 simultaneous Sleeper requests being throttled during the offseason.
+    for(let start=0;start<missing.length;start+=16){
+      const batch=missing.slice(start,start+16);
+      const rows=await limitedMap(batch,4,async id=>{try{const result=await loadPlayerGameLogAverage(id,season,scoring);return result?{id,result}:null}catch(error){console.warn('Spotlight log unavailable',id,season,error);return null}});
+      rows.filter(Boolean).forEach(({id,result})=>{state.gameLogs[season][id]=result.rows||[];state.gameLogAverages[season][id]=Number(result.average||0);state.gameLogMeta[season][id]={gamesPlayed:Number(result.games||0),totalFantasyPoints:Number(result.points||0),average:Number(result.average||0)}});
+      if(playerSpotlightCandidates().length>=6)break;
     }
   })().finally(()=>{playerSpotlightHydrationPromise=null});
   return playerSpotlightHydrationPromise;
@@ -320,7 +324,7 @@ async function ensurePlayerSpotlightData(){
 function renderPlayerSpotlight(){
   const target=$('playerSpotlight');if(!target)return;
   const player=dailyPlayerSpotlight();
-  if(!player){target.innerHTML='<div class="player-spotlight-empty"><strong>Finding today’s standout…</strong><small>Loading 2025 form data for the offseason spotlight.</small></div>';ensurePlayerSpotlightData().then(()=>{const resolved=dailyPlayerSpotlight();if(resolved)renderPlayerSpotlight();else target.innerHTML='<div class="player-spotlight-empty"><strong>No eligible spotlight today</strong><small>No top-125 player outperformed their season average across their final three games.</small></div>'}).catch(error=>{console.warn('Player Spotlight hydration failed',error);target.innerHTML='<div class="player-spotlight-empty"><strong>Spotlight unavailable</strong><small>Please refresh to retry the latest player form data.</small></div>'});return}
+  if(!player){target.innerHTML='<div class="player-spotlight-empty"><strong>Finding today’s standout…</strong><small>Loading 2025 form data for the offseason spotlight.</small></div>';ensurePlayerSpotlightData().then(()=>{const resolved=dailyPlayerSpotlight();if(resolved){renderPlayerSpotlight();return}const context=playerSpotlightContext(),fallback=Object.entries(context.averages).filter(([,avg])=>Number(avg)>0).sort((a,b)=>Number(b[1])-Number(a[1]))[0];if(!fallback){target.innerHTML='<div class="player-spotlight-empty"><strong>Spotlight unavailable</strong><small>No season averages are available yet.</small></div>';return}const [id,average]=fallback;target.innerHTML=`<button type="button" class="player-spotlight-avatar player-history-link" data-player-id="${esc(id)}" aria-label="Open ${esc(playerName(id))} player profile"><img src="https://sleepercdn.com/content/nba/players/${esc(id)}.jpg" alt="" loading="lazy" onerror="this.style.display='none'"></button><div class="player-spotlight-copy"><small>Top-125 season standout</small>${playerLink(id,playerName(id),'player-spotlight-name')}<span>${esc(context.season)} season average · refreshes every 24 hours</span></div><div class="player-spotlight-average"><strong>${Number(average).toFixed(2)}</strong><small>FPTS/G</small></div>`}).catch(error=>{console.warn('Player Spotlight hydration failed',error);target.innerHTML='<div class="player-spotlight-empty"><strong>Spotlight unavailable</strong><small>Please refresh to retry the latest player form data.</small></div>'});return}
   target.innerHTML=`<button type="button" class="player-spotlight-avatar player-history-link" data-player-id="${esc(player.id)}" aria-label="Open ${esc(player.name)} player profile"><img src="${esc(player.avatar)}" alt="" loading="lazy" onerror="this.style.display='none'"></button><div class="player-spotlight-copy"><small>Top-125 player · outperforming last 3</small>${playerLink(player.id,player.name,'player-spotlight-name')}<span>${esc(player.season)} season average · refreshes every 24 hours</span></div><div class="player-spotlight-average"><strong>${player.seasonAverage.toFixed(2)}</strong><small>FPTS/G</small></div>`
 }
 function renderSummary(){
@@ -1456,35 +1460,50 @@ function discoveryOwnershipResult(managerId,event){
   const endAverage=departure?averageAtAcquisition(event.playerId,departure):event.currentAverage;
   return{...event,departure,endValue,endAverage,capturedValueChange:endValue-event.acquisitionValue,stillOwned:!departure}
 }
+function managerTradeSales(managerId){
+  const id=String(managerId),events=[];
+  managerTrades(id).forEach(raw=>{
+    const t=normaliseTrade(raw),created=Number(t.created)||0,season=transactionSeason(t);
+    Object.entries(t.drops||{}).forEach(([playerId,rosterId])=>{
+      const seller=String(t.roster_owner_map?.[String(rosterId)]||transactionManagerForRoster(t,rosterId));
+      if(seller!==id||!playerId||playerId==='0')return;
+      const saleAverage=averageAtAcquisition(playerId,t),saleValue=saleAverage>0?playerDynastyValue(String(playerId),saleAverage,created):0,current=currentPlayerIMOValue(playerId);
+      events.push({method:'trade-sale',playerId:String(playerId),created,season,saleAverage,saleValue,currentAverage:current.average,currentValue:current.value,valueChangeAfterSale:current.value-saleValue,ageAtSale:playerAgeAt(String(playerId),created),transaction:t})
+    })
+  });
+  return events
+}
 function managerFrontOfficeHighlights(managerId){
-  const now=Date.now(),day=864e5,id=String(managerId),draftStar=managerAllRookiePicks(id).map(p=>{const current=playerCurrentAverage(String(p.playerId));return{...p,currentAverage:Number(current.avg||0)}}).filter(p=>p.currentAverage>0).sort((a,b)=>b.currentAverage-a.currentAverage||Number(a.overallPick||999)-Number(b.overallPick||999))[0]||null;
-  const trades=managerTradeAcquisitions(id),waivers=managerWaiverAcquisitions(id),packages=managerTradePackages(id);
+  const now=Date.now(),day=864e5,id=String(managerId);
+  const draftStar=managerAllRookiePicks(id).map(p=>{const current=playerCurrentAverage(String(p.playerId));return{...p,currentAverage:Number(current.avg||0)}}).filter(p=>p.currentAverage>0).sort((a,b)=>b.currentAverage-a.currentAverage||Number(a.overallPick||999)-Number(b.overallPick||999))[0]||null;
 
-  // Trades are judged as complete packages, including players and draft picks.
-  // A single declining player cannot condemn a package that also delivered a
-  // valuable rookie or future pick.
-  const eligibleBest=packages.filter(x=>x.ageDays>=30);
-  const bestTrade=(eligibleBest.filter(x=>x.currentNet>=5&&x.valueSwing>=3)
-    .sort((a,b)=>b.currentNet-a.currentNet||b.valueSwing-a.valueSwing||a.created-b.created)[0])||
-    eligibleBest.sort((a,b)=>b.currentNet-a.currentNet||b.valueSwing-a.valueSwing||a.created-b.created)[0]||packages.sort((a,b)=>b.currentNet-a.currentNet)[0]||null;
+  const tradeResults=managerTradeAcquisitions(id).map(x=>discoveryOwnershipResult(id,x));
+  const waiverResults=managerWaiverAcquisitions(id).map(x=>discoveryOwnershipResult(id,x));
 
-  const eligibleMiss=packages.filter(x=>x.ageDays>100&&!x.hasTop20Player);
-  const tradeMiss=(eligibleMiss.filter(x=>x.currentNet<=-5&&x.valueSwing<=-3)
-    .sort((a,b)=>a.currentNet-b.currentNet||a.valueSwing-b.valueSwing||a.created-b.created)[0])||
-    eligibleMiss.sort((a,b)=>a.currentNet-b.currentNet||a.valueSwing-b.valueSwing||a.created-b.created)[0]||
-    packages.filter(x=>!x.hasTop20Player).sort((a,b)=>a.currentNet-b.currentNet)[0]||packages.sort((a,b)=>a.currentNet-b.currentNet)[0]||null;
+  // Best Waiver Find: prefer a meaningful held result, but always fall back to
+  // the highest averaging waiver/free-agent acquisition for this manager.
+  const waiverEligible=waiverResults.filter(x=>now-x.created>=30*day&&x.endAverage>=18);
+  const bestWaiverFind=(waiverEligible.sort((a,b)=>b.endAverage-a.endAverage||b.capturedValueChange-a.capturedValueChange||a.created-b.created)[0])||
+    waiverResults.sort((a,b)=>b.endAverage-a.endAverage||b.currentAverage-a.currentAverage||b.capturedValueChange-a.capturedValueChange)[0]||null;
 
-  // Discoveries are player-based and only credit value captured while the
-  // manager actually owned the player. Growth after the player was traded away
-  // is excluded. Rookie-draft selections remain excluded.
-  const bestTradePlayerIds=new Set((bestTrade?.received||[]).filter(a=>a.type==='player'&&a.id).map(a=>String(a.id)));
-  const discoveryPool=[...trades,...waivers].map(x=>discoveryOwnershipResult(id,x)).filter(x=>!bestTradePlayerIds.has(String(x.playerId))&&now-x.created>=30*day&&x.endAverage>=18);
-  const bestDiscovery=(discoveryPool.filter(x=>x.endAverage-x.acquisitionAverage>=4&&x.capturedValueChange>=4)
+  // Best Buy-Low: traded-for player still owned, acquired at 8+ FPTS/G and
+  // currently at least +8 IMO Value. If nobody clears the bar, show the traded-
+  // for player whose value grew the most while this manager owned them.
+  const stillOwnedTrades=tradeResults.filter(x=>x.stillOwned&&now-x.created>=30*day);
+  const bestBuyLow=(stillOwnedTrades.filter(x=>x.acquisitionAverage>=8&&x.capturedValueChange>=8)
     .sort((a,b)=>b.capturedValueChange-a.capturedValueChange||(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||a.created-b.created)[0])||
-    discoveryPool.sort((a,b)=>b.capturedValueChange-a.capturedValueChange||(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||a.created-b.created)[0]||
-    [...trades,...waivers].map(x=>discoveryOwnershipResult(id,x)).filter(x=>!bestTradePlayerIds.has(String(x.playerId))).sort((a,b)=>b.capturedValueChange-a.capturedValueChange)[0]||null;
+    stillOwnedTrades.sort((a,b)=>b.capturedValueChange-a.capturedValueChange||(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||a.created-b.created)[0]||
+    tradeResults.filter(x=>x.stillOwned).sort((a,b)=>b.capturedValueChange-a.capturedValueChange)[0]||null;
 
-  return{draftStar,bestTrade,bestDiscovery,tradeMiss}
+  // Biggest Sell-Low: player traded away who appreciated the most after leaving.
+  // Prefer established assets and meaningful movement, then fall back to the
+  // largest post-sale rise so the category remains populated.
+  const sales=managerTradeSales(id).filter(x=>now-x.created>=30*day);
+  const biggestSellLow=(sales.filter(x=>x.saleAverage>=15&&x.ageAtSale<=35&&x.valueChangeAfterSale>=5)
+    .sort((a,b)=>b.valueChangeAfterSale-a.valueChangeAfterSale||(b.currentAverage-b.saleAverage)-(a.currentAverage-a.saleAverage)||a.created-b.created)[0])||
+    sales.sort((a,b)=>b.valueChangeAfterSale-a.valueChangeAfterSale||(b.currentAverage-b.saleAverage)-(a.currentAverage-a.saleAverage)||a.created-b.created)[0]||null;
+
+  return{draftStar,bestWaiverFind,bestBuyLow,biggestSellLow}
 }
 
 async function hydrateManagerAcquisitionGameLogs(managerId){
@@ -1511,7 +1530,7 @@ function managerPicksMadeHTML(managerId){
 }
 function managerGradesHTML(managerId){
   const league=managerGradesLeague(),id=String(managerId),grades=league.grades[id]||{},highlights=managerFrontOfficeHighlights(id),items=[['Trading',grades.trading],['Drafting',grades.drafting],['Player Development',grades.development],['Team Building',grades.building]];
-  return`<section class="manager-grades-row" aria-label="Manager grades"><div class="manager-grades-title"><span class="eyebrow">MANAGER GRADES</span></div><div class="manager-grade-items">${items.map(([label,grade])=>`<div class="manager-grade-item"><span>${esc(label)}</span><strong class="manager-grade-badge ${gradeClass(grade||'F')}">${esc(grade||'—')}</strong></div>`).join('')}</div><div class="manager-draft-highlights">${managerGradePlayerHTML('Draft Star',highlights.draftStar)}${managerGradePackageHTML('Best Trade',highlights.bestTrade)}${managerGradePlayerHTML('Best Discovery',highlights.bestDiscovery)}${managerGradePackageHTML('Trade Miss',highlights.tradeMiss)}</div></section>`
+  return`<section class="manager-grades-row" aria-label="Manager grades"><div class="manager-grades-title"><span class="eyebrow">MANAGER GRADES</span></div><div class="manager-grade-items">${items.map(([label,grade])=>`<div class="manager-grade-item"><span>${esc(label)}</span><strong class="manager-grade-badge ${gradeClass(grade||'F')}">${esc(grade||'—')}</strong></div>`).join('')}</div><div class="manager-draft-highlights">${managerGradePlayerHTML('Draft Star',highlights.draftStar)}${managerGradePlayerHTML('Best Waiver Find',highlights.bestWaiverFind)}${managerGradePlayerHTML('Best Buy-Low',highlights.bestBuyLow)}${managerGradePlayerHTML('Biggest Sell-Low',highlights.biggestSellLow)}</div></section>`
 }
 function managerPicksMadeModalHTML(managerId){
   const picks=managerAllRookiePicks(managerId);
@@ -1845,7 +1864,7 @@ function closeManagerDirectory(){const modal=$("managerDirectoryModal");if(!moda
 
 function managerProfileCacheKey(managerId){return `${String(managerId)}|${String(state.profileAverageSeason||"")}`}
 function managerProfileDataFingerprint(){const latest=state.trades?.[0]?.created||0,current=state.modelBundle?.league?.season||'';return `${CONFIG.currentLeagueId}|${current}|${latest}|${state.trades.length}|${state.managers.size}|${state.draftSelections.length}`}
-function managerProfileSessionKey(key){return `imo-profile-v3340-front-office-highlights|${managerProfileDataFingerprint()}|${key}`}
+function managerProfileSessionKey(key){return `imo-profile-v3345-player-highlights|${managerProfileDataFingerprint()}|${key}`}
 function cachedManagerProfileHTML(managerId){
   const key=managerProfileCacheKey(managerId);
   if(state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
