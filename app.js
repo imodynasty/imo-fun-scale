@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.41 — Player Spotlight offseason fallback */
+/* IMO DYNASTY V3.3.42 — Player Spotlight offseason fallback */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,h2hHouseMargin:1.05,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -1365,9 +1365,54 @@ function managerWaiverAcquisitions(managerId){
 }
 function managerFrontOfficeHighlights(managerId){
   const now=Date.now(),day=864e5,id=String(managerId),draftStar=managerAllRookiePicks(id).map(p=>{const current=playerCurrentAverage(String(p.playerId));return{...p,currentAverage:Number(current.avg||0)}}).filter(p=>p.currentAverage>0).sort((a,b)=>b.currentAverage-a.currentAverage||Number(a.overallPick||999)-Number(b.overallPick||999))[0]||null;
-  const trades=managerTradeAcquisitions(id),waivers=managerWaiverAcquisitions(id),bestTrade=trades.filter(x=>now-x.created>=30*day&&x.acquisitionAverage>=15&&x.valueChange>=3).sort((a,b)=>b.valueChange-a.valueChange||a.created-b.created)[0]||null;
-  const bestDiscovery=[...trades,...waivers].filter(x=>now-x.created>=30*day&&x.valueChange>=3).sort((a,b)=>b.valueChange-a.valueChange||a.created-b.created)[0]||null;
-  const tradeMiss=trades.filter(x=>now-x.created>=100*day&&x.acquisitionAverage>=15&&Number(x.ageAtAcquisition)<=35&&x.acquisitionValue-x.currentValue>=3).sort((a,b)=>(b.acquisitionValue-b.currentValue)-(a.acquisitionValue-a.currentValue)||a.created-b.created)[0]||null;
+  const trades=managerTradeAcquisitions(id),waivers=managerWaiverAcquisitions(id);
+
+  // Best Trade should reflect a genuinely strong fantasy outcome, not merely a
+  // small dynasty-value fluctuation. Require the player to be useful now and
+  // to have improved in both production and IMO Value since acquisition.
+  const bestTrade=trades.filter(x=>
+    now-x.created>=30*day&&
+    x.acquisitionAverage>=15&&
+    x.currentAverage>=20&&
+    x.currentAverage-x.acquisitionAverage>=3&&
+    x.valueChange>=3
+  ).sort((a,b)=>
+    ((b.currentAverage-b.acquisitionAverage)+(b.valueChange))-
+    ((a.currentAverage-a.acquisitionAverage)+(a.valueChange))||
+    b.valueChange-a.valueChange||a.created-b.created
+  )[0]||null;
+
+  // Best Discovery excludes rookie-draft selections by construction and must
+  // be a meaningful fantasy player. Do not repeat the same player selected as
+  // Best Trade; if no separate qualifying discovery exists, render a dash.
+  const bestTradePlayerId=String(bestTrade?.playerId||'');
+  const bestDiscovery=[...trades,...waivers].filter(x=>
+    String(x.playerId)!==bestTradePlayerId&&
+    now-x.created>=30*day&&
+    x.currentAverage>=18&&
+    x.currentAverage-x.acquisitionAverage>=4&&
+    x.valueChange>=4
+  ).sort((a,b)=>
+    ((b.currentAverage-b.acquisitionAverage)+(b.valueChange))-
+    ((a.currentAverage-a.acquisitionAverage)+(a.valueChange))||
+    b.valueChange-a.valueChange||a.created-b.created
+  )[0]||null;
+
+  // Trade Miss is reserved for a real on-court and asset-value decline. This
+  // prevents elite players such as Giannis from appearing solely because age
+  // softened their dynasty value while production remained excellent.
+  const tradeMiss=trades.filter(x=>
+    now-x.created>=100*day&&
+    x.acquisitionAverage>=15&&
+    Number(x.ageAtAcquisition)<=35&&
+    x.currentAverage<22&&
+    x.acquisitionAverage-x.currentAverage>=5&&
+    x.acquisitionValue-x.currentValue>=5
+  ).sort((a,b)=>
+    ((b.acquisitionAverage-b.currentAverage)+(b.acquisitionValue-b.currentValue))-
+    ((a.acquisitionAverage-a.currentAverage)+(a.acquisitionValue-a.currentValue))||
+    a.created-b.created
+  )[0]||null;
   return{draftStar,bestTrade,bestDiscovery,tradeMiss}
 }
 async function hydrateManagerAcquisitionGameLogs(managerId){
