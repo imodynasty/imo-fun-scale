@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.46 — Spotlight guarantee + quality-controlled Buy/Sell-Low */
+/* IMO DYNASTY V3.3.47 — Guaranteed top-100 Spotlight + complete Front Office highlights */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,h2hHouseMargin:1.05,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -268,74 +268,55 @@ function spotlightSeasonHasPlayedGames(logs){
 }
 function playerSpotlightContext(){
   const currentCandidates=[String(tradeTargetAverageContext().season||''),String(currentLeagueBundle()?.league?.season||''),String(state.modelBundle?.league?.season||'')].filter((value,index,array)=>value&&array.indexOf(value)===index&&value!=='2025');
-  // The active season can already exist in Sleeper before any NBA games have
-  // been played. Do not let empty/preseason log shells suppress the daily
-  // spotlight: only use the active season once at least one real game exists.
   for(const season of currentCandidates){
-    const averages=seasonAverageMap(season),logs=state.gameLogs?.[season]||{};
-    if(Object.values(averages).some(value=>Number(value)>0)&&spotlightSeasonHasPlayedGames(logs))return{season,averages,logs,isFallback:false};
+    const averages=seasonAverageMap(season),meta=state.seasonTotalMeta?.[season]||{};
+    const playedCount=Object.values(meta).filter(row=>Number(row?.gamesPlayed||0)>0).length;
+    const usable=Object.values(averages).filter(value=>Number(value)>0).length;
+    if(usable>=20&&playedCount>=10)return{season,averages,isFallback:false};
   }
-  const fallbackSeason='2025',fallbackAverages=seasonAverageMap(fallbackSeason),fallbackLogs=state.gameLogs?.[fallbackSeason]||{};
-  if(Object.values(fallbackAverages).some(value=>Number(value)>0)&&spotlightSeasonHasPlayedGames(fallbackLogs))return{season:fallbackSeason,averages:fallbackAverages,logs:fallbackLogs,isFallback:true};
-  const season=currentCandidates[0]||fallbackSeason;
-  return{season,averages:seasonAverageMap(season),logs:state.gameLogs?.[season]||{},isFallback:season===fallbackSeason}
-}
-function playerSpotlightCandidates(){
-  const context=playerSpotlightContext(),bundle=seasonBundleForStats(context.season)||state.modelBundle,scoring=bundle?.league?.scoring_settings||{};
-  const top125=Object.entries(context.averages).filter(([,average])=>Number(average)>0).sort((a,b)=>Number(b[1])-Number(a[1])||String(a[0]).localeCompare(String(b[0]))).slice(0,125);
-  return top125.map(([id,average],index)=>{
-    const played=safeArray(context.logs[String(id)]).map((row,rowIndex)=>({row,rowIndex,fpts:rawFantasyPoints(row,scoring),date:gameDateValue(row)?.getTime()||rowIndex})).filter(game=>gameWasPlayed(game.row)&&Number.isFinite(game.fpts)).sort((a,b)=>a.date-b.date||a.rowIndex-b.rowIndex);
-    if(played.length<3)return null;
-    const last3=played.slice(-3),last3Average=last3.reduce((sum,game)=>sum+game.fpts,0)/3,seasonAverage=Number(average)||0;
-    if(!(last3Average>seasonAverage))return null;
-    return{id:String(id),name:playerName(id),season:context.season,seasonAverage,last3Average,rank:index+1,delta:last3Average-seasonAverage,avatar:`https://sleepercdn.com/content/nba/players/${id}.jpg`}
-  }).filter(Boolean).sort((a,b)=>b.delta-a.delta||a.rank-b.rank||a.name.localeCompare(b.name))
+  return{season:'2025',averages:seasonAverageMap('2025'),isFallback:true};
 }
 function dailyPlayerSpotlight(){
-  const candidates=playerSpotlightCandidates();if(!candidates.length)return null;
-  const bucket=Math.floor(Date.now()/864e5),key='imoPlayerSpotlightV3',stored=readStoredJSON(key);
-  let selected=stored?.bucket===bucket?candidates.find(player=>String(player.id)===String(stored.playerId)&&String(player.season)===String(stored.season)):null;
-  if(!selected){const ordered=[...candidates].sort((a,b)=>String(a.id).localeCompare(String(b.id))),index=stableIndex(`spotlight|${bucket}|${ordered.map(player=>player.id).join('|')}`,ordered.length);selected=ordered[index]||ordered[0];try{localStorage.setItem(key,JSON.stringify({bucket,playerId:selected.id,season:selected.season,savedAt:Date.now()}))}catch(_){ }}
-  return selected
+  const context=playerSpotlightContext();
+  const pool=Object.entries(context.averages||{}).filter(([,avg])=>Number(avg)>0).sort((a,b)=>Number(b[1])-Number(a[1])||String(a[0]).localeCompare(String(b[0]))).slice(0,100);
+  if(!pool.length)return null;
+  const bucket=Math.floor(Date.now()/864e5),key='imoPlayerSpotlightV4',stored=readStoredJSON(key);
+  let selected=stored?.bucket===bucket&&String(stored.season)===String(context.season)?pool.find(([id])=>String(id)===String(stored.playerId)):null;
+  if(!selected){
+    const index=stableIndex(`spotlight-top100|${context.season}|${bucket}|${pool.map(([id])=>id).join('|')}`,pool.length);
+    selected=pool[index]||pool[0];
+    try{localStorage.setItem(key,JSON.stringify({bucket,season:context.season,playerId:selected[0],savedAt:Date.now()}))}catch(_){ }
+  }
+  const [id,average]=selected;
+  return{id:String(id),name:playerName(id),season:context.season,seasonAverage:Number(average)||0,avatar:`https://sleepercdn.com/content/nba/players/${id}.jpg`};
 }
 let playerSpotlightHydrationPromise=null;
 async function ensurePlayerSpotlightData(){
   if(playerSpotlightHydrationPromise)return playerSpotlightHydrationPromise;
   playerSpotlightHydrationPromise=(async()=>{
-    const activeSeason=String(tradeTargetAverageContext().season||state.modelBundle?.league?.season||'');
-    const activeLogs=state.gameLogs?.[activeSeason]||{};
-    const useActive=activeSeason&&activeSeason!=='2025'&&spotlightSeasonHasPlayedGames(activeLogs);
-    const season=useActive?activeSeason:'2025';
-    let averages=seasonAverageMap(season),scoring=seasonBundleForStats(season)?.league?.scoring_settings||state.modelBundle?.league?.scoring_settings||{};
-    state.gameLogs[season]??={};state.gameLogAverages[season]??={};state.gameLogMeta[season]??={};state.seasonTotalAverages[season]??={};state.seasonTotalMeta[season]??={};
-    // Some browsers intermittently receive an empty bulk season response. In
-    // that case, hydrate a broad league-relevant player pool directly from
-    // Sleeper's individual season endpoint before selecting the spotlight.
-    if(!Object.values(averages).some(value=>Number(value)>0)){
-      const seedIds=[...new Set(relevantPlayerIds().map(String))].slice(0,180);
-      const direct=await limitedMap(seedIds,6,async id=>{try{const result=await loadPlayerSeasonAverage(id,season,scoring);return result?{id,result}:null}catch(error){console.warn('Spotlight season average unavailable',id,season,error);return null}});
-      direct.filter(Boolean).forEach(({id,result})=>{state.seasonTotalAverages[season][id]=Number(result.average||0);state.seasonTotalMeta[season][id]={gamesPlayed:Number(result.gamesPlayed||0),totalFantasyPoints:Number(result.totalFantasyPoints||0),average:Number(result.average||0),totalMinutes:Number(result.totalMinutes||0),averageMinutes:Number(result.averageMinutes||0),source:result.source||'spotlight-direct-season'};if(Array.isArray(result.rows))state.gameLogs[season][id]=result.rows});
-      state.computedCache.seasonAverages.delete(String(season));
-      averages=seasonAverageMap(season);
-    }
-    const ids=Object.entries(averages).filter(([,avg])=>Number(avg)>0).sort((a,b)=>Number(b[1])-Number(a[1])).slice(0,125).map(([id])=>String(id));
-    const missing=ids.filter(id=>!safeArray(state.gameLogs[season][id]).some(gameWasPlayed));
-    // Hydrate in small batches and stop as soon as a useful daily pool exists.
-    // This avoids 125 simultaneous Sleeper requests being throttled during the offseason.
-    for(let start=0;start<missing.length;start+=16){
-      const batch=missing.slice(start,start+16);
-      const rows=await limitedMap(batch,4,async id=>{try{const result=await loadPlayerGameLogAverage(id,season,scoring);return result?{id,result}:null}catch(error){console.warn('Spotlight log unavailable',id,season,error);return null}});
-      rows.filter(Boolean).forEach(({id,result})=>{state.gameLogs[season][id]=result.rows||[];state.gameLogAverages[season][id]=Number(result.average||0);state.gameLogMeta[season][id]={gamesPlayed:Number(result.games||0),totalFantasyPoints:Number(result.points||0),average:Number(result.average||0)}});
-      if(playerSpotlightCandidates().length>=6)break;
-    }
+    const context=playerSpotlightContext();
+    if(Object.values(context.averages||{}).filter(v=>Number(v)>0).length>=20)return;
+    const season='2025',scoring=seasonBundleForStats(season)?.league?.scoring_settings||state.modelBundle?.league?.scoring_settings||{};
+    state.seasonTotalAverages[season]??={};state.seasonTotalMeta[season]??={};
+    const seedIds=[...new Set(relevantPlayerIds().map(String))].slice(0,220);
+    const direct=await limitedMap(seedIds,8,async id=>{try{const result=await loadPlayerSeasonAverage(id,season,scoring);return result?{id,result}:null}catch(error){console.warn('Spotlight season average unavailable',id,season,error);return null}});
+    direct.filter(Boolean).forEach(({id,result})=>{
+      state.seasonTotalAverages[season][id]=Number(result.average||0);
+      state.seasonTotalMeta[season][id]={gamesPlayed:Number(result.gamesPlayed||0),totalFantasyPoints:Number(result.totalFantasyPoints||0),average:Number(result.average||0),totalMinutes:Number(result.totalMinutes||0),averageMinutes:Number(result.averageMinutes||0),source:result.source||'spotlight-direct-season'};
+    });
+    state.computedCache.seasonAverages.delete(String(season));
   })().finally(()=>{playerSpotlightHydrationPromise=null});
   return playerSpotlightHydrationPromise;
 }
 function renderPlayerSpotlight(){
   const target=$('playerSpotlight');if(!target)return;
   const player=dailyPlayerSpotlight();
-  if(!player){target.innerHTML='<div class="player-spotlight-empty"><strong>Finding today’s standout…</strong><small>Loading 2025 form data for the offseason spotlight.</small></div>';ensurePlayerSpotlightData().then(()=>{const resolved=dailyPlayerSpotlight();if(resolved){renderPlayerSpotlight();return}const context=playerSpotlightContext(),fallbackPool=Object.entries(context.averages).filter(([,avg])=>Number(avg)>0).sort((a,b)=>Number(b[1])-Number(a[1])).slice(0,100);if(!fallbackPool.length){target.innerHTML='<div class="player-spotlight-empty"><strong>Finding today’s player…</strong><small>Refreshing 2025 Sleeper season data.</small></div>';setTimeout(()=>renderPlayerSpotlight(),2500);return}const bucket=Math.floor(Date.now()/864e5),fallback=fallbackPool[stableIndex(`spotlight-fallback|${context.season}|${bucket}|${fallbackPool.map(([id])=>id).join('|')}`,fallbackPool.length)]||fallbackPool[0];const [id,average]=fallback;target.innerHTML=`<button type="button" class="player-spotlight-avatar player-history-link" data-player-id="${esc(id)}" aria-label="Open ${esc(playerName(id))} player profile"><img src="https://sleepercdn.com/content/nba/players/${esc(id)}.jpg" alt="" loading="lazy" onerror="this.style.display='none'"></button><div class="player-spotlight-copy"><small>Top-100 season spotlight</small>${playerLink(id,playerName(id),'player-spotlight-name')}<span>${esc(context.season)} season average · refreshes every 24 hours</span></div><div class="player-spotlight-average"><strong>${Number(average).toFixed(2)}</strong><small>FPTS/G</small></div>`}).catch(error=>{console.warn('Player Spotlight hydration failed',error);target.innerHTML='<div class="player-spotlight-empty"><strong>Spotlight unavailable</strong><small>Please refresh to retry the latest player form data.</small></div>'});return}
-  target.innerHTML=`<button type="button" class="player-spotlight-avatar player-history-link" data-player-id="${esc(player.id)}" aria-label="Open ${esc(player.name)} player profile"><img src="${esc(player.avatar)}" alt="" loading="lazy" onerror="this.style.display='none'"></button><div class="player-spotlight-copy"><small>Top-125 player · outperforming last 3</small>${playerLink(player.id,player.name,'player-spotlight-name')}<span>${esc(player.season)} season average · refreshes every 24 hours</span></div><div class="player-spotlight-average"><strong>${player.seasonAverage.toFixed(2)}</strong><small>FPTS/G</small></div>`
+  if(!player){
+    target.innerHTML='<div class="player-spotlight-empty"><strong>Finding today’s player…</strong><small>Loading 2025 Sleeper season averages.</small></div>';
+    ensurePlayerSpotlightData().then(()=>{const resolved=dailyPlayerSpotlight();if(resolved)renderPlayerSpotlight();else target.innerHTML='<div class="player-spotlight-empty"><strong>Player Spotlight</strong><small>Season averages could not be loaded. Refresh to retry.</small></div>'}).catch(error=>{console.warn('Player Spotlight hydration failed',error);target.innerHTML='<div class="player-spotlight-empty"><strong>Player Spotlight</strong><small>Season averages could not be loaded. Refresh to retry.</small></div>'});
+    return;
+  }
+  target.innerHTML=`<button type="button" class="player-spotlight-avatar player-history-link" data-player-id="${esc(player.id)}" aria-label="Open ${esc(player.name)} player profile"><img src="${esc(player.avatar)}" alt="" loading="lazy" onerror="this.style.display='none'"></button><div class="player-spotlight-copy"><small>Daily top-100 player</small>${playerLink(player.id,player.name,'player-spotlight-name')}<span>${esc(player.season)} season average · refreshes every 24 hours</span></div><div class="player-spotlight-average"><strong>${player.seasonAverage.toFixed(2)}</strong><small>FPTS/G</small></div>`;
 }
 function renderSummary(){
   const latest=state.trades[0];
@@ -1496,15 +1477,17 @@ function managerFrontOfficeHighlights(managerId){
   const bestWaiverFind=(waiverEligible.sort((a,b)=>b.endAverage-a.endAverage||b.capturedValueChange-a.capturedValueChange||a.created-b.created)[0])||
     waiverResults.sort((a,b)=>b.endAverage-a.endAverage||b.currentAverage-a.currentAverage||b.capturedValueChange-a.capturedValueChange)[0]||null;
 
-  // Best Buy-Low must represent a genuine market read, not simply acquiring an
-  // already-established superstar. A qualifying player must have been outside
-  // the elite production tier at acquisition, improve meaningfully in both
-  // fantasy output and IMO Value, and still be owned by the manager.
+  // Best Buy-Low: prioritise genuine value growth, while guaranteeing a result.
+  // Established superstars acquired above 27.00 FPTS/G are excluded from the
+  // buy-low pool. The fallback is the still-owned trade acquisition with the
+  // largest FPTS/G increase since arrival.
   const stillOwnedTrades=tradeResults.filter(x=>x.stillOwned&&now-x.created>=30*day);
-  const buyLowPool=stillOwnedTrades.filter(x=>x.acquisitionAverage>=8&&x.acquisitionAverage<24&&x.endAverage>=15&&(x.endAverage-x.acquisitionAverage)>=3);
-  const bestBuyLow=(buyLowPool.filter(x=>x.capturedValueChange>=8)
+  const buyLowPool=stillOwnedTrades.filter(x=>x.acquisitionAverage>=8&&x.acquisitionAverage<27);
+  const bestBuyLow=(buyLowPool.filter(x=>x.capturedValueChange>=8&&(x.endAverage-x.acquisitionAverage)>0)
     .sort((a,b)=>b.capturedValueChange-a.capturedValueChange||(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||a.created-b.created)[0])||
-    buyLowPool.filter(x=>x.capturedValueChange>0).sort((a,b)=>b.capturedValueChange-a.capturedValueChange||(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||a.created-b.created)[0]||
+    buyLowPool.sort((a,b)=>(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||b.capturedValueChange-a.capturedValueChange||a.created-b.created)[0]||
+    stillOwnedTrades.sort((a,b)=>(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||b.capturedValueChange-a.capturedValueChange||a.created-b.created)[0]||
+    tradeResults.sort((a,b)=>(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||b.capturedValueChange-a.capturedValueChange||a.created-b.created)[0]||
     null;
 
   // Biggest Sell-Low only counts a player who became a meaningful fantasy asset
@@ -1515,7 +1498,9 @@ function managerFrontOfficeHighlights(managerId){
   const sellLowPool=sales.filter(x=>x.saleAverage>=8&&x.ageAtSale<=35&&x.currentAverage>=18&&(x.currentAverage-x.saleAverage)>=3&&x.valueChangeAfterSale>0);
   const biggestSellLow=(sellLowPool.filter(x=>x.valueChangeAfterSale>=5)
     .sort((a,b)=>b.valueChangeAfterSale-a.valueChangeAfterSale||(b.currentAverage-b.saleAverage)-(a.currentAverage-a.saleAverage)||a.created-b.created)[0])||
-    sellLowPool.sort((a,b)=>b.valueChangeAfterSale-a.valueChangeAfterSale||(b.currentAverage-b.saleAverage)-(a.currentAverage-a.saleAverage)||a.created-b.created)[0]||null;
+    sellLowPool.sort((a,b)=>b.valueChangeAfterSale-a.valueChangeAfterSale||(b.currentAverage-b.saleAverage)-(a.currentAverage-a.saleAverage)||a.created-b.created)[0]||
+    sales.filter(x=>x.currentAverage>0).sort((a,b)=>b.currentAverage-a.currentAverage||(b.currentAverage-b.saleAverage)-(a.currentAverage-a.saleAverage)||a.created-b.created)[0]||
+    managerTradeSales(id).sort((a,b)=>b.currentAverage-a.currentAverage||b.valueChangeAfterSale-a.valueChangeAfterSale||a.created-b.created)[0]||null;
 
   return{draftStar,bestWaiverFind,bestBuyLow,biggestSellLow}
 }
