@@ -2004,6 +2004,7 @@ body.manager-picks-open{overflow:hidden}
 .potential-target-badge.need{border-color:rgba(255,185,74,.34);background:rgba(255,185,74,.11);color:#ffd27a}
 .potential-target-badge.youth{border-color:rgba(56,224,126,.3);background:rgba(56,224,126,.1);color:#7cf2ad}
 .potential-target-badge.veteran{border-color:rgba(255,95,103,.3);background:rgba(255,95,103,.1);color:#ff9da3}
+.potential-target-badge.ascending{border-color:rgba(167,139,250,.38);background:rgba(139,92,246,.13);color:#c4b5fd}
 .potential-target-identity{margin:12px 0}
 .potential-target-identity h4{margin:0;font-size:18px;line-height:1.08;letter-spacing:-.03em;overflow-wrap:break-word}
 .potential-target-identity p{margin:5px 0 0;color:var(--muted);font-size:10px;font-weight:750}
@@ -2027,3 +2028,5 @@ body.manager-picks-open{overflow:hidden}
   .potential-target-average{margin-bottom:9px}
   .potential-target-owner{margin-top:0}
 }
+
+.potential-target-player-link,.potential-target-owner-link{appearance:none;border:0;background:none;padding:0;color:inherit;font:inherit;text-align:left;cursor:pointer}.potential-target-player-link:hover,.potential-target-owner-link:hover{color:#a78bfa;text-decoration:underline;text-underline-offset:3px}.potential-target-avatar{padding:0;cursor:pointer}.potential-target-avatar:hover{border-color:rgba(167,139,250,.7);transform:translateY(-1px)}
