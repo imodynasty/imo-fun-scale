@@ -2083,7 +2083,7 @@ body.manager-picks-open{overflow:hidden}
 .profile-per36-more{margin-top:.42rem}
 .profile-per36-more summary{cursor:pointer;list-style:none;text-align:center;font-size:.66rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;opacity:.68;padding:.35rem}
 .profile-per36-more summary::-webkit-details-marker{display:none}
-.profile-per36-more[open] summary{margin-bottom:.35rem}
+.profile-per36-more[open]{display:flex;flex-direction:column}.profile-per36-more[open] .profile-per36-list{order:1}.profile-per36-more[open] summary{order:2;margin-top:.35rem}.profile-per36-collapse-label{display:none}.profile-per36-more[open] .profile-per36-expand-label{display:none}.profile-per36-more[open] .profile-per36-collapse-label{display:inline}
 @media(max-width:700px){.profile-per36-row{padding:.45rem .5rem}}
 
 /* Player profile hierarchy: FPTS/G remains the hero metric. */

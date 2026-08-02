@@ -1407,7 +1407,7 @@ function playerFptsPer36(playerId,season=null,averageOverride=null){
   const resolvedGames=Number(meta.gamesPlayed||games||0);if(!(mpg>0)&&resolvedGames>0&&totalMinutes>0)mpg=totalMinutes/resolvedGames;
   if(!(mpg>0)||!Number.isFinite(average))return{season:resolvedSeason,average,mpg:0,totalMinutes,value:0,eligible:false,monster:false};
   const value=(average/mpg)*36,eligible=mpg>=12||totalMinutes>=100;
-  return{season:resolvedSeason,average,mpg,totalMinutes,value:Number.isFinite(value)?value:0,eligible,monster:eligible&&value-average>=12};
+  return{season:resolvedSeason,average,mpg,totalMinutes,value:Number.isFinite(value)?value:0,eligible,monster:eligible&&value-average>9};
 }
 function fpts36Display(metric){return metric?.eligible?metric.value.toFixed(2):'—'}
 
@@ -1425,7 +1425,7 @@ function managerPerMinuteMonstersHTML(managerId,season=state.profileAverageSeaso
   const seasonPill=displaySeason==='2025'&&requestedSeason!=='2025'?'2025 fallback':'Top FPTS/36';
   if(!players.length)return `<section class="manager-profile-card profile-per36-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">EFFICIENCY WATCH</span><h3>Per-Minute Monsters</h3></div><span class="period-pill">${seasonPill}</span></div><div class="profile-empty">No players currently meet the minutes threshold.</div></section>`;
   const top=players.slice(0,3).map(rowHTML).join(''),more=players.slice(3).map((row,index)=>rowHTML(row,index+3)).join('');
-  return `<section class="manager-profile-card profile-per36-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">EFFICIENCY WATCH</span><h3>Per-Minute Monsters</h3></div><span class="period-pill">${seasonPill}</span></div><div class="profile-per36-list">${top}</div>${more?`<details class="profile-per36-more"><summary>Show top 6</summary><div class="profile-per36-list">${more}</div></details>`:''}</section>`;
+  return `<section class="manager-profile-card profile-per36-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">EFFICIENCY WATCH</span><h3>Per-Minute Monsters</h3></div><span class="period-pill">${seasonPill}</span></div><div class="profile-per36-list">${top}</div>${more?`<details class="profile-per36-more"><summary><span class="profile-per36-expand-label">Show top 6</span><span class="profile-per36-collapse-label">Show top 3</span></summary><div class="profile-per36-list">${more}</div></details>`:''}</section>`;
 }
 
 function playerDraftOrigin(playerId){
