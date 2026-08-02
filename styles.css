@@ -2110,3 +2110,24 @@ body.manager-picks-open{overflow:hidden}
 .player-profile-tag.franchise-cornerstone{border:1px solid rgba(250,204,21,.34);background:rgba(250,204,21,.10);color:#fde68a}
 .player-profile-tag.elite-prospect{border:1px solid rgba(96,165,250,.34);background:rgba(96,165,250,.10);color:#bfdbfe}
 @media(max-width:720px){.player-interest-control small{max-width:145px;font-size:7px}.player-star-btn{flex-basis:23px!important;width:23px!important;height:23px!important;min-width:23px!important;min-height:23px!important;font-size:14px!important}}
+
+
+/* V3.3.39 — two-card summary and daily player spotlight */
+.v26-summary-grid.summary-grid-two{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr)}
+.player-spotlight-metric{min-height:104px}
+.player-spotlight-card{display:grid;grid-template-columns:52px minmax(0,1fr) auto;align-items:center;gap:12px;margin-top:8px;min-height:58px}
+.player-spotlight-avatar{width:52px;height:52px;border:1px solid rgba(56,224,126,.3);border-radius:50%;overflow:hidden;padding:0;background:#0a0e15;cursor:pointer;display:grid;place-items:center}
+.player-spotlight-avatar img{width:100%;height:100%;object-fit:cover}
+.player-spotlight-copy{min-width:0}
+.player-spotlight-copy>small{display:block;color:var(--green);font-size:8px;font-weight:900;letter-spacing:.07em;text-transform:uppercase;margin-bottom:3px}
+.player-spotlight-name{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:0;background:none;color:var(--text);padding:0;font:inherit;font-size:18px;font-weight:950;text-align:left;cursor:pointer}
+.player-spotlight-name:hover{color:#b8aaff;text-decoration:underline;text-underline-offset:3px}
+.player-spotlight-copy>span{display:block;color:var(--muted);font-size:9px;margin-top:4px}
+.player-spotlight-average{text-align:right}
+.player-spotlight-average strong{display:block;margin:0;color:var(--text);font-size:25px;line-height:1}
+.player-spotlight-average small{display:block;color:var(--green);font-size:8px;font-weight:900;letter-spacing:.08em;margin-top:4px}
+.player-spotlight-empty{grid-column:1/-1;display:flex;flex-direction:column;gap:4px;color:var(--muted)}
+.player-spotlight-empty strong{font-size:13px;margin:0;color:var(--text)}
+.player-spotlight-empty small{font-size:9px}
+@media(max-width:900px){.v26-summary-grid.summary-grid-two{grid-template-columns:1fr 1fr}}
+@media(max-width:650px){.v26-summary-grid.summary-grid-two{grid-template-columns:1fr}.player-spotlight-card{grid-template-columns:46px minmax(0,1fr) auto}.player-spotlight-avatar{width:46px;height:46px}.player-spotlight-name{font-size:16px}.player-spotlight-average strong{font-size:21px}}

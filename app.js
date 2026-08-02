@@ -1,5 +1,5 @@
-/* IMO DYNASTY V3.3.33 — Reliable Per-36 Season Fallback */
-const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
+/* IMO DYNASTY V3.3.39 — Markets, Persistent Movement & Player Spotlight */
+const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,h2hHouseMargin:1.05,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
 // traded historical pick into the player it became. Sleeper's drafter/current
@@ -263,17 +263,42 @@ function tradeDetailsHTML(raw){
 }
 function safeTradeEditorialHTML(raw,compact=false){try{return tradeEditorialHTML(normaliseTrade(raw),compact)}catch(error){console.warn('Trade grading unavailable',raw?.transaction_id||raw?.created,error);return '<div class="trade-editorial compact"><div class="trade-grade-row"><span class="trade-grade-comment">Trade grades are temporarily unavailable; full transaction details are shown above.</span></div></div>'}}
 
+function playerSpotlightContext(){
+  const preferred=[String(tradeTargetAverageContext().season||''),String(currentLeagueBundle()?.league?.season||''),String(state.modelBundle?.league?.season||''),'2025'].filter((value,index,array)=>value&&array.indexOf(value)===index);
+  for(const season of preferred){
+    const averages=seasonAverageMap(season),logs=state.gameLogs?.[season]||{};
+    if(Object.values(averages).some(value=>Number(value)>0)&&Object.keys(logs).length)return{season,averages,logs};
+  }
+  const season=preferred[0]||'2025';
+  return{season,averages:seasonAverageMap(season),logs:state.gameLogs?.[season]||{}}
+}
+function playerSpotlightCandidates(){
+  const context=playerSpotlightContext(),bundle=seasonBundleForStats(context.season)||state.modelBundle,scoring=bundle?.league?.scoring_settings||{};
+  const top125=Object.entries(context.averages).filter(([,average])=>Number(average)>0).sort((a,b)=>Number(b[1])-Number(a[1])||String(a[0]).localeCompare(String(b[0]))).slice(0,125);
+  return top125.map(([id,average],index)=>{
+    const played=safeArray(context.logs[String(id)]).map((row,rowIndex)=>({row,rowIndex,fpts:rawFantasyPoints(row,scoring),date:gameDateValue(row)?.getTime()||rowIndex})).filter(game=>gameWasPlayed(game.row)&&Number.isFinite(game.fpts)).sort((a,b)=>a.date-b.date||a.rowIndex-b.rowIndex);
+    if(played.length<3)return null;
+    const last3=played.slice(-3),last3Average=last3.reduce((sum,game)=>sum+game.fpts,0)/3,seasonAverage=Number(average)||0;
+    if(!(last3Average>seasonAverage))return null;
+    return{id:String(id),name:playerName(id),season:context.season,seasonAverage,last3Average,rank:index+1,delta:last3Average-seasonAverage,avatar:`https://sleepercdn.com/content/nba/players/${id}.jpg`}
+  }).filter(Boolean).sort((a,b)=>b.delta-a.delta||a.rank-b.rank||a.name.localeCompare(b.name))
+}
+function dailyPlayerSpotlight(){
+  const candidates=playerSpotlightCandidates();if(!candidates.length)return null;
+  const bucket=Math.floor(Date.now()/864e5),key='imoPlayerSpotlightV1',stored=readStoredJSON(key);
+  let selected=stored?.bucket===bucket?candidates.find(player=>String(player.id)===String(stored.playerId)&&String(player.season)===String(stored.season)):null;
+  if(!selected){const ordered=[...candidates].sort((a,b)=>String(a.id).localeCompare(String(b.id))),index=stableIndex(`spotlight|${bucket}|${ordered.map(player=>player.id).join('|')}`,ordered.length);selected=ordered[index]||ordered[0];try{localStorage.setItem(key,JSON.stringify({bucket,playerId:selected.id,season:selected.season,savedAt:Date.now()}))}catch(_){ }}
+  return selected
+}
+function renderPlayerSpotlight(){
+  const target=$('playerSpotlight');if(!target)return;
+  const player=dailyPlayerSpotlight();
+  if(!player){target.innerHTML='<div class="player-spotlight-empty"><strong>Form watch is loading</strong><small>The daily spotlight appears after the latest player game logs are ready.</small></div>';return}
+  target.innerHTML=`<button type="button" class="player-spotlight-avatar player-history-link" data-player-id="${esc(player.id)}" aria-label="Open ${esc(player.name)} player profile"><img src="${esc(player.avatar)}" alt="" loading="lazy" onerror="this.style.display='none'"></button><div class="player-spotlight-copy"><small>Top-125 player · outperforming last 3</small>${playerLink(player.id,player.name,'player-spotlight-name')}<span>${esc(player.season)} season average · refreshes every 24 hours</span></div><div class="player-spotlight-average"><strong>${player.seasonAverage.toFixed(2)}</strong><small>FPTS/G</small></div>`
+}
 function renderSummary(){
-  const last7=tradesFor("7"),latest=state.trades[0],active=activeRanked(state.activeWindow),lead=active[0];
-  const current=state.bundles.find(b=>String(b.league.league_id)===CONFIG.currentLeagueId)||state.modelBundle;
-  const seasonTrades=current?.trades||[];
-  const seasonStart=Number(current?.league?.season_start_date?new Date(current.league.season_start_date).getTime():0)||Math.min(...seasonTrades.map(t=>Number(t.created)||Date.now()),Date.now());
-  const seasonWeeks=Math.max(1,(Date.now()-seasonStart)/6048e5);
-  $("leagueTrades").textContent=last7.length;
-  $("leagueTradesLabel").textContent="Last 7 days";
-  $("averageTrades").textContent=(seasonTrades.length/seasonWeeks).toFixed(1);
-  const topActive=$('topActiveManagers'),topThree=activeRanked('14').slice(0,3);
-  if(topActive)topActive.innerHTML=topThree.length?topThree.map((x,i)=>`<div class="top-active-row"><b>${i+1}.</b><span class="summary-manager-avatar">${x.avatar?`<img src="${esc(x.avatar)}" alt="" loading="lazy">`:`<span>${esc(x.initials||x.name.slice(0,2).toUpperCase())}</span>`}</span><button class="inline-manager-link manager-profile-link" type="button" data-manager-id="${esc(x.id)}">${esc(x.name)}</button><small>${x.count} ${x.count===1?'trade':'trades'}</small></div>`).join(''):'<small>No trades in the last 14 days</small>';
+  const latest=state.trades[0];
+  renderPlayerSpotlight();
   if(latest){
     const sides=Object.entries(tradeAssets(latest)).slice(0,2),headline=sides.map(([mid,assets])=>{const biggest=[...assets].sort((a,b)=>Number(b.value||0)-Number(a.value||0))[0];return biggest?tradeAssetLinkHTML(biggest,'summary-player-link'):esc(managerName(mid,latest))}).join('<span class="latest-trade-for"> for </span>');
     $("latestTradeShort").innerHTML=headline||esc(tradeSummary(latest));$("latestTradeDate").textContent=`${mids(latest).map(id=>managerName(id,latest)).join(" ↔ ")} · ${fmt(latest.created)}`;
@@ -339,22 +364,21 @@ function latestCurrentLeagueTrade(){return state.trades.find(t=>String(t.league_
 function oddsSnapshotRows(){const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity;return priceRows(through)}
 function readStoredJSON(key){try{return JSON.parse(localStorage.getItem(key)||"null")}catch{return null}}
 function prepareOddsMovement(){
-  const rows=oddsSnapshotRows(),latest=latestCurrentLeagueTrade(),tradeId=String(latest?.transaction_id||latest?.created||"none"),currentOdds=Object.fromEntries(rows.map(x=>[String(x.id),Number(x.odds)]));
-  const existing=readStoredJSON("imoOddsMovementV2"),dedicated=readStoredJSON("imoOddsSnapshotV2"),market=readStoredJSON("imoMarketSnapshotV1"),previous=dedicated||market;
-  let movement=existing?.tradeId===tradeId?existing:null;
-  if(!movement&&previous&&String(previous.latestTradeId||"none")!==tradeId){
-    const changes={};
-    Object.entries(currentOdds).forEach(([id,newOdds])=>{const raw=previous.odds?.[id],oldOdds=Number(raw&&typeof raw==="object"?raw.odds:raw);if(Number.isFinite(oldOdds)&&Number.isFinite(newOdds)&&Math.abs(newOdds-oldOdds)>=.001)changes[id]={oldOdds,newOdds}});
-    movement={tradeId,tradeCreated:Number(latest?.created||Date.now()),changes};
-    try{localStorage.setItem("imoOddsMovementV2",JSON.stringify(movement))}catch(_){ }
-  }else if(movement){
-    Object.entries(currentOdds).forEach(([id,newOdds])=>{if(movement.changes?.[id])movement.changes[id].newOdds=newOdds});
-    try{localStorage.setItem("imoOddsMovementV2",JSON.stringify(movement))}catch(_){ }
-  }
-  state.oddsMovement=movement;
-  try{localStorage.setItem("imoOddsSnapshotV2",JSON.stringify({savedAt:Date.now(),latestTradeId:tradeId,odds:currentOdds}))}catch(_){ }
+  const rows=oddsSnapshotRows(),currentOdds=Object.fromEntries(rows.map(row=>[String(row.id),Number(row.odds)])),existing=readStoredJSON("imoOddsMovementV3")||readStoredJSON("imoOddsMovementV2")||{changes:{}},previous=readStoredJSON("imoOddsSnapshotV3")||readStoredJSON("imoOddsSnapshotV2")||readStoredJSON("imoMarketSnapshotV1"),changes={...(existing?.changes||{})};
+  const weeks=meaningfulWeeks(state.modelBundle),priorWeek=weeks.length>1?weeks.at(-2):null,priorWeekOdds=priorWeek==null?{}:Object.fromEntries(priceRows(priorWeek).map(row=>[String(row.id),Number(row.odds)]));
+  Object.entries(currentOdds).forEach(([id,current])=>{
+    const previousRaw=previous?.odds?.[id],snapshotOdds=Number(previousRaw&&typeof previousRaw==='object'?previousRaw.odds:previousRaw),stored=changes[id],storedNew=Number(stored?.newOdds),weekOdds=Number(priorWeekOdds[id]);
+    if(Number.isFinite(snapshotOdds)&&Math.abs(current-snapshotOdds)>=.001)changes[id]={oldOdds:snapshotOdds,newOdds:current,changedAt:Date.now()};
+    else if(Number.isFinite(storedNew)&&Math.abs(current-storedNew)>=.001)changes[id]={oldOdds:storedNew,newOdds:current,changedAt:Date.now()};
+    else if(!(Number.isFinite(Number(stored?.oldOdds))&&Number.isFinite(storedNew)&&Math.abs(storedNew-Number(stored.oldOdds))>=.001)){
+      if(Number.isFinite(weekOdds)&&Math.abs(current-weekOdds)>=.001)changes[id]={oldOdds:weekOdds,newOdds:current,changedAt:Date.now(),source:'previous-week'};
+      else changes[id]={oldOdds:null,newOdds:current,opening:true,changedAt:Number(stored?.changedAt)||Date.now()};
+    }
+  });
+  state.oddsMovement={changes};
+  try{localStorage.setItem("imoOddsMovementV3",JSON.stringify(state.oddsMovement));localStorage.setItem("imoOddsSnapshotV3",JSON.stringify({savedAt:Date.now(),odds:currentOdds}))}catch(_){ }
 }
-function renderPower(){const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,prior=weeks.length>1?weeks.at(-2):through,p=modelRows(state.modelBundle,through,"power"),priced=priceRows(through),oddsById=Object.fromEntries(priced.map(x=>[String(x.id),x])),oldOdds=Object.fromEntries(priceRows(prior).map(x=>[String(x.id),x])),n=Math.max(p.length-1,1),favouriteId=String([...priced].filter(x=>!x.eliminated).sort((a,b)=>a.odds-b.odds)[0]?.id||""),bottomFour=p.slice(-4),smokeyId=String([...bottomFour].sort((a,b)=>recentThreePointAverage(b.id,state.modelBundle,through)-recentThreePointAverage(a.id,state.modelBundle,through))[0]?.id||"");$("powerRankings").classList.remove("loading");$("powerRankings").innerHTML=p.map((x,i)=>{const oldRank=state.previousPowerRanks[x.id]??x.rank,diff=oldRank-x.rank,arrow=diff>0?`<span class="movement up">▲ ${diff}</span>`:diff<0?`<span class="movement down">▼ ${Math.abs(diff)}</span>`:`<span class="movement flat">—</span>`,hue=140-(140*i/n),m=state.managers.get(String(x.id)),avatar=m?.avatar?`<img src="${esc(m.avatar)}" alt="" loading="lazy">`:`<span>${esc(m?.initials||x.name.slice(0,2).toUpperCase())}</span>`,o=oddsById[String(x.id)]||x,tradeMove=state.oddsMovement?.changes?.[String(x.id)],prev=Number.isFinite(Number(tradeMove?.oldOdds))?Number(tradeMove.oldOdds):(oldOdds[String(x.id)]?.odds??o.odds),current=Number.isFinite(Number(tradeMove?.newOdds))?Number(tradeMove.newOdds):Number(o.odds),delta=current-prev,oddsClass=delta<0?'up':delta>0?'down':'flat',moveText=Math.abs(delta)<.001?'No price movement':`$${prev.toFixed(2)} → $${current.toFixed(2)}`,ladderMove=(oldOdds[String(x.id)]?.standingRank||o.standingRank)-o.standingRank,ladderText=ladderMove>0?`Moved up to ${ordinal(o.standingRank)} on ladder`:ladderMove<0?`Dropped to ${ordinal(o.standingRank)} on ladder`:`Currently ${ordinal(o.standingRank)} on ladder`,streak=o.streak>=1?`Won last ${o.streak}`:`Form: ${Math.round(o.form*5)} wins from last 5`,temperature=Number(o.avg5||0)<220?'❄️':'🔥',luck=managerLuckRating(x.id,state.modelBundle,through),luckText=`${luck>=0?'+':''}${luck.toFixed(1)} wins vs expected`,tag=String(x.id)===favouriteId?'<span class="market-tag favourite-tag">Favourite</span>':String(x.id)===smokeyId?'<span class="market-tag smokey-tag">Smokey</span>':'';return `<details class="power-odds-row ${x.rank===1?'featured-number-one':''}" style="--rank-colour:hsl(${hue} 85% 52%)"><summary><b class="power-rank-number">${x.rank}</b><span class="power-avatar">${avatar}</span><span class="power-copy"><button class="power-name manager-profile-link" type="button" data-manager-id="${esc(x.id)}">${esc(x.name)}</button><small>View manager profile</small></span><span class="power-market-stack"><span class="power-odds-price">${championshipOddsLabel(o)}</span>${tag}</span>${arrow}<span class="power-chevron">⌄</span></summary><div class="power-detail"><div>${o.streak>=3?'🔥':o.streak?'✅':'⚪'} ${streak}</div><div>${temperature} Averaging ${Number(o.avg5||0).toFixed(1)} over last five games</div><div>${ladderMove<0?'⬇':'⬆'} ${ladderText}</div><div class="odds-move ${oddsClass}">${moveText}</div><div class="luck-rating ${luck>0.5?'lucky':luck<-0.5?'unlucky':'neutral'}">🍀 Luck rating: ${luckText}</div></div></details>`}).join("")}
+function renderPower(){const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,prior=weeks.length>1?weeks.at(-2):through,p=modelRows(state.modelBundle,through,"power"),priced=priceRows(through),oddsById=Object.fromEntries(priced.map(x=>[String(x.id),x])),oldOdds=Object.fromEntries(priceRows(prior).map(x=>[String(x.id),x])),n=Math.max(p.length-1,1),favouriteId=String([...priced].filter(x=>!x.eliminated).sort((a,b)=>a.odds-b.odds)[0]?.id||""),bottomFour=p.slice(-4),smokeyId=String([...bottomFour].sort((a,b)=>recentThreePointAverage(b.id,state.modelBundle,through)-recentThreePointAverage(a.id,state.modelBundle,through))[0]?.id||"");$("powerRankings").classList.remove("loading");$("powerRankings").innerHTML=p.map((x,i)=>{const oldRank=state.previousPowerRanks[x.id]??x.rank,diff=oldRank-x.rank,arrow=diff>0?`<span class="movement up">▲ ${diff}</span>`:diff<0?`<span class="movement down">▼ ${Math.abs(diff)}</span>`:`<span class="movement flat">—</span>`,hue=140-(140*i/n),m=state.managers.get(String(x.id)),avatar=m?.avatar?`<img src="${esc(m.avatar)}" alt="" loading="lazy">`:`<span>${esc(m?.initials||x.name.slice(0,2).toUpperCase())}</span>`,o=oddsById[String(x.id)]||x,priceMove=state.oddsMovement?.changes?.[String(x.id)],prev=Number(priceMove?.oldOdds),current=Number(priceMove?.newOdds??o.odds),hasMovement=Number.isFinite(prev)&&Number.isFinite(current)&&Math.abs(current-prev)>=.001,delta=hasMovement?current-prev:0,oddsClass=delta<0?'up':delta>0?'down':'flat',moveText=hasMovement?`$${prev.toFixed(2)} → $${current.toFixed(2)}`:`Opening price $${Number(o.odds).toFixed(2)}`,ladderMove=(oldOdds[String(x.id)]?.standingRank||o.standingRank)-o.standingRank,ladderText=ladderMove>0?`Moved up to ${ordinal(o.standingRank)} on ladder`:ladderMove<0?`Dropped to ${ordinal(o.standingRank)} on ladder`:`Currently ${ordinal(o.standingRank)} on ladder`,streak=o.streak>=1?`Won last ${o.streak}`:`Form: ${Math.round(o.form*5)} wins from last 5`,temperature=Number(o.avg5||0)<220?'❄️':'🔥',luck=managerLuckRating(x.id,state.modelBundle,through),luckText=`${luck>=0?'+':''}${luck.toFixed(1)} wins vs expected`,tag=String(x.id)===favouriteId?'<span class="market-tag favourite-tag">Favourite</span>':String(x.id)===smokeyId?'<span class="market-tag smokey-tag">Smokey</span>':'';return `<details class="power-odds-row ${x.rank===1?'featured-number-one':''}" style="--rank-colour:hsl(${hue} 85% 52%)"><summary><b class="power-rank-number">${x.rank}</b><span class="power-avatar">${avatar}</span><span class="power-copy"><button class="power-name manager-profile-link" type="button" data-manager-id="${esc(x.id)}">${esc(x.name)}</button><small>View manager profile</small></span><span class="power-market-stack"><span class="power-odds-price">${championshipOddsLabel(o)}</span>${tag}</span>${arrow}<span class="power-chevron">⌄</span></summary><div class="power-detail"><div>${o.streak>=3?'🔥':o.streak?'✅':'⚪'} ${streak}</div><div>${temperature} Averaging ${Number(o.avg5||0).toFixed(1)} over last five games</div><div>${ladderMove<0?'⬇':'⬆'} ${ladderText}</div><div class="odds-move ${oddsClass}">${moveText}</div><div class="luck-rating ${luck>0.5?'lucky':luck<-0.5?'unlucky':'neutral'}">🍀 Luck rating: ${luckText}</div></div></details>`}).join("")}
 function roundFive(x){return Math.round(x*20)/20}
 function priceRows(through){const current=state.bundles.find(b=>String(b.league?.league_id)===CONFIG.currentLeagueId);return priceRowsForBundle(current||state.modelBundle,through)}
 function renderOdds(){}
@@ -438,9 +462,9 @@ function liveWeightedProjection(current,pregame){
 function roundOdds05(value){if(!Number.isFinite(value)||value<=0)return 2;return Math.max(1.05,Math.min(51,Math.round(value/.05)*.05))}
 function matchupOdds(a,b){
   const total=Math.max(.001,a+b),baseA=Math.max(.001,Math.min(.999,a/total)),baseB=1-baseA;
-  // Add 15% market separation so favourites and underdogs are more distinct.
-  const weightA=Math.pow(baseA,1.15),weightB=Math.pow(baseB,1.15),pa=weightA/(weightA+weightB),pb=1-pa;
-  return{a:roundOdds05(1/Math.max(.001,pa)),b:roundOdds05(1/Math.max(.001,pb)),pa,pb}
+  // Add 15% market separation, then apply a 5% two-way house margin.
+  const weightA=Math.pow(baseA,1.15),weightB=Math.pow(baseB,1.15),pa=weightA/(weightA+weightB),pb=1-pa,marketPa=Math.min(.999,pa*CONFIG.h2hHouseMargin),marketPb=Math.min(.999,pb*CONFIG.h2hHouseMargin);
+  return{a:roundOdds05(1/Math.max(.001,marketPa)),b:roundOdds05(1/Math.max(.001,marketPb)),pa,pb,marketPa,marketPb}
 }
 function managerFormBadges(managerId,bundle,beforeWeek){
   let games=(outcomesForBundle(bundle,Number(beforeWeek)-1)[String(managerId)]||[]);
@@ -517,7 +541,7 @@ function h2hNarrative(data){
   const injuryRows=[...injuriesA.map(p=>`${p.name} (${nameA})`),...injuriesB.map(p=>`${p.name} (${nameB})`)];
   let second='';
   if(injuryRows.length)second=`The market also has to account for ${injuryRows.join(' and ')}, who ${injuryRows.length===1?'is':'are'} currently listed OUT.`;
-  else if(formA.length&&formB.length){const aWins=formA.filter(x=>x==='W').length,bWins=formB.filter(x=>x==='W').length;if(aWins!==bWins)second=`Recent form leans toward ${aWins>bWins?nameA:nameB}, adding pressure to the opposing side before the week begins.`}
+  else if(formA.length&&formB.length){const aWins=formA.filter(x=>x==='W').length,bWins=formB.filter(x=>x==='W').length;if(aWins!==bWins)second=`Recent form leans toward ${aWins>bWins?nameA:nameB}, adding pressure to ${aWins>bWins?nameB:nameA} before the week begins.`}
   if(!second)second=`The all-time series currently reads: ${rivalryLabel(idA,idB)}.`;
   return `${first} ${second}`
 }
@@ -559,7 +583,7 @@ function renderHeadToHead(){
       ${h2hMatchupDetailsHTML(featured,mode)}
     </article>
     ${others.length?`<div class="h2h-other-heading"><span>OTHER MATCHUPS</span><small>Tap a row to expand</small></div><div class="h2h-compact-list">${others.map((data,index)=>`<details class="h2h-compact-matchup ${mode}"><summary><div class="h2h-compact-pair">${h2hCompactTeamHTML(data.idA,data.odds.a,data.formA)}${h2hCompactTeamHTML(data.idB,data.odds.b,data.formB)}</div><span class="h2h-expand-mark">+</span></summary><div class="h2h-compact-details">${h2hMatchupDetailsHTML(data,mode,false)}</div></details>`).join('')}</div>`:''}
-    <p class="h2h-method-note">Odds are the primary market view, use a 15% probability separation for clearer favourites and underdogs, and refresh automatically every 60 seconds during live gameweeks.</p>`
+    <p class="h2h-method-note">Odds are the primary market view, include a 5% house margin, use a 15% probability separation for clearer favourites and underdogs, and refresh automatically every 60 seconds during live gameweeks.</p>`
 }
 async function refreshHeadToHeadData(){
   if(state.h2hRefreshBusy||document.hidden)return;state.h2hRefreshBusy=true;
@@ -1751,7 +1775,7 @@ function renderTicker(){
     root.innerHTML=`<span class="ticker-live">LIVE</span><div class="ticker-window"><div class="ticker-track"><div class="ticker-group">${group}</div><div class="ticker-group" aria-hidden="true">${group}</div></div></div>`;
   }catch(error){console.error('Ticker render failed',error);root.innerHTML='<span class="ticker-live">LIVE</span><div class="ticker-window"><div class="ticker-track"><div class="ticker-group"><span class="ticker-item">IMO Dynasty · Live League HQ</span></div></div></div>'}
 }
-async function loadTickerGameLogs(){const season=String(state.modelBundle?.league?.season||'2025'),ids=[...new Set((state.currentRosters||[]).flatMap(r=>(r.players||[]).map(String)))],scoring=state.modelBundle?.league?.scoring_settings||{};if(!ids.length)return;const rows=await limitedMap(ids,8,async id=>{const result=await loadPlayerGameLogAverage(id,season,scoring);return result?{id,...result}:null});state.gameLogs[season]??={};rows.filter(Boolean).forEach(row=>state.gameLogs[season][row.id]=row.rows||[]);renderPlayerForm();renderTicker();renderHeadToHead()}
+async function loadTickerGameLogs(){const season=String(tradeTargetAverageContext().season||state.modelBundle?.league?.season||'2025'),ids=[...new Set((state.currentRosters||[]).flatMap(r=>(r.players||[]).map(String)))],scoring=seasonBundleForStats(season)?.league?.scoring_settings||state.modelBundle?.league?.scoring_settings||{};if(!ids.length)return;const rows=await limitedMap(ids,8,async id=>{const result=await loadPlayerGameLogAverage(id,season,scoring);return result?{id,...result}:null});state.gameLogs[season]??={};rows.filter(Boolean).forEach(row=>state.gameLogs[season][row.id]=row.rows||[]);renderPlayerForm();renderPlayerSpotlight();renderTicker();renderHeadToHead()}
 
 
 function insiderEventKey(){
