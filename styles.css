@@ -1913,3 +1913,117 @@ body.manager-picks-open{overflow:hidden}
   .v26-header-actions{grid-template-columns:30px minmax(0,1fr) minmax(0,.7fr) minmax(0,1.08fr)!important;gap:4px!important}
   .v26-header-actions .branded-action{padding:0 4px!important;font-size:7.5px!important}
 }
+
+/* V3.3.24 — desktop Recent Trades expansion + Front Office targets */
+#recentTrades{align-items:start}
+#recentTrades>details{min-width:0}
+#recentTrades>details[open]{
+  grid-column:1/-1;
+  width:100%;
+  contain:none;
+}
+#recentTrades>details[open] summary{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  column-gap:18px;
+  align-items:start;
+}
+#recentTrades>details[open] summary:after{grid-column:2;grid-row:1/4}
+#recentTrades>details[open] summary .trade-date,
+#recentTrades>details[open] summary .trade-teams,
+#recentTrades>details[open] summary .trade-meta{grid-column:1;min-width:0}
+#recentTrades>details[open] .trade-detail-body{
+  grid-template-columns:repeat(2,minmax(280px,1fr));
+  width:100%;
+  box-sizing:border-box;
+}
+#recentTrades .trade-detail-side,
+#recentTrades .trade-detail-side>div,
+#recentTrades .trade-detail-side button,
+#recentTrades .trade-grade-row,
+#recentTrades .trade-grade-comment{
+  min-width:0;
+  max-width:100%;
+  white-space:normal;
+  word-break:normal;
+  overflow-wrap:break-word;
+}
+#recentTrades details>.trade-detail-body>.trade-editorial .trade-grade-row{
+  grid-template-columns:minmax(0,1fr) auto!important;
+  align-items:start;
+  padding:10px 11px;
+  border:1px solid rgba(148,163,184,.12);
+  border-radius:10px;
+  background:rgba(255,255,255,.025);
+}
+#recentTrades details>.trade-detail-body>.trade-editorial .trade-grade-team{white-space:normal;overflow:visible;text-overflow:clip}
+#recentTrades details>.trade-detail-body>.trade-editorial .trade-grade-comment{
+  grid-column:1/-1;
+  min-width:0!important;
+  margin-top:2px;
+  overflow-wrap:break-word!important;
+  word-break:normal!important;
+}
+@media(max-width:900px){
+  #recentTrades>details[open] .trade-detail-body{grid-template-columns:1fr}
+  #recentTrades details>.trade-detail-body>.trade-editorial{grid-template-columns:1fr!important}
+}
+
+.potential-trade-targets-card{
+  grid-column:1/-1;
+  position:relative;
+  overflow:hidden;
+  border-color:rgba(82,145,255,.25)!important;
+  background:radial-gradient(circle at 100% 0,rgba(82,145,255,.11),transparent 34%),linear-gradient(145deg,rgba(17,23,35,.98),rgba(8,12,19,.98))!important;
+}
+.potential-trade-targets-card:before{
+  content:'';
+  position:absolute;
+  inset:0 auto 0 0;
+  width:3px;
+  background:linear-gradient(180deg,#5291ff,#8c72ff);
+}
+.potential-trade-targets-card .manager-profile-card-heading{align-items:flex-end}
+.potential-trade-targets-card .manager-profile-card-heading p{max-width:660px;margin:6px 0 0;color:var(--muted);font-size:10px;line-height:1.5}
+.potential-target-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.potential-target-card{
+  position:relative;
+  min-width:0;
+  padding:14px;
+  border:1px solid rgba(148,163,184,.15);
+  border-radius:14px;
+  background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.018));
+  box-shadow:0 12px 28px rgba(0,0,0,.17);
+}
+.potential-target-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.potential-target-reason{display:grid;justify-items:end;gap:4px;min-width:0}.potential-target-reason>small{color:var(--muted);font-size:6px;font-weight:950;letter-spacing:.11em;text-transform:uppercase}
+.potential-target-avatar{width:58px;height:58px;flex:0 0 58px;overflow:hidden;display:grid;place-items:center;border-radius:15px;background:#121a27;border:1px solid rgba(82,145,255,.25);color:#8fc0ff;font-size:12px;font-weight:950}
+.potential-target-avatar img{width:100%;height:100%;object-fit:cover}
+.potential-target-avatar>span{display:none;width:100%;height:100%;place-items:center}
+.potential-target-badge{max-width:150px;padding:6px 8px;border:1px solid rgba(82,145,255,.3);border-radius:999px;background:rgba(82,145,255,.1);color:#a9ceff;font-size:8px;font-weight:950;letter-spacing:.055em;text-transform:uppercase;text-align:center;line-height:1.2}
+.potential-target-badge.need{border-color:rgba(255,185,74,.34);background:rgba(255,185,74,.11);color:#ffd27a}
+.potential-target-badge.youth{border-color:rgba(56,224,126,.3);background:rgba(56,224,126,.1);color:#7cf2ad}
+.potential-target-badge.veteran{border-color:rgba(255,95,103,.3);background:rgba(255,95,103,.1);color:#ff9da3}
+.potential-target-identity{margin:12px 0}
+.potential-target-identity h4{margin:0;font-size:18px;line-height:1.08;letter-spacing:-.03em;overflow-wrap:break-word}
+.potential-target-identity p{margin:5px 0 0;color:var(--muted);font-size:10px;font-weight:750}
+.potential-target-average{padding:11px 12px;border:1px solid rgba(82,145,255,.14);border-radius:11px;background:rgba(4,9,18,.48)}
+.potential-target-average span,.potential-target-owner span{display:block;color:var(--muted);font-size:7px;font-weight:950;letter-spacing:.13em;text-transform:uppercase}
+.potential-target-average strong{display:block;margin:4px 0 3px;color:#dbeafe;font-size:26px;line-height:1;font-weight:1000;letter-spacing:-.045em}
+.potential-target-average small{display:block;color:#8aa1bd;font-size:8px}
+.potential-target-owner{margin-top:11px;padding-top:10px;border-top:1px solid rgba(148,163,184,.11)}
+.potential-target-owner strong{display:block;margin-top:4px;font-size:11px;line-height:1.25;overflow-wrap:break-word}
+@media(max-width:900px){.potential-target-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.potential-target-card:last-child{grid-column:1/-1}}
+@media(max-width:620px){
+  .potential-trade-targets-card .manager-profile-card-heading{align-items:flex-start}
+  .potential-target-grid{grid-template-columns:1fr}
+  .potential-target-card:last-child{grid-column:auto}
+  .potential-target-card{display:grid;grid-template-columns:58px minmax(0,1fr);column-gap:12px;padding:12px}
+  .potential-target-card-top{grid-column:1;grid-row:1/4;display:block}
+  .potential-target-reason{position:absolute;top:12px;right:12px;max-width:140px}
+  .potential-target-badge{max-width:135px}
+  .potential-target-identity,.potential-target-average,.potential-target-owner{grid-column:2;margin-top:0}
+  .potential-target-identity{padding-right:120px;margin-bottom:9px}
+  .potential-target-average{margin-bottom:9px}
+  .potential-target-owner{margin-top:0}
+}
