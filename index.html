@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#080a10"><link rel="icon" href="assets/imo-dynasty-mark.svg"><title>IMO DYNASTY</title>
-<link rel="stylesheet" href="styles.css?v=3.3.18">
+<link rel="stylesheet" href="styles.css?v=3.3.19">
 </head><body><div class="noise"></div>
 <header class="site-header v26-header">
   <div class="brand v26-brand">
@@ -12,9 +12,9 @@
   <div class="header-actions v26-header-actions">
     <span id="statusText">Connecting…</span>
     <button id="globalSearchBtn" class="global-search-launch" type="button" aria-label="Search IMO Hub" title="Search IMO Hub"><span aria-hidden="true">⌕</span><small>Search</small></button>
-    <button id="headlinesBtn" class="headlines-btn branded-action" type="button"><img src="assets/imo-insider.svg" alt="">Today's Headlines</button>
-    <button id="managerDirectoryBtn" class="v26-manager-btn branded-action" type="button"><img src="assets/manager-profiles.svg" alt="">Manager Profiles</button>
-    <button id="mockDraftBtn" class="v26-manager-btn branded-action mock-draft-launch" type="button">2027 Mock Draft</button>
+    <button id="managerDirectoryBtn" class="v26-manager-btn branded-action" type="button"><img src="assets/manager-profiles.svg" alt="">Managers</button>
+    <button id="headlinesBtn" class="headlines-btn branded-action" type="button"><img src="assets/imo-insider.svg" alt="">News</button>
+    <button id="mockDraftBtn" class="v26-manager-btn branded-action mock-draft-launch" type="button">27 Mock Draft</button>
   </div>
 </header>
 <div id="leagueTicker" class="league-ticker" aria-label="Latest IMO Dynasty headlines" hidden></div>
@@ -44,6 +44,21 @@
 <article class="panel standard-panel form-panel"><div class="panel-heading"><div><span class="eyebrow">📈 LAST FIVE WATCH</span><h3>GOOD FORM</h3></div><span class="period-pill">Biggest risers</span></div><div id="goodForm" class="rank-list loading">Calculating recent form…</div></article>
 </section>
 <section class="panel recent-panel standard-panel"><div class="panel-heading"><div><span class="eyebrow">LATEST MOVES</span><h3>RECENT TRADES</h3></div></div><div id="recentTrades" class="recent-trades loading">Loading trade history…</div></section>
+
+
+<div class="league-history-group">
+<div class="league-history-heading"><span class="section-brand"><img src="assets/league-history.svg" alt=""><span><b>LEAGUE HISTORY</b><small>THE ARCHIVES</small></span></span><h2>LEAGUE HISTORY</h2><p>All-time trades, relationships and records from across IMO Dynasty.</p></div>
+<section class="panel biggest-trades-panel"><div class="panel-heading"><div><span class="eyebrow">💥 BLOCKBUSTERS</span><h3>Biggest Ever Trades</h3></div><button id="biggestTradesToggle" class="small-button" type="button">Show top 10</button></div><p class="method-note">Ranked using the league’s private dynasty-value model.</p><div id="biggestTrades" class="biggest-trades-list loading">Calculating the largest trades…</div></section>
+
+<section class="panel heatmap-panel"><div class="panel-heading"><div><span class="eyebrow">🤝 CONNECTIONS</span><h3>Favourite Trade Partners</h3></div><span class="period-pill">Top 5</span></div><div id="tradeHeatmap" class="heatmap-wrap loading">Building heatmap…</div></section>
+
+
+
+
+
+<section class="panel lightweight-panel history-lightweight-panel"><div class="panel-heading"><div><span class="section-brand"><img src="assets/league-history.svg" alt=""><span><b>HISTORY BOOK</b><small>LEAGUE RECORDS</small></span></span><h3>League Records</h3></div></div><div id="leagueRecords" class="records-grid records-grid-eight loading">Calculating records…</div><details class="history-dropdown"><summary>Most traded players ever</summary><div id="tradeBlock" class="rank-list loading">Analysing player movement…</div></details><details class="history-dropdown"><summary>Most waived players ever</summary><div id="waiverBlock" class="rank-list loading">Analysing waiver history…</div></details></section>
+</div>
+
 <section class="panel voting-panel" id="allNbaVoting">
 <div class="panel-heading"><div><span class="section-brand"><img src="assets/awards.svg" alt=""><span><b>IMO AWARDS</b><small>LEAGUE BALLOT</small></span></span><h3>IMO AWARDS VOTING</h3></div><span class="period-pill">Winners announced 1 March</span></div>
 <div id="votingCountdown" class="voting-countdown">Voting opens 23 February 2027</div>
@@ -79,18 +94,6 @@
 </article>
 </div>
 </section>
-
-<div class="league-history-heading"><span class="section-brand"><img src="assets/league-history.svg" alt=""><span><b>LEAGUE HISTORY</b><small>THE ARCHIVES</small></span></span><h2>LEAGUE HISTORY</h2><p>All-time trades, relationships and records from across IMO Dynasty.</p></div>
-<section class="panel biggest-trades-panel"><div class="panel-heading"><div><span class="eyebrow">💥 BLOCKBUSTERS</span><h3>Biggest Ever Trades</h3></div><button id="biggestTradesToggle" class="small-button" type="button">Show top 10</button></div><p class="method-note">Ranked using the league’s private dynasty-value model.</p><div id="biggestTrades" class="biggest-trades-list loading">Calculating the largest trades…</div></section>
-
-<section class="panel heatmap-panel"><div class="panel-heading"><div><span class="eyebrow">🤝 CONNECTIONS</span><h3>Favourite Trade Partners</h3></div><span class="period-pill">Top 5</span></div><div id="tradeHeatmap" class="heatmap-wrap loading">Building heatmap…</div></section>
-
-
-
-
-
-<section class="panel lightweight-panel history-lightweight-panel"><div class="panel-heading"><div><span class="section-brand"><img src="assets/league-history.svg" alt=""><span><b>HISTORY BOOK</b><small>LEAGUE RECORDS</small></span></span><h3>League Records</h3></div></div><div id="leagueRecords" class="records-grid records-grid-eight loading">Calculating records…</div><details class="history-dropdown"><summary>Most traded players ever</summary><div id="tradeBlock" class="rank-list loading">Analysing player movement…</div></details><details class="history-dropdown"><summary>Most waived players ever</summary><div id="waiverBlock" class="rank-list loading">Analysing waiver history…</div></details></section>
-
 
 </div></div>
 </main>
