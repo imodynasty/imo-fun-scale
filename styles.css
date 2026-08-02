@@ -2090,3 +2090,23 @@ body.manager-picks-open{overflow:hidden}
 .player-efficiency-stats .player-efficiency-secondary span,
 .player-efficiency-stats .player-efficiency-secondary strong{color:var(--muted,#a7afc2);opacity:.72}
 .player-efficiency-stats .player-efficiency-secondary strong{font-weight:750}
+
+
+/* V3.3.38 — expanded roster control + compact trade signal + profile tags */
+.profile-roster-more[open]{display:flex;flex-direction:column}
+.profile-roster-more[open]>.profile-roster-list{order:1;margin-top:0;margin-bottom:7px}
+.profile-roster-more[open]>summary{order:2}
+.profile-roster-collapse-label{display:none}
+.profile-roster-more[open] .profile-roster-expand-label{display:none}
+.profile-roster-more[open] .profile-roster-collapse-label{display:inline}
+.profile-roster-more>summary:after{content:' ↓';color:var(--muted)}
+.profile-roster-more[open]>summary:after{content:' ↑'}
+.player-interest-control{gap:6px}
+.player-interest-control small{max-width:175px;font-size:8px;line-height:1.2;font-weight:650}
+.player-star-btn{flex-basis:25px!important;width:25px!important;height:25px!important;min-width:25px!important;min-height:25px!important;border-radius:7px!important;font-size:15px!important}
+.player-profile-tags{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:5px;margin-top:1px}
+.player-profile-tag{display:inline-flex;align-items:center;width:max-content;max-width:100%;padding:4px 7px;border-radius:999px;font-size:7px;font-style:normal;font-weight:950;letter-spacing:.08em;text-transform:uppercase}
+.player-profile-tag.per-minute-monster{margin:0;border:1px solid rgba(56,224,126,.3);background:rgba(56,224,126,.1);color:#7cf2ad}
+.player-profile-tag.franchise-cornerstone{border:1px solid rgba(250,204,21,.34);background:rgba(250,204,21,.10);color:#fde68a}
+.player-profile-tag.elite-prospect{border:1px solid rgba(96,165,250,.34);background:rgba(96,165,250,.10);color:#bfdbfe}
+@media(max-width:720px){.player-interest-control small{max-width:145px;font-size:7px}.player-star-btn{flex-basis:23px!important;width:23px!important;height:23px!important;min-width:23px!important;min-height:23px!important;font-size:14px!important}}
