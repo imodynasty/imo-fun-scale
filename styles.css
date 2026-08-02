@@ -2068,3 +2068,20 @@ body.manager-picks-open{overflow:hidden}
 .player-efficiency-stats>small,.player-efficiency-stats>.per-minute-monster{grid-column:1/-1}
 .player-efficiency-stats>.per-minute-monster{margin:0}
 @media(max-width:780px){.player-efficiency-stats{flex-basis:100%;grid-template-columns:repeat(3,minmax(0,1fr));padding-top:14px}.player-efficiency-stats strong{font-size:24px}}
+
+/* V3.3.31 compact manager-profile FPTS/36 rankings */
+.profile-per36-card{align-self:start}
+.profile-per36-card .manager-profile-card-heading{margin-bottom:.55rem}
+.profile-per36-list{display:grid;gap:.35rem}
+.profile-per36-row{display:grid;grid-template-columns:1.35rem minmax(0,1fr) auto;align-items:center;gap:.55rem;padding:.48rem .55rem;border:1px solid rgba(255,255,255,.07);border-radius:.65rem;background:rgba(255,255,255,.025)}
+.profile-per36-rank{font-size:.72rem;font-weight:900;opacity:.55;text-align:center}
+.profile-per36-player{min-width:0;display:flex;flex-direction:column;gap:.08rem}
+.profile-per36-player .profile-player-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+.profile-per36-player small{font-size:.65rem;opacity:.58}
+.profile-per36-row>strong{display:flex;flex-direction:column;align-items:flex-end;font-size:.92rem;line-height:1.05}
+.profile-per36-row>strong small{margin-top:.12rem;font-size:.54rem;letter-spacing:.06em;opacity:.55}
+.profile-per36-more{margin-top:.42rem}
+.profile-per36-more summary{cursor:pointer;list-style:none;text-align:center;font-size:.66rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;opacity:.68;padding:.35rem}
+.profile-per36-more summary::-webkit-details-marker{display:none}
+.profile-per36-more[open] summary{margin-bottom:.35rem}
+@media(max-width:700px){.profile-per36-row{padding:.45rem .5rem}}
