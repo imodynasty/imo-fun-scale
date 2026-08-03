@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.49 — Buy-Low / Sell-Low pre-trade eligibility guard */
+/* IMO DYNASTY V3.3.50 — Simplified Front Office highlights */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,h2hHouseMargin:1.05,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -1495,43 +1495,20 @@ function managerTradeSales(managerId){
 }
 function managerFrontOfficeHighlights(managerId){
   const now=Date.now(),day=864e5,id=String(managerId);
-  const draftStar=managerAllRookiePicks(id).map(p=>{const current=playerCurrentAverage(String(p.playerId));return{...p,currentAverage:Number(current.avg||0)}}).filter(p=>p.currentAverage>0).sort((a,b)=>b.currentAverage-a.currentAverage||Number(a.overallPick||999)-Number(b.overallPick||999))[0]||null;
+  const draftStar=managerAllRookiePicks(id)
+    .map(p=>{const current=playerCurrentAverage(String(p.playerId));return{...p,currentAverage:Number(current.avg||0)}})
+    .filter(p=>p.currentAverage>0)
+    .sort((a,b)=>b.currentAverage-a.currentAverage||Number(a.overallPick||999)-Number(b.overallPick||999))[0]||null;
 
-  const tradeResults=managerTradeAcquisitions(id).map(x=>discoveryOwnershipResult(id,x));
   const waiverResults=managerWaiverAcquisitions(id).map(x=>discoveryOwnershipResult(id,x));
-
-  // Best Waiver Find: prefer a meaningful held result, but always fall back to
-  // the highest averaging waiver/free-agent acquisition for this manager.
+  // Prefer a meaningful waiver/free-agent find, but always fall back to the
+  // highest averaging waiver acquisition recorded for this manager.
   const waiverEligible=waiverResults.filter(x=>now-x.created>=30*day&&x.endAverage>=18);
-  const bestWaiverFind=(waiverEligible.sort((a,b)=>b.endAverage-a.endAverage||b.capturedValueChange-a.capturedValueChange||a.created-b.created)[0])||
+  const bestWaiverFind=(waiverEligible
+    .sort((a,b)=>b.endAverage-a.endAverage||b.capturedValueChange-a.capturedValueChange||a.created-b.created)[0])||
     waiverResults.sort((a,b)=>b.endAverage-a.endAverage||b.currentAverage-a.currentAverage||b.capturedValueChange-a.capturedValueChange)[0]||null;
 
-  // Best Buy-Low: prioritise genuine value growth, while guaranteeing a result.
-  // Established superstars acquired above 27.00 FPTS/G are excluded from the
-  // buy-low pool. The fallback is the still-owned trade acquisition with the
-  // largest FPTS/G increase since arrival.
-  const stillOwnedTrades=tradeResults.filter(x=>x.stillOwned&&now-x.created>=30*day&&x.hadPlayedBeforeTrade&&x.acquisitionAverage>=9);
-  const buyLowPool=stillOwnedTrades.filter(x=>x.acquisitionAverage<27);
-  const bestBuyLow=(buyLowPool.filter(x=>x.capturedValueChange>=8&&(x.endAverage-x.acquisitionAverage)>0)
-    .sort((a,b)=>b.capturedValueChange-a.capturedValueChange||(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||a.created-b.created)[0])||
-    buyLowPool.sort((a,b)=>(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||b.capturedValueChange-a.capturedValueChange||a.created-b.created)[0]||
-    stillOwnedTrades.sort((a,b)=>(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||b.capturedValueChange-a.capturedValueChange||a.created-b.created)[0]||
-    tradeResults.sort((a,b)=>(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||b.capturedValueChange-a.capturedValueChange||a.created-b.created)[0]||
-    null;
-
-  // Biggest Sell-Low only counts a player who became a meaningful fantasy asset
-  // after leaving. Free agents, fringe players and players who never reached a
-  // useful fantasy level are excluded even if their mathematical value rose from
-  // an extremely low base.
-  const sales=managerTradeSales(id).filter(x=>now-x.created>=30*day&&isCurrentlyRostered(x.playerId)&&x.hadPlayedBeforeTrade&&x.saleAverage>=9);
-  const sellLowPool=sales.filter(x=>x.ageAtSale<=35&&x.currentAverage>=18&&(x.currentAverage-x.saleAverage)>=3&&x.valueChangeAfterSale>0);
-  const biggestSellLow=(sellLowPool.filter(x=>x.valueChangeAfterSale>=5)
-    .sort((a,b)=>b.valueChangeAfterSale-a.valueChangeAfterSale||(b.currentAverage-b.saleAverage)-(a.currentAverage-a.saleAverage)||a.created-b.created)[0])||
-    sellLowPool.sort((a,b)=>b.valueChangeAfterSale-a.valueChangeAfterSale||(b.currentAverage-b.saleAverage)-(a.currentAverage-a.saleAverage)||a.created-b.created)[0]||
-    sales.filter(x=>x.currentAverage>0).sort((a,b)=>b.currentAverage-a.currentAverage||(b.currentAverage-b.saleAverage)-(a.currentAverage-a.saleAverage)||a.created-b.created)[0]||
-    sales.sort((a,b)=>b.currentAverage-a.currentAverage||b.valueChangeAfterSale-a.valueChangeAfterSale||a.created-b.created)[0]||null;
-
-  return{draftStar,bestWaiverFind,bestBuyLow,biggestSellLow}
+  return{draftStar,bestWaiverFind}
 }
 
 async function hydrateManagerAcquisitionGameLogs(managerId){
@@ -1561,7 +1538,7 @@ function managerPicksMadeHTML(managerId){
 }
 function managerGradesHTML(managerId){
   const league=managerGradesLeague(),id=String(managerId),grades=league.grades[id]||{},highlights=managerFrontOfficeHighlights(id),items=[['Trading',grades.trading],['Drafting',grades.drafting],['Player Development',grades.development],['Team Building',grades.building]];
-  return`<section class="manager-grades-row" aria-label="Manager grades"><div class="manager-grades-title"><span class="eyebrow">MANAGER GRADES</span></div><div class="manager-grade-items">${items.map(([label,grade])=>`<div class="manager-grade-item"><span>${esc(label)}</span><strong class="manager-grade-badge ${gradeClass(grade||'F')}">${esc(grade||'—')}</strong></div>`).join('')}</div><div class="manager-draft-highlights">${managerGradePlayerHTML('Draft Star',highlights.draftStar)}${managerGradePlayerHTML('Best Waiver Find',highlights.bestWaiverFind)}${managerGradePlayerHTML('Best Buy-Low',highlights.bestBuyLow)}${managerGradePlayerHTML('Biggest Sell-Low',highlights.biggestSellLow)}</div></section>`
+  return`<section class="manager-grades-row" aria-label="Manager grades"><div class="manager-grades-title"><span class="eyebrow">MANAGER GRADES</span></div><div class="manager-grade-items">${items.map(([label,grade])=>`<div class="manager-grade-item"><span>${esc(label)}</span><strong class="manager-grade-badge ${gradeClass(grade||'F')}">${esc(grade||'—')}</strong></div>`).join('')}</div><div class="manager-draft-highlights">${managerGradePlayerHTML('Draft Star',highlights.draftStar)}${managerGradePlayerHTML('Best Waiver Find',highlights.bestWaiverFind)}</div></section>`
 }
 function managerPicksMadeModalHTML(managerId){
   const picks=managerAllRookiePicks(managerId);
@@ -1577,7 +1554,7 @@ function ensureManagerGradeStyles(){
   .manager-grades-title{white-space:nowrap}.manager-grade-items{display:grid;grid-template-columns:repeat(4,minmax(86px,1fr));gap:8px}.manager-grade-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;border-radius:10px;background:rgba(255,255,255,.035)}
   .manager-grade-item>span{font-size:11px;line-height:1.2;color:var(--muted,#94a3b8)}.manager-grade-badge{display:grid;place-items:center;min-width:34px;height:28px;padding:0 7px;border-radius:8px;font-size:14px;line-height:1;font-weight:900}
   .manager-grade-badge.grade-a{color:#052e16;background:#4ade80}.manager-grade-badge.grade-b{color:#172554;background:#60a5fa}.manager-grade-badge.grade-c{color:#422006;background:#facc15}.manager-grade-badge.grade-d{color:#431407;background:#fb923c}.manager-grade-badge.grade-f{color:#450a0a;background:#f87171}
-  .manager-draft-highlights{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;grid-auto-rows:minmax(58px,auto);gap:8px;width:100%;height:auto!important;max-height:none!important;overflow:visible!important}.manager-draft-highlight{display:block!important;visibility:visible!important;opacity:1!important;min-width:0;min-height:58px;height:auto!important;max-height:none!important;overflow:visible!important;padding:6px 9px;border-left:1px solid rgba(148,163,184,.18)}.manager-draft-highlight>span{display:block;margin-bottom:4px;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#94a3b8)}.manager-package-open{width:100%;padding:0;border:0;background:none;color:inherit;text-align:left;cursor:pointer}.manager-package-open:hover .manager-package-names small{text-decoration:underline;color:#fff}.manager-draft-highlight>div{display:flex;align-items:center;gap:8px;min-width:0}.manager-grade-player-avatar{width:26px;height:26px;border-radius:50%;overflow:hidden;background:rgba(148,163,184,.15);flex:0 0 auto}.manager-grade-player-avatar img{width:100%;height:100%;object-fit:cover}.manager-grade-player-name{padding:0;border:0;background:none;color:inherit;font:inherit;font-size:11px;font-weight:800;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.manager-grade-pick-label{margin-left:auto;padding:3px 5px;border:1px solid rgba(148,163,184,.18);border-radius:6px;color:var(--muted,#94a3b8);font-size:9px;font-weight:900;letter-spacing:.04em;white-space:nowrap}.manager-draft-highlight.empty small{font-size:16px}
+  .manager-draft-highlights{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-rows:minmax(58px,auto);gap:8px;width:100%;height:auto!important;max-height:none!important;overflow:visible!important}.manager-draft-highlight{display:block!important;visibility:visible!important;opacity:1!important;min-width:0;min-height:58px;height:auto!important;max-height:none!important;overflow:visible!important;padding:6px 9px;border-left:1px solid rgba(148,163,184,.18)}.manager-draft-highlight>span{display:block;margin-bottom:4px;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#94a3b8)}.manager-package-open{width:100%;padding:0;border:0;background:none;color:inherit;text-align:left;cursor:pointer}.manager-package-open:hover .manager-package-names small{text-decoration:underline;color:#fff}.manager-draft-highlight>div{display:flex;align-items:center;gap:8px;min-width:0}.manager-grade-player-avatar{width:26px;height:26px;border-radius:50%;overflow:hidden;background:rgba(148,163,184,.15);flex:0 0 auto}.manager-grade-player-avatar img{width:100%;height:100%;object-fit:cover}.manager-grade-player-name{padding:0;border:0;background:none;color:inherit;font:inherit;font-size:11px;font-weight:800;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.manager-grade-pick-label{margin-left:auto;padding:3px 5px;border:1px solid rgba(148,163,184,.18);border-radius:6px;color:var(--muted,#94a3b8);font-size:9px;font-weight:900;letter-spacing:.04em;white-space:nowrap}.manager-draft-highlight.empty small{font-size:16px}
   @media(max-width:900px){.manager-grades-title{display:none}.manager-draft-highlights{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-rows:minmax(64px,auto)}.manager-draft-highlight{border-left:0;border-top:1px solid rgba(148,163,184,.18);padding-top:9px}}
   @media(max-width:620px){.manager-grades-row{padding:10px;gap:10px;height:auto!important;max-height:none!important;overflow:visible!important}.manager-grade-items{grid-template-columns:repeat(2,1fr)}.manager-grade-item{padding:8px}.manager-draft-highlights{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-flow:row!important;height:auto!important;max-height:none!important;overflow:visible!important}.manager-grade-player-name{font-size:10px}}
   .manager-picks-made{display:flex!important;visibility:visible!important;opacity:1!important;flex-direction:column;justify-content:center}.manager-picks-total{width:max-content;padding:0;border:0;background:none;color:#fff;font:inherit;font-size:28px;font-weight:1000;line-height:1;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(143,115,255,.7);text-underline-offset:5px}.manager-picks-total:hover{color:#c9bbff}
@@ -1895,7 +1872,7 @@ function closeManagerDirectory(){const modal=$("managerDirectoryModal");if(!moda
 
 function managerProfileCacheKey(managerId){return `${String(managerId)}|${String(state.profileAverageSeason||"")}`}
 function managerProfileDataFingerprint(){const latest=state.trades?.[0]?.created||0,current=state.modelBundle?.league?.season||'';return `${CONFIG.currentLeagueId}|${current}|${latest}|${state.trades.length}|${state.managers.size}|${state.draftSelections.length}`}
-function managerProfileSessionKey(key){return `imo-profile-v3349-buy-sell-pretrade-guard|${managerProfileDataFingerprint()}|${key}`}
+function managerProfileSessionKey(key){return `imo-profile-v3350-two-front-office-highlights|${managerProfileDataFingerprint()}|${key}`}
 function cachedManagerProfileHTML(managerId){
   const key=managerProfileCacheKey(managerId);
   if(state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
