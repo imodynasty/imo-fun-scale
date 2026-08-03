@@ -2142,3 +2142,29 @@ body.manager-picks-open{overflow:hidden}
 .manager-package-names small{display:block;color:#f4f6fb;font-size:13px;font-weight:750;line-height:1.22;white-space:normal;overflow-wrap:anywhere}
 .manager-package-names small+small{color:#aeb7c9;font-size:11px;font-weight:650}
 @media(max-width:620px){.manager-package-names small{font-size:12px}.manager-package-names small+small{font-size:10px}}
+
+/* V3.3.48 — unified Trade Centre with compact, collapsible Recent Trades */
+.trade-centre-recent{margin-top:20px;padding-top:18px;border-top:1px solid rgba(234,195,90,.22)}
+.trade-centre-recent-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:10px}
+.trade-centre-recent-heading h4{margin:4px 0 0;font-size:15px;letter-spacing:-.01em}
+.trade-centre-recent-list{display:grid!important;grid-template-columns:1fr!important;gap:6px!important;align-items:stretch!important}
+.trade-centre-recent-list>details{width:100%;margin:0!important;contain:none!important;border-radius:11px!important;background:rgba(5,8,13,.5)!important}
+.trade-centre-recent-list>details>summary{display:grid!important;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) auto!important;align-items:center!important;gap:12px!important;padding:10px 12px!important;min-height:54px}
+.trade-centre-recent-list>details>summary:after{display:none!important;content:none!important}
+.trade-centre-recent-list .recent-trade-primary{min-width:0}
+.trade-centre-recent-list .trade-teams{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trade-centre-recent-list .trade-date{margin:3px 0 0;font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trade-centre-recent-list .trade-meta{min-width:0;margin:0;font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.trade-centre-recent-list .recent-trade-toggle{justify-self:end;border:1px solid rgba(56,224,126,.24);border-radius:999px;padding:5px 8px;color:var(--green);font-size:8px;font-weight:900;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+.trade-centre-recent-list details[open] .recent-trade-toggle{color:var(--text);border-color:var(--line)}
+.trade-centre-recent-list .recent-trade-close-label{display:none}
+.trade-centre-recent-list details[open] .recent-trade-open-label{display:none}
+.trade-centre-recent-list details[open] .recent-trade-close-label{display:inline}
+.trade-centre-recent-list>details[open]>summary{border-bottom:1px solid rgba(38,48,66,.7)}
+.trade-centre-recent-list>details[open] .trade-detail-body{grid-template-columns:repeat(2,minmax(240px,1fr));padding:12px;gap:10px}
+@media(max-width:760px){
+  .trade-centre-recent-list>details>summary{grid-template-columns:minmax(0,1fr) auto!important;gap:8px!important;padding:10px!important}
+  .trade-centre-recent-list .trade-meta{grid-column:1/-1;grid-row:2;white-space:normal;line-height:1.35}
+  .trade-centre-recent-list .recent-trade-toggle{grid-column:2;grid-row:1}
+  .trade-centre-recent-list>details[open] .trade-detail-body{grid-template-columns:1fr}
+}

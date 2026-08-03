@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.47 — Guaranteed top-100 Spotlight + complete Front Office highlights */
+/* IMO DYNASTY V3.3.49 — Buy-Low / Sell-Low pre-trade eligibility guard */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,h2hHouseMargin:1.05,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -405,10 +405,19 @@ function roundFive(x){return Math.round(x*20)/20}
 function priceRows(through){const current=state.bundles.find(b=>String(b.league?.league_id)===CONFIG.currentLeagueId);return priceRowsForBundle(current||state.modelBundle,through)}
 function renderOdds(){}
 function ordinal(n){const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0])}
+function featuredTradeOfWeek(){
+  const currentLeagueTrades=state.trades.filter(t=>String(t.league_id)===String(CONFIG.currentLeagueId));
+  return currentLeagueTrades.find(t=>tradeValue(t)>=25)||state.trades.find(t=>tradeValue(t)>=25)||null;
+}
+function sameTrade(a,b){
+  if(!a||!b)return false;
+  const aId=String(a.transaction_id||''),bId=String(b.transaction_id||'');
+  if(aId&&bId)return aId===bId;
+  return Number(a.created||0)===Number(b.created||0)&&String(a.league_id||'')===String(b.league_id||'');
+}
 function renderTradeWeek(){
-  const currentLeagueTrades=state.trades.filter(t=>String(t.league_id)===String(CONFIG.currentLeagueId)),t=currentLeagueTrades.find(t=>tradeValue(t)>=25)||state.trades.find(t=>tradeValue(t)>=25)||null;
-  const target=$("tradeOfWeek");if(!target)return;
-  if(!t){target.innerHTML="No trade available";return}
+  const t=featuredTradeOfWeek(),target=$("tradeOfWeek");if(!target)return;
+  if(!t){target.classList.remove("loading");target.innerHTML='<div class="block-empty">No featured trade is available yet.</div>';return}
   const featuredGrades=Object.fromEntries(tradeGrades(t).map(g=>[String(g.id),g])),sides=Object.entries(tradeAssets(t)).slice(0,3),html=sides.map(([mid,assets])=>{const g=featuredGrades[String(mid)];return `<div class="trade-side-v2">${g?`<span class="featured-trade-grade ${gradeClass(g.grade)}">${esc(g.grade)}</span>`:''}<strong>${esc(managerName(mid,t))} receives</strong>${assets.length?assets.map(a=>`<div class="asset-row"><span>${tradeAssetLinkHTML(a,'featured-trade-asset-link')}${a.owner?`<small class="asset-owner">Originally ${esc(a.owner)}'s pick</small>`:''}</span></div>`).join(""):'<div class="asset-row"><span>No listed assets</span></div>'}</div>`}).join('<div class="trade-mid">⇄</div>');
   target.classList.remove("loading");target.innerHTML=`<div class="trade-feature-v2">${html}${tradeEditorialHTML(t)}<div class="trade-foot-v2"><span>Featured trade</span><strong>${fmt(t.created)}</strong></div></div>`
 }
@@ -686,11 +695,15 @@ function tradeFallbackHTML(raw,label='Trade details'){
 }
 function recentTradeCardHTML(raw){
   const t=normaliseTrade(raw),names=mids(t).map(id=>managerName(id,t)).filter(Boolean),summary=tradeSummaryLinksHTML(t),details=tradeDetailsHTML(t),editorial=safeTradeEditorialHTML(t,true);
-  return `<details><summary><div class="trade-date">${fmt(t.created)} · ${esc(t.season_label||'')}</div><div class="trade-teams">${names.map(esc).join(' ↔ ')||'League trade'}</div><div class="trade-meta">${summary}</div></summary><div class="trade-detail-body">${details}${editorial}</div></details>`
+  return `<details class="recent-trade-row"><summary><div class="recent-trade-primary"><div class="trade-teams">${names.map(esc).join(' ↔ ')||'League trade'}</div><div class="trade-date">${fmt(t.created)} · ${esc(t.season_label||'')}</div></div><div class="trade-meta">${summary}</div><span class="recent-trade-toggle"><span class="recent-trade-open-label">View trade</span><span class="recent-trade-close-label">Close trade</span></span></summary><div class="trade-detail-body">${details}${editorial}</div></details>`
 }
 function renderRecent(){
   const root=$("recentTrades");if(!root)return;
-  try{const trades=safeArray(state.trades).filter(Boolean).slice(0,4);root.innerHTML=trades.length?trades.map(raw=>{try{return recentTradeCardHTML(raw)}catch(error){console.warn('Recent trade card recovered',raw?.transaction_id||raw?.created,error);return tradeFallbackHTML(raw)}}).join(''):'<div class="block-empty">No trades available yet.</div>'}
+  try{
+    const featured=featuredTradeOfWeek(),trades=safeArray(state.trades).filter(Boolean).filter(t=>!sameTrade(t,featured)).slice(0,4);
+    root.innerHTML=trades.length?trades.map(raw=>{try{return recentTradeCardHTML(raw)}catch(error){console.warn('Recent trade card recovered',raw?.transaction_id||raw?.created,error);return tradeFallbackHTML(raw)}}).join(''):'<div class="block-empty">No additional recent trades are available yet.</div>';
+    root.querySelectorAll('details').forEach(details=>details.addEventListener('toggle',()=>{if(!details.open)return;root.querySelectorAll('details[open]').forEach(other=>{if(other!==details)other.open=false})}));
+  }
   catch(error){console.error('Recent Trades render failed',error);root.innerHTML='<div class="block-empty">Trade history could not be fully loaded. Please try again shortly.</div>'}
   finally{root.classList.remove('loading')}
 }
@@ -1355,6 +1368,22 @@ function averageAtAcquisition(playerId,raw){
   if(Number.isFinite(snapshot)&&snapshot>0)return snapshot;
   return Number(tradeSeasonAverage(id,t)||playerSeasonAverage(id,season)||latestKnownAverage(id)||0)
 }
+function playerPerformanceBeforeTrade(playerId,raw){
+  const id=String(playerId),t=raw||{},season=String(transactionSeason(t)),cutoff=Number(t.created)||Date.now(),scoring=bundleForSeason(season)?.league?.scoring_settings||state.modelBundle?.league?.scoring_settings||{},rows=safeArray(state.gameLogs?.[season]?.[id]);
+  const played=rows.map(row=>({date:gameDateValue(row),fpts:rawFantasyPoints(row,scoring),row})).filter(x=>x.date&&x.date.getTime()<=cutoff&&gameWasPlayed(x.row)&&Number.isFinite(x.fpts));
+  if(played.length){return{average:played.reduce((sum,x)=>sum+x.fpts,0)/played.length,gamesPlayed:played.length,season,source:'pre-trade-games'}}
+  const year=Number(season);
+  if(Number.isFinite(year)){
+    for(let prior=year-1;prior>=year-3;prior--){
+      const avg=Number(seasonAverageMap(String(prior))?.[id]||playerSeasonAverage(id,String(prior))||0);
+      if(avg>0){
+        const games=Number(state.gameLogMeta?.[String(prior)]?.[id]?.gamesPlayed||state.seasonTotalMeta?.[String(prior)]?.[id]?.gamesPlayed||1);
+        return{average:avg,gamesPlayed:Math.max(1,games),season:String(prior),source:'previous-season'}
+      }
+    }
+  }
+  return{average:0,gamesPlayed:0,season,source:'no-prior-games'}
+}
 function currentPlayerIMOValue(playerId){
   const id=String(playerId),current=playerCurrentAverage(id),avg=Number(current.avg||latestKnownAverage(id)||0);
   return{average:avg,value:avg>0?playerDynastyValue(id,avg,Date.now()):0,season:current.season}
@@ -1372,8 +1401,8 @@ function managerTradeAcquisitions(managerId){
     Object.entries(t.adds||{}).forEach(([playerId,rosterId])=>{
       const recipient=String(t.roster_owner_map?.[String(rosterId)]||transactionManagerForRoster(t,rosterId));
       if(recipient!==id||!playerId||playerId==='0')return;
-      const acquisitionAverage=averageAtAcquisition(playerId,t),acquisitionValue=acquisitionAverage>0?playerDynastyValue(String(playerId),acquisitionAverage,created):0,current=currentPlayerIMOValue(playerId);
-      events.push({method:'trade',playerId:String(playerId),created,season,acquisitionAverage,acquisitionValue,currentAverage:current.average,currentValue:current.value,valueChange:current.value-acquisitionValue,ageAtAcquisition:playerAgeAt(String(playerId),created),transaction:t})
+      const prior=playerPerformanceBeforeTrade(playerId,t),acquisitionAverage=Number(prior.average||0),acquisitionValue=acquisitionAverage>0?playerDynastyValue(String(playerId),acquisitionAverage,created):0,current=currentPlayerIMOValue(playerId);
+      events.push({method:'trade',playerId:String(playerId),created,season,acquisitionAverage,acquisitionGamesPlayed:Number(prior.gamesPlayed||0),hadPlayedBeforeTrade:Number(prior.gamesPlayed||0)>0,acquisitionValue,currentAverage:current.average,currentValue:current.value,valueChange:current.value-acquisitionValue,ageAtAcquisition:playerAgeAt(String(playerId),created),transaction:t})
     })
   });
   return events
@@ -1458,8 +1487,8 @@ function managerTradeSales(managerId){
     Object.entries(t.drops||{}).forEach(([playerId,rosterId])=>{
       const seller=String(t.roster_owner_map?.[String(rosterId)]||transactionManagerForRoster(t,rosterId));
       if(seller!==id||!playerId||playerId==='0')return;
-      const saleAverage=averageAtAcquisition(playerId,t),saleValue=saleAverage>0?playerDynastyValue(String(playerId),saleAverage,created):0,current=currentPlayerIMOValue(playerId);
-      events.push({method:'trade-sale',playerId:String(playerId),created,season,saleAverage,saleValue,currentAverage:current.average,currentValue:current.value,valueChangeAfterSale:current.value-saleValue,ageAtSale:playerAgeAt(String(playerId),created),transaction:t})
+      const prior=playerPerformanceBeforeTrade(playerId,t),saleAverage=Number(prior.average||0),saleValue=saleAverage>0?playerDynastyValue(String(playerId),saleAverage,created):0,current=currentPlayerIMOValue(playerId);
+      events.push({method:'trade-sale',playerId:String(playerId),created,season,saleAverage,saleGamesPlayed:Number(prior.gamesPlayed||0),hadPlayedBeforeTrade:Number(prior.gamesPlayed||0)>0,saleValue,currentAverage:current.average,currentValue:current.value,valueChangeAfterSale:current.value-saleValue,ageAtSale:playerAgeAt(String(playerId),created),transaction:t})
     })
   });
   return events
@@ -1481,8 +1510,8 @@ function managerFrontOfficeHighlights(managerId){
   // Established superstars acquired above 27.00 FPTS/G are excluded from the
   // buy-low pool. The fallback is the still-owned trade acquisition with the
   // largest FPTS/G increase since arrival.
-  const stillOwnedTrades=tradeResults.filter(x=>x.stillOwned&&now-x.created>=30*day);
-  const buyLowPool=stillOwnedTrades.filter(x=>x.acquisitionAverage>=8&&x.acquisitionAverage<27);
+  const stillOwnedTrades=tradeResults.filter(x=>x.stillOwned&&now-x.created>=30*day&&x.hadPlayedBeforeTrade&&x.acquisitionAverage>=9);
+  const buyLowPool=stillOwnedTrades.filter(x=>x.acquisitionAverage<27);
   const bestBuyLow=(buyLowPool.filter(x=>x.capturedValueChange>=8&&(x.endAverage-x.acquisitionAverage)>0)
     .sort((a,b)=>b.capturedValueChange-a.capturedValueChange||(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||a.created-b.created)[0])||
     buyLowPool.sort((a,b)=>(b.endAverage-b.acquisitionAverage)-(a.endAverage-a.acquisitionAverage)||b.capturedValueChange-a.capturedValueChange||a.created-b.created)[0]||
@@ -1494,20 +1523,23 @@ function managerFrontOfficeHighlights(managerId){
   // after leaving. Free agents, fringe players and players who never reached a
   // useful fantasy level are excluded even if their mathematical value rose from
   // an extremely low base.
-  const sales=managerTradeSales(id).filter(x=>now-x.created>=30*day&&isCurrentlyRostered(x.playerId));
-  const sellLowPool=sales.filter(x=>x.saleAverage>=8&&x.ageAtSale<=35&&x.currentAverage>=18&&(x.currentAverage-x.saleAverage)>=3&&x.valueChangeAfterSale>0);
+  const sales=managerTradeSales(id).filter(x=>now-x.created>=30*day&&isCurrentlyRostered(x.playerId)&&x.hadPlayedBeforeTrade&&x.saleAverage>=9);
+  const sellLowPool=sales.filter(x=>x.ageAtSale<=35&&x.currentAverage>=18&&(x.currentAverage-x.saleAverage)>=3&&x.valueChangeAfterSale>0);
   const biggestSellLow=(sellLowPool.filter(x=>x.valueChangeAfterSale>=5)
     .sort((a,b)=>b.valueChangeAfterSale-a.valueChangeAfterSale||(b.currentAverage-b.saleAverage)-(a.currentAverage-a.saleAverage)||a.created-b.created)[0])||
     sellLowPool.sort((a,b)=>b.valueChangeAfterSale-a.valueChangeAfterSale||(b.currentAverage-b.saleAverage)-(a.currentAverage-a.saleAverage)||a.created-b.created)[0]||
     sales.filter(x=>x.currentAverage>0).sort((a,b)=>b.currentAverage-a.currentAverage||(b.currentAverage-b.saleAverage)-(a.currentAverage-a.saleAverage)||a.created-b.created)[0]||
-    managerTradeSales(id).sort((a,b)=>b.currentAverage-a.currentAverage||b.valueChangeAfterSale-a.valueChangeAfterSale||a.created-b.created)[0]||null;
+    sales.sort((a,b)=>b.currentAverage-a.currentAverage||b.valueChangeAfterSale-a.valueChangeAfterSale||a.created-b.created)[0]||null;
 
   return{draftStar,bestWaiverFind,bestBuyLow,biggestSellLow}
 }
 
 async function hydrateManagerAcquisitionGameLogs(managerId){
   const id=String(managerId),pairs=new Map();
-  managerTrades(id).forEach(t=>Object.entries(t.adds||{}).forEach(([playerId,rosterId])=>{const recipient=String(t.roster_owner_map?.[String(rosterId)]||transactionManagerForRoster(t,rosterId));if(recipient===id&&playerId&&playerId!=='0')pairs.set(`${transactionSeason(t)}|${playerId}`,{playerId:String(playerId),season:transactionSeason(t)})}));
+  managerTrades(id).forEach(t=>{
+    Object.entries(t.adds||{}).forEach(([playerId,rosterId])=>{const recipient=String(t.roster_owner_map?.[String(rosterId)]||transactionManagerForRoster(t,rosterId));if(recipient===id&&playerId&&playerId!=='0')pairs.set(`${transactionSeason(t)}|${playerId}`,{playerId:String(playerId),season:transactionSeason(t)})});
+    Object.entries(t.drops||{}).forEach(([playerId,rosterId])=>{const seller=String(t.roster_owner_map?.[String(rosterId)]||transactionManagerForRoster(t,rosterId));if(seller===id&&playerId&&playerId!=='0')pairs.set(`${transactionSeason(t)}|${playerId}`,{playerId:String(playerId),season:transactionSeason(t)})})
+  });
   const waiverCandidates=[];
   allLeagueTransactions().filter(t=>['waiver','free_agent'].includes(String(t.type||''))&&(!t.status||t.status==='complete')).forEach(t=>Object.entries(t.adds||{}).forEach(([playerId,rosterId])=>{if(transactionManagerForRoster(t,rosterId)!==id||!playerId||playerId==='0')return;waiverCandidates.push({playerId:String(playerId),season:transactionSeason(t),currentValue:currentPlayerIMOValue(playerId).value})}));
   waiverCandidates.sort((a,b)=>b.currentValue-a.currentValue).slice(0,12).forEach(x=>pairs.set(`${x.season}|${x.playerId}`,{playerId:x.playerId,season:x.season}));
@@ -1863,7 +1895,7 @@ function closeManagerDirectory(){const modal=$("managerDirectoryModal");if(!moda
 
 function managerProfileCacheKey(managerId){return `${String(managerId)}|${String(state.profileAverageSeason||"")}`}
 function managerProfileDataFingerprint(){const latest=state.trades?.[0]?.created||0,current=state.modelBundle?.league?.season||'';return `${CONFIG.currentLeagueId}|${current}|${latest}|${state.trades.length}|${state.managers.size}|${state.draftSelections.length}`}
-function managerProfileSessionKey(key){return `imo-profile-v3346-quality-highlights|${managerProfileDataFingerprint()}|${key}`}
+function managerProfileSessionKey(key){return `imo-profile-v3349-buy-sell-pretrade-guard|${managerProfileDataFingerprint()}|${key}`}
 function cachedManagerProfileHTML(managerId){
   const key=managerProfileCacheKey(managerId);
   if(state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
@@ -2144,7 +2176,6 @@ function closeMockDraft(){const modal=$("mockDraftModal");modal?.classList.remov
 function safeRender(name,fn){try{fn()}catch(error){console.error(`Failed to render ${name}:`,error)}}
 function renderAll(){
   ensureManagerGradeStyles();
-  safeRender("summary",renderSummary);
   safeRender("leaderboard",renderLeaderboard);
   safeRender("power rankings",renderPower);
   safeRender("odds",renderOdds);
@@ -2708,7 +2739,7 @@ async function load(){
     // Automatic loading only; manual refresh control intentionally removed.
   }
 }
-document.querySelectorAll('.active-window-btn').forEach(b=>b.addEventListener('click',()=>{state.activeWindow=b.dataset.activeWindow;document.querySelectorAll('.active-window-btn').forEach(x=>x.classList.toggle('active',x===b));renderSummary();renderLeaderboard()}));$("biggestTradesToggle")?.addEventListener('click',()=>{state.biggestTradesExpanded=!state.biggestTradesExpanded;renderBiggestTrades()});
+document.querySelectorAll('.active-window-btn').forEach(b=>b.addEventListener('click',()=>{state.activeWindow=b.dataset.activeWindow;document.querySelectorAll('.active-window-btn').forEach(x=>x.classList.toggle('active',x===b));renderLeaderboard()}));$("biggestTradesToggle")?.addEventListener('click',()=>{state.biggestTradesExpanded=!state.biggestTradesExpanded;renderBiggestTrades()});
 let lastManagerPointerAction=0;
 function closeMobileManagerSwitcher(){
   const sheet=document.getElementById('mobileManagerSwitcherSheet');
