@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.54 — Rebalanced Championship Odds Depth Model */
+/* IMO DYNASTY V3.3.55 — Performance Optimisation Pass */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,h2hHouseMargin:1.05,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -19,11 +19,17 @@ const CANONICAL_DRAFT_COLUMNS={
 function normaliseTeamKey(name){return String(name||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
 function canonicalDraftSlot(season,teamName){return CANONICAL_DRAFT_COLUMNS[String(season)]?.[normaliseTeamKey(teamName)]??null}
 
-const state={league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,draftSelections:[],allDraftSelections:[],oddsMovement:null,sportState:null,h2hRefreshTimer:null,h2hRefreshBusy:false,computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null,managerGrades:null}};
+const state={jsonRequestCache:new Map(),globalSearchIndex:null,league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,draftSelections:[],allDraftSelections:[],oddsMovement:null,sportState:null,h2hRefreshTimer:null,h2hRefreshBusy:false,computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null,managerGrades:null}};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
 try{for(let i=sessionStorage.length-1;i>=0;i--){const key=sessionStorage.key(i);if(key&&key.startsWith('imo-profile-'))sessionStorage.removeItem(key)}}catch(_){ }
 function resetComputedCaches(){state.computedCache.seasonAverages.clear();state.computedCache.managerTrades.clear();state.computedCache.tradeSide.clear();state.computedCache.completedMatchups.clear();state.computedCache.tendencyLeague=null;state.computedCache.managerGrades=null;state.profileHTMLCache.clear()}
-async function getJSON(url,optional=false){try{const r=await fetch(url);if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){if(optional)return null;throw e}}
+async function getJSON(url,optional=false){
+  const key=String(url);
+  if(state.jsonRequestCache.has(key))return state.jsonRequestCache.get(key);
+  const request=(async()=>{try{const r=await fetch(key,{cache:"default"});if(!r.ok)throw new Error(r.status);return await r.json()}catch(e){state.jsonRequestCache.delete(key);if(optional)return null;throw e}})();
+  state.jsonRequestCache.set(key,request);
+  return request;
+}
 async function statsJSON(url){if(state.statsRequestCache.has(url))return state.statsRequestCache.get(url);const request=getJSON(url,true).finally(()=>{});state.statsRequestCache.set(url,request);return request}
 async function limitedMap(items,limit,fn){const out=new Array(items.length);let n=0;async function run(){while(n<items.length){const i=n++;try{out[i]=await fn(items[i])}catch{out[i]=null}}}await Promise.all(Array.from({length:limit},run));return out}
 function esc(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;")}
@@ -782,7 +788,7 @@ async function refreshHeadToHeadData(){
 }
 function setupHeadToHeadRefresh(){
   if(state.h2hRefreshTimer)clearInterval(state.h2hRefreshTimer);
-  state.h2hRefreshTimer=setInterval(refreshHeadToHeadData,60000);
+  state.h2hRefreshTimer=setInterval(()=>{if(!document.hidden)refreshHeadToHeadData()},180000);
 }
 
 function gameDateValue(row){const raw=row?.date||row?.game_date||row?.gameDate||row?.start_time||row?.startTime||row?.timestamp;const d=raw?new Date(raw):null;return d&&!Number.isNaN(d.getTime())?d:null}
@@ -2079,12 +2085,6 @@ async function openManagerProfile(managerId,pushState=true){
   document.body.classList.add("manager-profile-open");
   modal.dataset.managerId=id;
   const requestedSeason=String(state.profileAverageSeason||'2026'),rosterIds=safeArray(state.managers.get(id)?.roster?.players).map(String);
-  try{await ensurePlayerEfficiencyData(rosterIds,requestedSeason)}catch(error){console.warn('Manager roster efficiency hydration failed:',error)}
-  try{await hydrateManagerAcquisitionGameLogs(id)}catch(error){console.warn('Manager acquisition history hydration failed:',error)}
-  state.computedCache.managerGrades=null;
-  state.profileHTMLCache.delete(managerProfileCacheKey(id));
-  try{sessionStorage.removeItem(managerProfileSessionKey(managerProfileCacheKey(id)))}catch(_){ }
-  if(modal.dataset.managerId!==id)return;
   const key=managerProfileCacheKey(id);
   if(state.profileHTMLCache.has(key)){
     content.innerHTML=state.profileHTMLCache.get(key);
@@ -2096,6 +2096,15 @@ async function openManagerProfile(managerId,pushState=true){
     let build=state.profileBuilds.get(key);
     if(!build){build=Promise.resolve().then(()=>cachedManagerProfileHTML(id));state.profileBuilds.set(key,build);build.finally(()=>state.profileBuilds.delete(key))}
     build.then(html=>{if(modal.dataset.managerId!==id)return;content.innerHTML=html||'<div class="profile-empty">No profile data is available.</div>';bindSparklineTooltips(content);initialiseManagerProfileTab()}).catch(error=>{console.error('Manager profile failed:',error);if(modal.dataset.managerId===id){const manager=state.managers.get(id);content.innerHTML=`<header class="manager-profile-hero"><div class="manager-profile-avatar">${manager?.avatar?`<img src="${esc(manager.avatar)}" alt="">`:esc(manager?.initials||'GM')}</div><div class="manager-profile-hero-copy"><span class="eyebrow">TEAM PROFILE</span><h2>${esc(manager?.name||'Manager')}</h2><p>The full profile encountered a data issue. Core roster and trade data remain available below.</p></div></header><section class="manager-profile-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">CURRENT TEAM</span><h3>Roster</h3></div></div><div class="profile-roster-list">${safeArray(manager?.roster?.players).map(pid=>`<div class="profile-roster-row">${playerLink(pid,playerName(pid))}</div>`).join('')||'<div class="profile-empty">No roster data available.</div>'}</div></section><section class="manager-profile-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">TRANSACTIONS</span><h3>Recent Trades</h3></div></div><div class="profile-trades-list">${safeArray(state.trades).filter(t=>mids(t).includes(id)).slice(0,5).map(t=>managerTradeSummaryHTML(t,id)).join('')||'<div class="profile-empty">No trades found.</div>'}</div></section>`}});
+  }
+  const hydrationKey=`hydrate|${id}|${requestedSeason}`;
+  if(!state.profileBuilds.has(hydrationKey)){
+    const hydration=Promise.allSettled([ensurePlayerEfficiencyData(rosterIds,requestedSeason),hydrateManagerAcquisitionGameLogs(id)]).then(()=>{
+      state.computedCache.managerGrades=null;state.profileHTMLCache.delete(key);
+      try{sessionStorage.removeItem(managerProfileSessionKey(key))}catch(_){ }
+      if(modal.dataset.managerId===id&&modal.classList.contains('open')){content.innerHTML=cachedManagerProfileHTML(id);bindSparklineTooltips(content);initialiseManagerProfileTab()}
+    }).finally(()=>state.profileBuilds.delete(hydrationKey));
+    state.profileBuilds.set(hydrationKey,hydration);
   }
   if(pushState)history.pushState({managerProfile:id,tab:"overview"},"",`#manager=${encodeURIComponent(id)}&tab=overview`);
   requestAnimationFrame(()=>$('managerProfileClose')?.focus());
@@ -2776,7 +2785,9 @@ async function loadSeason(id){
 
   const ownerByRoster={},userById=Object.fromEntries(users.map(u=>[String(u.user_id),u])),managerNameMap={};
   rosters.forEach(r=>{if(r.owner_id!=null){ownerByRoster[String(r.roster_id)]=String(r.owner_id);const u=userById[String(r.owner_id)]||{};managerNameMap[String(r.owner_id)]=u.metadata?.team_name||u.display_name||`Team ${r.roster_id}`}});
-  const rounds=Array.from({length:CONFIG.roundsToCheck},(_,i)=>i+1),weeks=await limitedMap(rounds,8,async wk=>{
+  const playoffStart=Number(league?.settings?.playoff_week_start)||19;
+  const seasonWeekCap=Math.min(CONFIG.roundsToCheck,Math.max(24,playoffStart+5));
+  const rounds=Array.from({length:seasonWeekCap},(_,i)=>i+1),weeks=await limitedMap(rounds,10,async wk=>{
     const [tx,match]=await Promise.all([getJSON(`${CONFIG.api}/league/${id}/transactions/${wk}`,true),getJSON(`${CONFIG.api}/league/${id}/matchups/${wk}`,true)]);
     const completedTransactions=(tx||[]).filter(t=>!t.status||t.status==='complete');
     const trades=completedTransactions.filter(t=>t.type==='trade').map(t=>{
@@ -2797,6 +2808,7 @@ function globalSearchScore(haystack,query){
 function globalTradeKey(trade){return String(trade?.transaction_id||`${trade?.league_id||'league'}-${trade?.created||0}`)}
 function globalTradeLabel(trade){try{const managers=mids(trade).map(id=>managerName(id,trade)),assets=renderableTradeAssets(trade),names=Object.values(assets||{}).flat().slice(0,5).map(x=>x?.name).filter(Boolean);return `${managers.join(' ↔ ')||'League trade'}${names.length?` · ${names.join(', ')}`:''}`}catch(_){return 'League trade'}}
 function buildGlobalSearchIndex(){
+  if(state.globalSearchIndex)return state.globalSearchIndex;
   const items=[];
   Object.keys(state.players||{}).forEach(id=>{const name=playerName(id);if(!name||/^Player \d+$/.test(name))return;const p=state.players[id]||{},current=playerCurrentAverage(id),identity=[p.team,p.position].filter(Boolean).join(' · ')||'Player profile',stats=current.avg>0?` · ${current.avg.toFixed(2)} FPTS/G`:'';items.push({type:'Player',title:name,subtitle:`${identity}${stats}`,search:`${name} ${p.team||''} ${p.position||''} ${current.avg.toFixed(2)} FPTS`,action:'player',id:String(id)})});
   [...state.managers.values()].forEach(m=>items.push({type:'Manager',title:m.name,subtitle:'Manager profile',search:`${m.name} ${m.displayName||''} manager team`,action:'manager',id:String(m.id)}));
@@ -2804,6 +2816,7 @@ function buildGlobalSearchIndex(){
   for(const manager of state.managers.values())for(const pick of managerCurrentDraftPicks(manager.id)){if(seenPicks.has(pick.key))continue;seenPicks.add(pick.key);items.push({type:'Future Pick',title:pick.label,subtitle:`Currently held by ${manager.name}`,search:`${pick.season} ${pick.originalName} ${manager.name} round ${pick.round} first second third fourth future pick`,action:'pick',id:pick.key})}
   Object.entries(state.draftPickMap||{}).forEach(([key,playerId])=>{if(!playerId)return;const data=pickHistoryData(key),player=playerName(String(playerId));items.push({type:'Completed Pick',title:`${data.season} Round ${data.round} Pick (${data.originalOwner}'s pick)`,subtitle:`Selected ${player}`,search:`${data.season} ${data.originalOwner} ${data.currentOwner} round ${data.round} completed rookie pick ${player}`,action:'pick',id:key})});
   state.trades.forEach(trade=>{const label=globalTradeLabel(trade),date=fmt(trade.created);items.push({type:'Trade',title:label,subtitle:`${date} · ${trade.season_label||'League trade'}`,search:`${label} ${date} ${trade.season_label||''}`,action:'trade',id:globalTradeKey(trade)})});
+  state.globalSearchIndex=items;
   return items
 }
 function globalSearchResults(query){const q=normalizeGlobalSearch(query);if(!q)return[];return buildGlobalSearchIndex().map(item=>({...item,score:globalSearchScore(item.search,q)+(normalizeGlobalSearch(item.title).startsWith(q)?25:0)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score||a.title.localeCompare(b.title)).slice(0,24)}
@@ -2844,6 +2857,7 @@ async function load(){
     if(status)status.textContent='Loading exact Sleeper season averages…';
     await loadSeasonTotalAverages();
     prepareModels();
+    state.globalSearchIndex=null;
     resetComputedCaches();
     prepareOddsMovement();
     state.profilePrewarmQueued=false;
@@ -2960,7 +2974,7 @@ document.addEventListener("click",e=>{
   const link=e.target.closest(".manager-profile-link");if(link){if(Date.now()-lastManagerPointerAction<700)return;closeManagerDirectory();openManagerProfile(link.dataset.managerId);return}
   if(e.target.closest("[data-close-manager-profile]")||e.target.closest("#managerProfileClose"))closeManagerProfile()
 });
-document.addEventListener("input",e=>{if(e.target?.id==="globalSearchInput")renderGlobalSearchResults(e.target.value)});
+let globalSearchDebounce=null;document.addEventListener("input",e=>{if(e.target?.id!=="globalSearchInput")return;clearTimeout(globalSearchDebounce);const value=e.target.value;globalSearchDebounce=setTimeout(()=>renderGlobalSearchResults(value),90)});
 document.addEventListener("toggle",e=>{const detail=e.target;if(!(detail instanceof HTMLDetailsElement)||!detail.open)return;if(detail.matches(".profile-badge-pop")){detail.closest(".profile-badge-icons")?.querySelectorAll(".profile-badge-pop[open]").forEach(x=>{if(x!==detail)x.open=false})}if(detail.matches(".profile-form-result")){detail.closest(".profile-form-strip")?.querySelectorAll(".profile-form-result[open]").forEach(x=>{if(x!==detail)x.open=false})}if(detail.matches(".player-history-trade")){detail.closest(".player-history-timeline")?.querySelectorAll(".player-history-trade[open]").forEach(x=>{if(x!==detail)x.open=false})}},true);
 document.addEventListener('change',e=>{
   const select=e.target.closest?.('[data-mobile-manager-select]');
@@ -2972,7 +2986,7 @@ document.addEventListener('change',e=>{
   openManagerProfile(managerId);
 });
 document.addEventListener('pointerdown',e=>{if(!e.target.closest('[data-manager-switcher]')&&!e.target.closest('#mobileManagerSwitcherSheet'))closeManagerSwitchers()},{passive:true});
-document.addEventListener("pointerover",e=>{const link=e.target.closest?.(".manager-profile-link");if(link)queueManagerProfilePrewarm(link.dataset.managerId)},{passive:true});
+document.addEventListener("pointerover",e=>{if(!matchMedia("(pointer:fine)").matches)return;const link=e.target.closest?.(".manager-profile-link");if(link)queueManagerProfilePrewarm(link.dataset.managerId)},{passive:true});
 document.addEventListener("focusin",e=>{const link=e.target.closest?.(".manager-profile-link");if(link)queueManagerProfilePrewarm(link.dataset.managerId)});
 document.addEventListener("keydown",e=>{if((e.metaKey||e.ctrlKey)&&String(e.key).toLowerCase()==="k"){e.preventDefault();openGlobalSearch();return}if(e.key!=="Escape")return;if($("globalSearchModal")?.classList.contains("open"))closeGlobalSearch();else if($("pickHistoryModal")?.classList.contains("open"))closePickHistory();else if($("tradeReturnTreeModal")?.classList.contains("open"))closeTradeReturnTree();else if($("managerPicksMadeModal")?.classList.contains("open"))closeManagerPicksMade();else if($("mockDraftModal")?.classList.contains("open"))closeMockDraft();else if($("archetypeGuideModal")?.classList.contains("open"))closeArchetypeGuide();else if(document.getElementById('mobileManagerSwitcherSheet'))closeMobileManagerSwitcher();else if(document.getElementById('mobileProfileInfoSheet')?.classList.contains('open'))closeMobileProfileInfo();else if(document.querySelector('[data-manager-switcher].open'))closeManagerSwitchers();else if($("headlinesModal")?.classList.contains("open"))closeHeadlines();else if($("playerHistoryModal")?.classList.contains("open"))closePlayerHistory();else if($("managerProfileModal")?.classList.contains("open"))closeManagerProfile();else if($("managerDirectoryModal")?.classList.contains("open"))closeManagerDirectory()});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshHeadToHeadData()});
