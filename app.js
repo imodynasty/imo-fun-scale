@@ -2030,7 +2030,7 @@ function closeManagerDirectory(){const modal=$("managerDirectoryModal");if(!moda
 
 function managerProfileCacheKey(managerId){return `${String(managerId)}|${String(state.profileAverageSeason||"")}`}
 function managerProfileDataFingerprint(){const latest=state.trades?.[0]?.created||0,current=state.modelBundle?.league?.season||'';return `${CONFIG.currentLeagueId}|${current}|${latest}|${state.trades.length}|${state.managers.size}|${state.draftSelections.length}`}
-function managerProfileSessionKey(key){return `imo-profile-v3350-two-front-office-highlights|${managerProfileDataFingerprint()}|${key}`}
+function managerProfileSessionKey(key){return `imo-profile-v3357-mobile-fast-profile|${managerProfileDataFingerprint()}|${key}`}
 function cachedManagerProfileHTML(managerId){
   const key=managerProfileCacheKey(managerId);
   if(state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
@@ -2062,6 +2062,27 @@ function observeManagerProfileLinks(){
   if(!managerProfileObserver)managerProfileObserver=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting){queueManagerProfilePrewarm(entry.target.dataset.managerId);managerProfileObserver.unobserve(entry.target)}}),{rootMargin:'500px 0px'});
   document.querySelectorAll('.manager-profile-link').forEach(link=>{if(!link.dataset.profileObserved){link.dataset.profileObserved='1';managerProfileObserver.observe(link)}})
 }
+
+function managerProfileFastHTML(managerId){
+  const id=String(managerId),manager=state.managers.get(id);
+  if(!manager)return '<div class="profile-empty">Manager profile unavailable.</div>';
+  const avatar=manager.avatar?`<img src="${esc(manager.avatar)}" alt="${esc(manager.name)} team avatar" loading="eager">`:esc(manager.initials||manager.name.slice(0,2).toUpperCase());
+  const rosterIds=safeArray(manager?.roster?.players).map(String).slice(0,8);
+  const rosterRows=rosterIds.map((pid,i)=>{const player=state.players?.[pid]||{},name=playerName(pid),pic=`https://sleepercdn.com/content/nba/players/${pid}.jpg`,avg=Number(playerCurrentAverage(pid)?.avg||0);return `<div class="profile-roster-row"><span class="profile-roster-rank">${i+1}</span><span class="player-avatar-wrap"><img src="${esc(pic)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><span class="player-avatar-fallback">${esc(name.split(/\s+/).map(x=>x[0]).slice(0,2).join(''))}</span></span><div>${playerLink(pid,name,'profile-player-name')}<small>${esc(player.position||'NBA')}</small></div><b class="profile-player-average">${avg>0?avg.toFixed(2):'—'}</b></div>`}).join('');
+  return `<header class="manager-profile-hero"><div class="manager-profile-avatar">${avatar}</div><div class="manager-profile-hero-copy"><span class="eyebrow">TEAM PROFILE</span><h2>${esc(manager.name)}</h2><p>Profile opened — loading deeper analytics in the background.</p></div></header><nav class="manager-profile-tabs manager-profile-tabs-fast" aria-label="Manager profile sections"><button type="button" class="manager-profile-tab active" disabled>Overview</button><button type="button" class="manager-profile-tab" disabled>Roster</button><button type="button" class="manager-profile-tab" disabled>Front Office</button><button type="button" class="manager-profile-tab" disabled>History</button></nav><div class="manager-profile-grid manager-profile-fast-grid"><section class="manager-profile-card profile-roster-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">CURRENT TEAM</span><h3>Roster preview</h3></div><span class="period-pill">${safeArray(manager?.roster?.players).length} players</span></div><div class="profile-roster-list">${rosterRows||'<div class="profile-empty">No roster data available.</div>'}</div></section><section class="manager-profile-card manager-profile-fast-status"><div class="manager-profile-card-heading"><div><span class="eyebrow">LIVE PROFILE</span><h3>Loading analytics</h3></div></div><div class="manager-profile-loading-fast-bars"><span></span><span></span><span></span></div><small>Grades, history and advanced roster metrics will appear shortly.</small></section></div>`;
+}
+function hydrateManagerProfileSection(managerId,tab){
+  const id=String(managerId||''),section=String(tab||'overview'),season=String(state.profileAverageSeason||'2026'),key=managerProfileCacheKey(id),rosterIds=safeArray(state.managers.get(id)?.roster?.players).map(String);
+  const jobs=[];
+  if(section==='roster')jobs.push(ensurePlayerEfficiencyData(rosterIds,season));
+  if(section==='front-office')jobs.push(hydrateManagerAcquisitionGameLogs(id));
+  if(!jobs.length)return;
+  const hydrationKey=`hydrate|${id}|${season}|${section}`;
+  if(state.profileBuilds.has(hydrationKey))return;
+  const hydration=Promise.allSettled(jobs).then(()=>{state.computedCache.managerGrades=null;state.profileHTMLCache.delete(key);try{sessionStorage.removeItem(managerProfileSessionKey(key))}catch(_){ }const modal=$('managerProfileModal'),content=$('managerProfileContent');if(modal?.dataset.managerId===id&&modal.classList.contains('open')&&modal.dataset.activeTab===section){const active=section;content.innerHTML=cachedManagerProfileHTML(id);bindSparklineTooltips(content);setManagerProfileTab(active,false)}}).finally(()=>state.profileBuilds.delete(hydrationKey));
+  state.profileBuilds.set(hydrationKey,hydration);
+}
+
 function closeManagerSwitchers(except=null){document.querySelectorAll('[data-manager-switcher].open').forEach(sw=>{if(sw===except)return;sw.classList.remove('open');const trigger=sw.querySelector('[data-manager-switcher-trigger]');const menu=sw.querySelector('.manager-switcher-menu');if(trigger)trigger.setAttribute('aria-expanded','false');if(menu)menu.hidden=true})}
 function openMobileProfileInfo(title,html){
   let sheet=document.getElementById('mobileProfileInfoSheet');
@@ -2074,6 +2095,7 @@ function setManagerProfileTab(tab,updateUrl=true){
   modal.dataset.activeTab=next;
   modal.querySelectorAll('[data-manager-tab]').forEach(btn=>{const active=btn.dataset.managerTab===next;btn.classList.toggle('active',active);btn.setAttribute('aria-selected',String(active))});
   modal.querySelectorAll('[data-manager-tab-panel]').forEach(panel=>{const active=panel.dataset.managerTabPanel===next;panel.classList.toggle('active',active);panel.hidden=!active});
+  if(modal.dataset.managerId)hydrateManagerProfileSection(modal.dataset.managerId,next);
   if(updateUrl&&modal.dataset.managerId){const id=encodeURIComponent(modal.dataset.managerId),hash=`#manager=${id}&tab=${encodeURIComponent(next)}`;history.replaceState({managerProfile:modal.dataset.managerId,tab:next},'',hash)}
 }
 function initialiseManagerProfileTab(){setManagerProfileTab(managerProfileTabFromHash()||$('managerProfileModal')?.dataset.activeTab||'overview',false)}
@@ -2085,15 +2107,13 @@ async function openManagerProfile(managerId,pushState=true){
   modal.setAttribute("aria-hidden","false");
   document.body.classList.add("manager-profile-open");
   modal.dataset.managerId=id;
-  const requestedSeason=String(state.profileAverageSeason||'2026'),rosterIds=safeArray(state.managers.get(id)?.roster?.players).map(String);
   const key=managerProfileCacheKey(id);
   if(state.profileHTMLCache.has(key)){
     content.innerHTML=state.profileHTMLCache.get(key);
     bindSparklineTooltips(content);
     initialiseManagerProfileTab();
   }else{
-    const manager=state.managers.get(id),avatar=manager?.avatar?`<img src="${esc(manager.avatar)}" alt="" loading="eager">`:`<span>${esc(manager?.initials||'GM')}</span>`;
-    content.innerHTML=`<div class="manager-profile-loading manager-profile-loading-fast"><div class="manager-loading-identity">${avatar}<div><small>MANAGER PROFILE</small><strong>${esc(manager?.name||'Loading profile')}</strong></div></div><span></span><strong>Loading live profile…</strong><small>Current roster and league history are being assembled.</small></div>`;
+    content.innerHTML=managerProfileFastHTML(id);
     let build=state.profileBuilds.get(key);
     if(!build){
       // Give the browser two paint opportunities so the modal opens instantly before
@@ -2101,17 +2121,9 @@ async function openManagerProfile(managerId,pushState=true){
       build=new Promise((resolve,reject)=>requestAnimationFrame(()=>requestAnimationFrame(()=>setTimeout(()=>{try{resolve(cachedManagerProfileHTML(id))}catch(error){reject(error)}},0))));
       state.profileBuilds.set(key,build);build.finally(()=>state.profileBuilds.delete(key));
     }
-    build.then(html=>{if(modal.dataset.managerId!==id)return;content.innerHTML=html||'<div class="profile-empty">No profile data is available.</div>';bindSparklineTooltips(content);initialiseManagerProfileTab()}).catch(error=>{console.error('Manager profile failed:',error);if(modal.dataset.managerId===id){const manager=state.managers.get(id);content.innerHTML=`<header class="manager-profile-hero"><div class="manager-profile-avatar">${manager?.avatar?`<img src="${esc(manager.avatar)}" alt="">`:esc(manager?.initials||'GM')}</div><div class="manager-profile-hero-copy"><span class="eyebrow">TEAM PROFILE</span><h2>${esc(manager?.name||'Manager')}</h2><p>The full profile encountered a data issue. Core roster and trade data remain available below.</p></div></header><section class="manager-profile-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">CURRENT TEAM</span><h3>Roster</h3></div></div><div class="profile-roster-list">${safeArray(manager?.roster?.players).map(pid=>`<div class="profile-roster-row">${playerLink(pid,playerName(pid))}</div>`).join('')||'<div class="profile-empty">No roster data available.</div>'}</div></section><section class="manager-profile-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">TRANSACTIONS</span><h3>Recent Trades</h3></div></div><div class="profile-trades-list">${safeArray(state.trades).filter(t=>mids(t).includes(id)).slice(0,5).map(t=>managerTradeSummaryHTML(t,id)).join('')||'<div class="profile-empty">No trades found.</div>'}</div></section>`}});
+    build.then(html=>{if(modal.dataset.managerId!==id)return;const desired=managerProfileTabFromHash()||modal.dataset.activeTab||'overview';content.innerHTML=html||'<div class="profile-empty">No profile data is available.</div>';bindSparklineTooltips(content);setManagerProfileTab(desired,false)}).catch(error=>{console.error('Manager profile failed:',error);if(modal.dataset.managerId===id){const manager=state.managers.get(id);content.innerHTML=`<header class="manager-profile-hero"><div class="manager-profile-avatar">${manager?.avatar?`<img src="${esc(manager.avatar)}" alt="">`:esc(manager?.initials||'GM')}</div><div class="manager-profile-hero-copy"><span class="eyebrow">TEAM PROFILE</span><h2>${esc(manager?.name||'Manager')}</h2><p>The full profile encountered a data issue. Core roster and trade data remain available below.</p></div></header><section class="manager-profile-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">CURRENT TEAM</span><h3>Roster</h3></div></div><div class="profile-roster-list">${safeArray(manager?.roster?.players).map(pid=>`<div class="profile-roster-row">${playerLink(pid,playerName(pid))}</div>`).join('')||'<div class="profile-empty">No roster data available.</div>'}</div></section><section class="manager-profile-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">TRANSACTIONS</span><h3>Recent Trades</h3></div></div><div class="profile-trades-list">${safeArray(state.trades).filter(t=>mids(t).includes(id)).slice(0,5).map(t=>managerTradeSummaryHTML(t,id)).join('')||'<div class="profile-empty">No trades found.</div>'}</div></section>`}});
   }
-  const hydrationKey=`hydrate|${id}|${requestedSeason}`;
-  if(!state.profileBuilds.has(hydrationKey)){
-    const hydration=Promise.allSettled([ensurePlayerEfficiencyData(rosterIds,requestedSeason),hydrateManagerAcquisitionGameLogs(id)]).then(()=>{
-      state.computedCache.managerGrades=null;state.profileHTMLCache.delete(key);
-      try{sessionStorage.removeItem(managerProfileSessionKey(key))}catch(_){ }
-      if(modal.dataset.managerId===id&&modal.classList.contains('open')){content.innerHTML=cachedManagerProfileHTML(id);bindSparklineTooltips(content);initialiseManagerProfileTab()}
-    }).finally(()=>state.profileBuilds.delete(hydrationKey));
-    state.profileBuilds.set(hydrationKey,hydration);
-  }
+  // Heavy roster efficiency and acquisition history are hydrated only when their tabs are opened.
   if(pushState)history.pushState({managerProfile:id,tab:"overview"},"",`#manager=${encodeURIComponent(id)}&tab=overview`);
   requestAnimationFrame(()=>$('managerProfileClose')?.focus());
 }

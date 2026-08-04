@@ -2217,3 +2217,19 @@ details > summary { touch-action: manipulation; }
 .power-odds-row {
   contain: layout style;
 }
+
+/* V3.3.57 mobile-first manager profile responsiveness */
+.manager-profile-tabs-fast .manager-profile-tab[disabled]{opacity:.55;cursor:default}
+.manager-profile-fast-grid{align-items:start}
+.manager-profile-fast-status{min-height:150px}
+.manager-profile-loading-fast-bars{display:grid;gap:10px;margin:8px 0 14px}
+.manager-profile-loading-fast-bars span{display:block;height:10px;border-radius:999px;background:linear-gradient(90deg,rgba(255,255,255,.06),rgba(255,255,255,.18),rgba(255,255,255,.06));background-size:200% 100%;animation:managerProfileFastShimmer 1.2s linear infinite}
+.manager-profile-loading-fast-bars span:nth-child(2){width:82%}
+.manager-profile-loading-fast-bars span:nth-child(3){width:64%}
+@keyframes managerProfileFastShimmer{to{background-position:-200% 0}}
+@media (max-width:700px){
+  .manager-profile-fast-grid{display:block}
+  .manager-profile-fast-status{margin-top:12px;min-height:112px}
+  .manager-profile-tabs-fast{overflow-x:auto;scrollbar-width:none}
+  .manager-profile-tabs-fast::-webkit-scrollbar{display:none}
+}
