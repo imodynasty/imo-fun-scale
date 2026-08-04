@@ -2275,3 +2275,50 @@ button,[role="button"],summary{touch-action:manipulation;-webkit-tap-highlight-c
   .instant-manager-link>small{display:none}
   .manager-profile-backdrop,.manager-directory-backdrop,.player-history-backdrop,.global-search-backdrop{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 }
+
+/* V3.3.62 — verified markets and lite rendering mode */
+html.imo-performance-lite{scroll-behavior:auto}
+html.imo-performance-lite *,html.imo-performance-lite *::before,html.imo-performance-lite *::after{
+  animation:none!important;
+  transition:none!important;
+}
+html.imo-performance-lite .noise{display:none!important}
+html.imo-performance-lite .site-header,
+html.imo-performance-lite .manager-profile-tabs,
+html.imo-performance-lite .vote-lock-overlay,
+html.imo-performance-lite .manager-profile-backdrop,
+html.imo-performance-lite .manager-directory-backdrop,
+html.imo-performance-lite .player-history-backdrop,
+html.imo-performance-lite .global-search-backdrop,
+html.imo-performance-lite .archetype-guide-backdrop,
+html.imo-performance-lite .mock-draft-backdrop,
+html.imo-performance-lite .manager-picks-backdrop,
+html.imo-performance-lite .trade-return-tree-backdrop,
+html.imo-performance-lite .pick-history-backdrop{
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+html.imo-performance-lite .power-rankings-grid .featured-number-one,
+html.imo-performance-lite .smokey-tag,
+html.imo-performance-lite .h2h-main-event-vs,
+html.imo-performance-lite .h2h-card-kicker i,
+html.imo-performance-lite .rookie-pick-pill.active,
+html.imo-performance-lite .mock-pick-card.rookie-target-highlight{
+  box-shadow:none!important;
+  text-shadow:none!important;
+}
+html.imo-performance-lite .manager-profile-sheet,
+html.imo-performance-lite .player-history-sheet,
+html.imo-performance-lite .pick-history-sheet,
+html.imo-performance-lite .trade-return-tree-sheet{
+  will-change:auto!important;
+}
+.verified-market-preview{opacity:.985}
+.instant-manager-note{display:grid;gap:3px}
+.instant-manager-note strong{color:var(--text);font-size:11px}
+.instant-manager-note span{color:var(--muted);font-size:9px}
+.instant-manager-link{grid-template-columns:38px minmax(0,1fr) auto}
+@media(max-width:900px){
+  .panel,.metric{box-shadow:0 8px 22px rgba(0,0,0,.18)!important}
+  .hero-module::before,.hero-module::after{display:none!important}
+}
