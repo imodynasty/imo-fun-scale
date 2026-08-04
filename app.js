@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.52 — Independent Power Rankings + Championship Odds Models */
+/* IMO DYNASTY V3.3.53 — Rebalanced Championship Odds Depth Model */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,h2hHouseMargin:1.05,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -423,7 +423,7 @@ function currentRosterProjectionProfiles(bundle){
     const rosterId=String(m.roster?.roster_id??''),historicalRoster=safeArray(bundle?.rosters).find(r=>String(r.roster_id)===rosterId),roster=isCurrent?(m.roster||historicalRoster||{}):(historicalRoster||m.roster||{}),raw=rosterProjectionRaw(roster,season,fallback);
     return {...m,...raw,assetValue:rosterAssetValueRaw(roster,season,fallback)}
   }),top10Values=rows.map(x=>x.top10),top3Values=rows.map(x=>x.top3);
-  return rows.map(x=>({...x,rosterStrength:minMax(x.top10,top10Values,true),starPower:minMax(x.top3,top3Values,true),rosterStarScore:minMax(x.top10,top10Values,true)*.65+minMax(x.top3,top3Values,true)*.35}))
+  return rows.map(x=>({...x,rosterStrength:minMax(x.top10,top10Values,true),starPower:minMax(x.top3,top3Values,true),rosterStarScore:minMax(x.top10,top10Values,true)*.80+minMax(x.top3,top3Values,true)*.20}))
 }
 function priorSeasonFormRows(bundle){
   const prior=previousCompletedBundle(bundle);if(!prior)return [];
@@ -468,11 +468,11 @@ function seasonQualityRows(bundle,throughWeek=Infinity){
   })
 }
 function preseasonOddsScoreRows(bundle){
-  // Offseason Championship Odds: 50% roster strength/star power,
-  // 35% prior full-year quality, 15% prior final ladder.
+  // Offseason Championship Odds: 45% roster strength/star power,
+  // 40% prior full-year quality, 15% prior final ladder.
   const prior=previousCompletedBundle(bundle),rosterRows=currentRosterProjectionProfiles(bundle),qualityRows=prior?seasonQualityRows(prior,Infinity):[],priorStandings=prior?standingsTable(prior,Infinity):[],teamCount=Math.max(1,priorStandings.length),rosterBy=Object.fromEntries(rosterRows.map(x=>[String(x.id),x])),qualityBy=Object.fromEntries(qualityRows.map(x=>[String(x.id),x])),standingBy=Object.fromEntries(priorStandings.map(x=>[String(x.id),x]));
   return [...state.managers.values()].map(team=>{
-    const roster=rosterBy[String(team.id)],quality=qualityBy[String(team.id)],standing=standingBy[String(team.id)],ladder=standing?(teamCount===1?1:1-(standing.standingRank-1)/(teamCount-1)):.5,rosterStarScore=Number(roster?.rosterStarScore??.5),fullSeasonQuality=Number(quality?.quality??.5),score=rosterStarScore*.50+fullSeasonQuality*.35+ladder*.15;
+    const roster=rosterBy[String(team.id)],quality=qualityBy[String(team.id)],standing=standingBy[String(team.id)],ladder=standing?(teamCount===1?1:1-(standing.standingRank-1)/(teamCount-1)):.5,rosterStarScore=Number(roster?.rosterStarScore??.5),fullSeasonQuality=Number(quality?.quality??.5),score=rosterStarScore*.45+fullSeasonQuality*.40+ladder*.15;
     return {...team,score,rosterStarScore,fullSeasonQuality,ladder,standingRank:standing?.standingRank||0,avg5:0,form:0,streak:0,oddsModel:'offseason',projectionSeason:String(prior?.league?.season||'')}
   }).sort((a,b)=>b.score-a.score||b.rosterStarScore-a.rosterStarScore||a.name.localeCompare(b.name)).map((x,i)=>({...x,rank:i+1}))
 }
