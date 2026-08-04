@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.50 — Simplified Front Office highlights */
+/* IMO DYNASTY V3.3.51 — Offseason Power Rankings + Current-Season Luck */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,h2hHouseMargin:1.05,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -366,7 +366,32 @@ function managerLuckRating(managerId,bundle=state.modelBundle,throughWeek=Infini
 function recentThreePointAverage(managerId,bundle=state.modelBundle,throughWeek=Infinity){const games=(outcomesForBundle(bundle,throughWeek)[String(managerId)]||[]).slice(-3);return games.length?games.reduce((s,g)=>s+g.points,0)/games.length:0}
 function activeTrendBundle(){const current=state.bundles.find(b=>String(b.league?.league_id)===CONFIG.currentLeagueId);if(current&&meaningfulWeeks(current).length)return current;return state.bundles.filter(b=>meaningfulWeeks(b).length).sort((a,b)=>Number(b.league?.season)-Number(a.league?.season))[0]||state.modelBundle}
 function currentRosterPlayerValue(managerId){const manager=state.managers.get(String(managerId)),players=(manager?.roster?.players||[]).map(String);return players.reduce((sum,pid)=>{const avg=playerSeasonAverage(pid,"2025")||playerSeasonAverage(pid,"2026")||0;return sum+playerDynastyValue(pid,avg,Date.now())},0)}
-function preseasonProjectionRows(bundle){const prior=state.bundles.filter(b=>String(b.league?.season)<String(bundle.league?.season)&&meaningfulWeeks(b).length).sort((a,b)=>Number(b.league?.season||0)-Number(a.league?.season||0))[0],current=standingsTable(bundle,Infinity),priorTable=prior?standingsTable(prior,Infinity):[],priorById=Object.fromEntries(priorTable.map(x=>[String(x.id),x])),values=current.map(x=>currentRosterPlayerValue(x.id)),standingsScores=current.map(x=>{const p=priorById[String(x.id)];if(!p)return .5;const n=Math.max(priorTable.length-1,1);return 1-(p.standingRank-1)/n});return current.map((x,i)=>({...x,form:0,avg5:0,ladder:standingsScores[i],score:standingsScores[i]*.45+minMax(values[i],values,true)*.55,projection:true})).sort((a,b)=>b.score-a.score||a.name.localeCompare(b.name)).map((x,i)=>({...x,rank:i+1}))}
+function preseasonProjectionRows(bundle){
+  const prior=state.bundles.filter(b=>String(b.league?.season)<String(bundle.league?.season)&&meaningfulWeeks(b).length).sort((a,b)=>Number(b.league?.season||0)-Number(a.league?.season||0))[0];
+  const current=[...state.managers.values()].map(m=>({...m,wins:0,games:0,pts:0,standingRank:0}));
+  const priorRows=prior?modelRows(prior,Infinity,"power"):[];
+  const priorById=Object.fromEntries(priorRows.map(x=>[String(x.id),x]));
+  const rosterValues=current.map(x=>currentRosterPlayerValue(x.id));
+  const priorAvgValues=priorRows.map(x=>Number(x.avg5||0));
+  return current.map((team,index)=>{
+    const previous=priorById[String(team.id)];
+    const ladder=previous?Number(previous.ladder||0):.5;
+    const form=previous?Number(previous.form||0):.5;
+    const avg5=previous?Number(previous.avg5||0):0;
+    const scoring=minMax(avg5,priorAvgValues,true);
+    const roster=minMax(rosterValues[index],rosterValues,true);
+    const score=priorRows.length?ladder*.35+form*.25+scoring*.20+roster*.20:roster;
+    return {...team,form,avg5,ladder,streak:0,score,projection:true,projectionSeason:String(prior?.league?.season||''),priorStandingRank:previous?.standingRank||null,rosterStrength:roster};
+  }).sort((a,b)=>b.score-a.score||b.rosterStrength-a.rosterStrength||a.name.localeCompare(b.name)).map((x,i)=>({...x,rank:i+1,standingRank:x.priorStandingRank||i+1}));
+}
+function currentSeasonLuckContext(){
+  const current=currentLeagueBundle(),weeks=meaningfulWeeks(current),through=weeks.at(-1)||Infinity;
+  return {bundle:current,weeks,through,ratings:weeks.length?leagueLuckRatings(current,through):{}};
+}
+function powerRowsForDisplay(){
+  const current=currentLeagueBundle(),weeks=meaningfulWeeks(current),through=weeks.at(-1)||Infinity;
+  return {bundle:current,weeks,through,rows:weeks.length?modelRows(current,through,"power"):preseasonProjectionRows(current),isOffseason:weeks.length===0};
+}
 function priceRowsForBundle(bundle,through){
   const isCurrent=String(bundle.league?.league_id)===CONFIG.currentLeagueId,weeks=meaningfulWeeks(bundle),weekCount=weeks.filter(w=>through===Infinity||w<=through).length;
   let rows;
@@ -400,7 +425,27 @@ function prepareOddsMovement(){
   state.oddsMovement={changes};
   try{localStorage.setItem("imoOddsMovementV3",JSON.stringify(state.oddsMovement));localStorage.setItem("imoOddsSnapshotV3",JSON.stringify({savedAt:Date.now(),odds:currentOdds}))}catch(_){ }
 }
-function renderPower(){const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,prior=weeks.length>1?weeks.at(-2):through,p=modelRows(state.modelBundle,through,"power"),priced=priceRows(through),oddsById=Object.fromEntries(priced.map(x=>[String(x.id),x])),oldOdds=Object.fromEntries(priceRows(prior).map(x=>[String(x.id),x])),n=Math.max(p.length-1,1),favouriteId=String([...priced].filter(x=>!x.eliminated).sort((a,b)=>a.odds-b.odds)[0]?.id||""),bottomFour=p.slice(-4),smokeyId=String([...bottomFour].sort((a,b)=>recentThreePointAverage(b.id,state.modelBundle,through)-recentThreePointAverage(a.id,state.modelBundle,through))[0]?.id||"");$("powerRankings").classList.remove("loading");$("powerRankings").innerHTML=p.map((x,i)=>{const oldRank=state.previousPowerRanks[x.id]??x.rank,diff=oldRank-x.rank,arrow=diff>0?`<span class="movement up">▲ ${diff}</span>`:diff<0?`<span class="movement down">▼ ${Math.abs(diff)}</span>`:`<span class="movement flat">—</span>`,hue=140-(140*i/n),m=state.managers.get(String(x.id)),avatar=m?.avatar?`<img src="${esc(m.avatar)}" alt="" loading="lazy">`:`<span>${esc(m?.initials||x.name.slice(0,2).toUpperCase())}</span>`,o=oddsById[String(x.id)]||x,priceMove=state.oddsMovement?.changes?.[String(x.id)],prev=Number(priceMove?.oldOdds),current=Number(priceMove?.newOdds??o.odds),hasMovement=Number.isFinite(prev)&&Number.isFinite(current)&&Math.abs(current-prev)>=.001,delta=hasMovement?current-prev:0,oddsClass=delta<0?'up':delta>0?'down':'flat',moveText=hasMovement?`$${prev.toFixed(2)} → $${current.toFixed(2)}`:`Opening price $${Number(o.odds).toFixed(2)}`,ladderMove=(oldOdds[String(x.id)]?.standingRank||o.standingRank)-o.standingRank,ladderText=ladderMove>0?`Moved up to ${ordinal(o.standingRank)} on ladder`:ladderMove<0?`Dropped to ${ordinal(o.standingRank)} on ladder`:`Currently ${ordinal(o.standingRank)} on ladder`,streak=o.streak>=1?`Won last ${o.streak}`:`Form: ${Math.round(o.form*5)} wins from last 5`,temperature=Number(o.avg5||0)<220?'❄️':'🔥',luck=managerLuckRating(x.id,state.modelBundle,through),luckText=`${luck>=0?'+':''}${luck.toFixed(1)} wins vs expected`,tag=String(x.id)===favouriteId?'<span class="market-tag favourite-tag">Favourite</span>':String(x.id)===smokeyId?'<span class="market-tag smokey-tag">Smokey</span>':'';return `<details class="power-odds-row ${x.rank===1?'featured-number-one':''}" style="--rank-colour:hsl(${hue} 85% 52%)"><summary><b class="power-rank-number">${x.rank}</b><span class="power-avatar">${avatar}</span><span class="power-copy"><button class="power-name manager-profile-link" type="button" data-manager-id="${esc(x.id)}">${esc(x.name)}</button><small>View manager profile</small></span><span class="power-market-stack"><span class="power-odds-price">${championshipOddsLabel(o)}</span>${tag}</span>${arrow}<span class="power-chevron">⌄</span></summary><div class="power-detail"><div>${o.streak>=3?'🔥':o.streak?'✅':'⚪'} ${streak}</div><div>${temperature} Averaging ${Number(o.avg5||0).toFixed(1)} over last five games</div><div>${ladderMove<0?'⬇':'⬆'} ${ladderText}</div><div class="odds-move ${oddsClass}">${moveText}</div><div class="luck-rating ${luck>0.5?'lucky':luck<-0.5?'unlucky':'neutral'}">🍀 Luck rating: ${luckText}</div></div></details>`}).join("")}
+function renderPower(){
+  const display=powerRowsForDisplay(),p=display.rows,through=display.through,isOffseason=display.isOffseason;
+  const priced=priceRows(through),oddsById=Object.fromEntries(priced.map(x=>[String(x.id),x]));
+  const weeks=display.weeks,prior=weeks.length>1?weeks.at(-2):through,oldOdds=Object.fromEntries(priceRows(prior).map(x=>[String(x.id),x]));
+  const n=Math.max(p.length-1,1),favouriteId=String([...priced].filter(x=>!x.eliminated).sort((a,b)=>a.odds-b.odds)[0]?.id||"");
+  const bottomFour=p.slice(-4),smokeyId=isOffseason?"":String([...bottomFour].sort((a,b)=>recentThreePointAverage(b.id,display.bundle,through)-recentThreePointAverage(a.id,display.bundle,through))[0]?.id||"");
+  const luckContext=currentSeasonLuckContext();
+  $("powerRankings").classList.remove("loading");
+  $("powerRankings").innerHTML=p.map((x,i)=>{
+    const oldRank=state.previousPowerRanks[x.id]??x.rank,diff=oldRank-x.rank,arrow=diff>0?`<span class="movement up">▲ ${diff}</span>`:diff<0?`<span class="movement down">▼ ${Math.abs(diff)}</span>`:`<span class="movement flat">—</span>`;
+    const hue=140-(140*i/n),m=state.managers.get(String(x.id)),avatar=m?.avatar?`<img src="${esc(m.avatar)}" alt="" loading="lazy">`:`<span>${esc(m?.initials||x.name.slice(0,2).toUpperCase())}</span>`,o=oddsById[String(x.id)]||x;
+    const priceMove=state.oddsMovement?.changes?.[String(x.id)],prev=Number(priceMove?.oldOdds),current=Number(priceMove?.newOdds??o.odds),hasMovement=Number.isFinite(prev)&&Number.isFinite(current)&&Math.abs(current-prev)>=.001,delta=hasMovement?current-prev:0,oddsClass=delta<0?'up':delta>0?'down':'flat',moveText=hasMovement?`$${prev.toFixed(2)} → $${current.toFixed(2)}`:`Opening price $${Number(o.odds).toFixed(2)}`;
+    const ladderMove=(oldOdds[String(x.id)]?.standingRank||o.standingRank)-o.standingRank;
+    const ladderText=isOffseason?(x.priorStandingRank?`Finished ${ordinal(x.priorStandingRank)} in ${x.projectionSeason}`:'Offseason roster projection'):ladderMove>0?`Moved up to ${ordinal(o.standingRank)} on ladder`:ladderMove<0?`Dropped to ${ordinal(o.standingRank)} on ladder`:`Currently ${ordinal(o.standingRank)} on ladder`;
+    const streak=isOffseason?'Offseason projection':o.streak>=1?`Won last ${o.streak}`:`Form: ${Math.round(o.form*5)} wins from last 5`;
+    const scoringText=isOffseason?`${x.projectionSeason||'Last season'} form + current roster strength`:`Averaging ${Number(o.avg5||0).toFixed(1)} over last five games`;
+    const luck=Number(luckContext.ratings?.[String(x.id)]||0),luckText=luckContext.weeks.length?`${luck>=0?'+':''}${luck.toFixed(1)} wins vs expected`:`${String(luckContext.bundle?.league?.season||'Current')} season not started`;
+    const tag=String(x.id)===favouriteId?'<span class="market-tag favourite-tag">Favourite</span>':String(x.id)===smokeyId?'<span class="market-tag smokey-tag">Smokey</span>':'';
+    return `<details class="power-odds-row ${x.rank===1?'featured-number-one':''}" style="--rank-colour:hsl(${hue} 85% 52%)"><summary><b class="power-rank-number">${x.rank}</b><span class="power-avatar">${avatar}</span><span class="power-copy"><button class="power-name manager-profile-link" type="button" data-manager-id="${esc(x.id)}">${esc(x.name)}</button><small>View manager profile</small></span><span class="power-market-stack"><span class="power-odds-price">${championshipOddsLabel(o)}</span>${tag}</span>${arrow}<span class="power-chevron">⌄</span></summary><div class="power-detail"><div>${isOffseason?'🗓️':'✅'} ${streak}</div><div>${isOffseason?'📊':'🔥'} ${scoringText}</div><div>${isOffseason?'🏁':ladderMove<0?'⬇':'⬆'} ${ladderText}</div><div class="odds-move ${oddsClass}">${moveText}</div><div class="luck-rating ${luckContext.weeks.length?(luck>0.5?'lucky':luck<-0.5?'unlucky':'neutral'):'neutral'}">🍀 Luck rating: ${luckText}</div></div></details>`;
+  }).join("")
+}
 function roundFive(x){return Math.round(x*20)/20}
 function priceRows(through){const current=state.bundles.find(b=>String(b.league?.league_id)===CONFIG.currentLeagueId);return priceRowsForBundle(current||state.modelBundle,through)}
 function renderOdds(){}
