@@ -542,7 +542,7 @@ function renderPower(){
   const priced=priceRows(through),oddsById=Object.fromEntries(priced.map(x=>[String(x.id),x]));
   const weeks=display.weeks,prior=weeks.length>1?weeks.at(-2):through,oldOdds=Object.fromEntries(priceRows(prior).map(x=>[String(x.id),x]));
   const n=Math.max(p.length-1,1),favouriteId=String([...priced].filter(x=>!x.eliminated).sort((a,b)=>a.odds-b.odds)[0]?.id||"");
-  const bottomFour=p.slice(-4),smokeyId=isOffseason?"":String([...bottomFour].sort((a,b)=>recentThreePointAverage(b.id,display.bundle,through)-recentThreePointAverage(a.id,display.bundle,through))[0]?.id||"");
+  const bottomFour=p.slice(-4),smokeyPool=bottomFour.filter(x=>String(x.id)!==favouriteId),smokeyId=String([...smokeyPool].sort((a,b)=>((Number(b.avg3)||0)-(Number(b.avg5)||0))-((Number(a.avg3)||0)-(Number(a.avg5)||0))||recentThreePointAverage(b.id,display.bundle,through)-recentThreePointAverage(a.id,display.bundle,through))[0]?.id||"");
   const luckContext=currentSeasonLuckContext();
   $("powerRankings").classList.remove("loading");
   $("powerRankings").innerHTML=p.map((x,i)=>{
@@ -2673,6 +2673,19 @@ async function loadSeasonTotalAverages(){
   return results;
 }
 
+async function loadCoreSeason(id){
+  const [league,users,rosters]=await Promise.all([
+    getJSON(`${CONFIG.api}/league/${id}`,true),
+    getJSON(`${CONFIG.api}/league/${id}/users`,true),
+    getJSON(`${CONFIG.api}/league/${id}/rosters`,true)
+  ]);
+  if(!league||!users||!rosters)return null;
+  const userById=Object.fromEntries(users.map(u=>[String(u.user_id),u]));
+  const ownerByRoster={},managerNameMap={};
+  rosters.forEach(r=>{if(r.owner_id!=null){ownerByRoster[String(r.roster_id)]=String(r.owner_id);const u=userById[String(r.owner_id)]||{};managerNameMap[String(r.owner_id)]=u.metadata?.team_name||u.display_name||`Team ${r.roster_id}`}});
+  return {league,users,rosters,trades:[],matchups:[],draftPickMap:{},draftSelections:[],allDraftSelections:[],ownerByRoster,managerNameMap,tradedPicks:[],winnersBracket:[]};
+}
+
 async function loadSeason(id){
   const [league,users,rosters,drafts,tradedPicks,winnersBracket]=await Promise.all([
     getJSON(`${CONFIG.api}/league/${id}`,true),getJSON(`${CONFIG.api}/league/${id}/users`,true),
@@ -2862,33 +2875,52 @@ function launchGlobalSearchEntity(action,id){if(action==='trade'){openGlobalTrad
 
 async function load(){
   const status=$("statusText");
-  if(status)status.textContent='Connecting to Sleeper…';
-  // Keep the ticker visible while live data is loading; richer stories replace the fallback after renderAll().
+  if(status)status.textContent='Loading league shell…';
   safeRender('ticker bootstrap',renderTicker);
   try{
-    const [bundles,players]=await Promise.all([
-      Promise.all(CONFIG.leagueIds.map(loadSeason)),
-      getJSON(`${CONFIG.api}/players/nba`,true)
+    // Phase 1: fetch only the data required to make the site interactive.
+    // Historical weeks, transactions and exact season totals hydrate afterward.
+    const [core,players,sportState]=await Promise.all([
+      loadCoreSeason(CONFIG.currentLeagueId),
+      getJSON(`${CONFIG.api}/players/nba`,true),
+      getJSON(`${CONFIG.api}/state/nba`,true)
     ]);
-    const valid=(bundles||[]).filter(Boolean);
-    const cur=valid.find(x=>String(x.league.league_id)===CONFIG.currentLeagueId)||valid[0];
-    if(!cur)throw new Error('No Sleeper league data could be loaded');
+    if(!core)throw new Error('No Sleeper league data could be loaded');
     state.exactSeasonAverages={};
-    state.sportState=await getJSON(`${CONFIG.api}/state/nba`,true);
-    state.bundles=valid;
+    state.sportState=sportState;
+    state.bundles=[core];
+    state.league=core.league;
+    state.currentUsers=core.users||[];
+    state.currentRosters=core.rosters||[];
+    state.players=players||{};
+    state.draftPickMap={};
+    state.draftSelections=[];
+    state.allDraftSelections=[];
+    state.trades=[];
+    buildManagers();
+    prepareModels();
+    resetComputedCaches();
+    renderAll();
+    document.documentElement.classList.add('imo-interactive');
+    if(status)status.textContent='Interactive · loading league history…';
+
+    // Yield so the first screen paints and taps/clicks are handled before the
+    // heavier historical requests and calculations begin.
+    await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
+
+    const valid=(await Promise.all(CONFIG.leagueIds.map(loadSeason))).filter(Boolean);
+    const cur=valid.find(x=>String(x.league.league_id)===CONFIG.currentLeagueId)||valid[0]||core;
+    state.bundles=valid.length?valid:[core];
     state.league=cur.league;
     state.currentUsers=cur.users||[];
     state.currentRosters=cur.rosters||[];
-    state.players=players||{};
-    state.draftPickMap=Object.assign({},...valid.map(b=>b.draftPickMap||{}));
-    state.draftSelections=valid.flatMap(b=>b.draftSelections||[]);
-    state.allDraftSelections=valid.flatMap(b=>b.allDraftSelections||[]);
+    state.draftPickMap=Object.assign({},...state.bundles.map(b=>b.draftPickMap||{}));
+    state.draftSelections=state.bundles.flatMap(b=>b.draftSelections||[]);
+    state.allDraftSelections=state.bundles.flatMap(b=>b.allDraftSelections||[]);
     buildManagers();
     const unique=new Map();
-    valid.flatMap(x=>safeArray(x?.trades)).filter(Boolean).forEach(raw=>{const t={...raw,adds:safeObject(raw?.adds),drops:safeObject(raw?.drops),draft_picks:safeArray(raw?.draft_picks),manager_ids:safeArray(raw?.manager_ids),roster_ids:safeArray(raw?.roster_ids),roster_owner_map:safeObject(raw?.roster_owner_map),manager_name_map:safeObject(raw?.manager_name_map)};unique.set(t.transaction_id||`${t.league_id||'league'}-${t.created||0}`,t)});
+    state.bundles.flatMap(x=>safeArray(x?.trades)).filter(Boolean).forEach(raw=>{const t={...raw,adds:safeObject(raw?.adds),drops:safeObject(raw?.drops),draft_picks:safeArray(raw?.draft_picks),manager_ids:safeArray(raw?.manager_ids),roster_ids:safeArray(raw?.roster_ids),roster_owner_map:safeObject(raw?.roster_owner_map),manager_name_map:safeObject(raw?.manager_name_map)};unique.set(t.transaction_id||`${t.league_id||'league'}-${t.created||0}`,t)});
     state.trades=[...unique.values()].filter(Boolean).sort((a,b)=>(Number(b?.created)||0)-(Number(a?.created)||0));
-    if(status)status.textContent='Loading exact Sleeper season averages…';
-    await loadSeasonTotalAverages();
     prepareModels();
     state.globalSearchIndex=null;
     resetComputedCaches();
@@ -2896,23 +2928,33 @@ async function load(){
     state.profilePrewarmQueued=false;
     renderAll();
     setupHeadToHeadRefresh();
-    if(status)status.textContent=`Live · ${valid.length} seasons loaded`;
+    if(status)status.textContent=`Live · ${state.bundles.length} seasons loaded · refining player averages…`;
+
+    // Exact totals are useful, but must never block first interaction.
+    loadSeasonTotalAverages().then(()=>{
+      prepareModels();
+      state.globalSearchIndex=null;
+      resetComputedCaches();
+      prepareOddsMovement();
+      renderAll();
+      const averageCount=Object.values(state.seasonTotalMeta||{}).reduce((sum,season)=>sum+Object.keys(season||{}).length,0);
+      if(status)status.textContent=`Live · ${state.bundles.length} seasons loaded · ${averageCount} exact player averages`;
+    }).catch(error=>{
+      console.warn('Exact Sleeper season averages unavailable:',error);
+      if(status)status.textContent=`Live · ${state.bundles.length} seasons loaded`;
+    });
+
     const runWhenIdle=(fn,timeout=2500)=>{
       if('requestIdleCallback' in window)requestIdleCallback(fn,{timeout});
       else setTimeout(fn,900);
     };
     runWhenIdle(()=>loadTickerGameLogs().catch(error=>console.warn("Ticker game logs unavailable:",error)),1800);
-    const averageCount=Object.values(state.seasonTotalMeta||{}).reduce((sum,season)=>sum+Object.keys(season||{}).length,0);
-    if(status)status.textContent=`Live · ${valid.length} seasons loaded · ${averageCount} exact player averages`;
   }catch(e){
     console.error('IMO DYNASTY load failed:',e);
     if(status)status.textContent='Could not load Sleeper data';
-    // Resolve loading states even when one or more upstream requests fail.
     safeRender('recent trades fallback',renderRecent);
     safeRender('biggest trades fallback',renderBiggestTrades);
     safeRender('ticker fallback',renderTicker);
-  }finally{
-    // Automatic loading only; manual refresh control intentionally removed.
   }
 }
 document.querySelectorAll('.active-window-btn').forEach(b=>b.addEventListener('click',()=>{state.activeWindow=b.dataset.activeWindow;document.querySelectorAll('.active-window-btn').forEach(x=>x.classList.toggle('active',x===b));renderLeaderboard()}));$("biggestTradesToggle")?.addEventListener('click',()=>{state.biggestTradesExpanded=!state.biggestTradesExpanded;renderBiggestTrades()});

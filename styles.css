@@ -2233,3 +2233,8 @@ details > summary { touch-action: manipulation; }
   .manager-profile-tabs-fast{overflow-x:auto;scrollbar-width:none}
   .manager-profile-tabs-fast::-webkit-scrollbar{display:none}
 }
+
+/* V3.3.59 — fast time-to-interactive */
+html:not(.imo-interactive) .manager-profile-link,html:not(.imo-interactive) .player-history-link{cursor:pointer}
+.manager-profile-link,.player-history-link,.power-name{touch-action:manipulation}
+@media (prefers-reduced-motion:no-preference){.manager-profile-link:active,.player-history-link:active,.power-name:active{transform:scale(.98)}}
