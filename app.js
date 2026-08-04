@@ -233,8 +233,13 @@ function gradeFromPoints(points,m){
   if(points>=5)return'C';
   if(points>=4)return'D+';
   if(points>=3)return'D';
-  if(m.edge<=-48&&m.net<=-25&&!m.clearCentrepiece)return'FLEECE ALERT 🚨';
-  return'F';
+  // F and Fleece Alert are reserved for unmistakable robberies. Ordinary bad
+  // trades now bottom out at D so the labels retain real meaning.
+  const trueFleece=!m.clearCentrepiece&&totalDealValue>=35&&m.edge<=-70&&m.net<=-40;
+  const trueFail=!m.clearCentrepiece&&totalDealValue>=25&&m.edge<=-58&&m.net<=-30;
+  if(trueFleece)return'FLEECE ALERT 🚨';
+  if(trueFail)return'F';
+  return'D';
 }
 function stableIndex(key,length){let h=2166136261;for(const c of String(key)){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return Math.abs(h>>>0)%Math.max(1,length)}
 const TRADE_COMMENTS={
