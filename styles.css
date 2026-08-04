@@ -2178,3 +2178,42 @@ body.manager-picks-open{overflow:hidden}
 
 
 /* V3.3.54 — championship odds weighting rebalance is calculation-only. */
+
+/* V3.3.56 responsiveness pass */
+main > section.panel,
+.dashboard-grid > section.panel,
+.manager-profile-card,
+.manager-profile-tab-panel.active {
+  contain: layout style paint;
+}
+
+/* Let the browser skip layout/paint work for modules well below the viewport. */
+.dashboard-grid > section.panel,
+.biggest-trades-panel,
+.heatmap-panel,
+.history-lightweight-panel,
+.voting-panel {
+  content-visibility: auto;
+  contain-intrinsic-size: 600px;
+}
+
+.manager-profile-tab-panel:not(.active) {
+  content-visibility: hidden;
+}
+
+.manager-profile-sheet,
+.player-history-sheet,
+.pick-history-sheet,
+.trade-return-tree-sheet {
+  will-change: transform;
+}
+
+/* Avoid expensive smooth layout work while large lists are expanding. */
+details > summary { touch-action: manipulation; }
+.profile-roster-more,
+.profile-per36-more,
+.history-dropdown,
+.trade-centre-recent-list details,
+.power-odds-row {
+  contain: layout style;
+}

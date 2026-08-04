@@ -2057,7 +2057,8 @@ function queueManagerProfilePrewarm(managerId){
   managerProfilePrewarmIds.add(id);managerProfilePrewarmQueue.push(id);drainManagerProfilePrewarmQueue();
 }
 function observeManagerProfileLinks(){
-  if(!('IntersectionObserver' in window)){document.querySelectorAll('.manager-profile-link').forEach(link=>queueManagerProfilePrewarm(link.dataset.managerId));return}
+  if(!matchMedia("(pointer:fine)").matches)return;
+  if(!('IntersectionObserver' in window)){return}
   if(!managerProfileObserver)managerProfileObserver=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting){queueManagerProfilePrewarm(entry.target.dataset.managerId);managerProfileObserver.unobserve(entry.target)}}),{rootMargin:'500px 0px'});
   document.querySelectorAll('.manager-profile-link').forEach(link=>{if(!link.dataset.profileObserved){link.dataset.profileObserved='1';managerProfileObserver.observe(link)}})
 }
@@ -2094,7 +2095,12 @@ async function openManagerProfile(managerId,pushState=true){
     const manager=state.managers.get(id),avatar=manager?.avatar?`<img src="${esc(manager.avatar)}" alt="" loading="eager">`:`<span>${esc(manager?.initials||'GM')}</span>`;
     content.innerHTML=`<div class="manager-profile-loading manager-profile-loading-fast"><div class="manager-loading-identity">${avatar}<div><small>MANAGER PROFILE</small><strong>${esc(manager?.name||'Loading profile')}</strong></div></div><span></span><strong>Loading live profile…</strong><small>Current roster and league history are being assembled.</small></div>`;
     let build=state.profileBuilds.get(key);
-    if(!build){build=Promise.resolve().then(()=>cachedManagerProfileHTML(id));state.profileBuilds.set(key,build);build.finally(()=>state.profileBuilds.delete(key))}
+    if(!build){
+      // Give the browser two paint opportunities so the modal opens instantly before
+      // the heavier profile HTML is assembled on the main thread.
+      build=new Promise((resolve,reject)=>requestAnimationFrame(()=>requestAnimationFrame(()=>setTimeout(()=>{try{resolve(cachedManagerProfileHTML(id))}catch(error){reject(error)}},0))));
+      state.profileBuilds.set(key,build);build.finally(()=>state.profileBuilds.delete(key));
+    }
     build.then(html=>{if(modal.dataset.managerId!==id)return;content.innerHTML=html||'<div class="profile-empty">No profile data is available.</div>';bindSparklineTooltips(content);initialiseManagerProfileTab()}).catch(error=>{console.error('Manager profile failed:',error);if(modal.dataset.managerId===id){const manager=state.managers.get(id);content.innerHTML=`<header class="manager-profile-hero"><div class="manager-profile-avatar">${manager?.avatar?`<img src="${esc(manager.avatar)}" alt="">`:esc(manager?.initials||'GM')}</div><div class="manager-profile-hero-copy"><span class="eyebrow">TEAM PROFILE</span><h2>${esc(manager?.name||'Manager')}</h2><p>The full profile encountered a data issue. Core roster and trade data remain available below.</p></div></header><section class="manager-profile-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">CURRENT TEAM</span><h3>Roster</h3></div></div><div class="profile-roster-list">${safeArray(manager?.roster?.players).map(pid=>`<div class="profile-roster-row">${playerLink(pid,playerName(pid))}</div>`).join('')||'<div class="profile-empty">No roster data available.</div>'}</div></section><section class="manager-profile-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">TRANSACTIONS</span><h3>Recent Trades</h3></div></div><div class="profile-trades-list">${safeArray(state.trades).filter(t=>mids(t).includes(id)).slice(0,5).map(t=>managerTradeSummaryHTML(t,id)).join('')||'<div class="profile-empty">No trades found.</div>'}</div></section>`}});
   }
   const hydrationKey=`hydrate|${id}|${requestedSeason}`;
@@ -2312,23 +2318,38 @@ function openMockDraftToOverall(overall){
 function closeMockDraft(){const modal=$("mockDraftModal");modal?.classList.remove('open');modal?.setAttribute('aria-hidden','true');document.body.classList.remove('mock-draft-open')}
 
 function safeRender(name,fn){try{fn()}catch(error){console.error(`Failed to render ${name}:`,error)}}
+function scheduleRenderChunks(chunks){
+  let index=0;
+  const run=()=>{
+    const started=performance.now();
+    while(index<chunks.length&&performance.now()-started<10){
+      const [name,fn]=chunks[index++];safeRender(name,fn);
+    }
+    if(index<chunks.length)requestAnimationFrame(run);
+    else setTimeout(()=>{if(matchMedia("(pointer:fine)").matches)observeManagerProfileLinks()},2800);
+  };
+  requestAnimationFrame(run);
+}
 function renderAll(){
   ensureManagerGradeStyles();
-  safeRender("leaderboard",renderLeaderboard);
+  // Paint the most visible homepage modules first, then spread the lower-page work
+  // across animation frames so scrolling, taps and expansion controls stay responsive.
   safeRender("power rankings",renderPower);
-  safeRender("odds",renderOdds);
   safeRender("trade of the week",renderTradeWeek);
-  safeRender("trade partners",renderHeatmap);
-  safeRender("player form",renderPlayerForm);
-  safeRender("most traded players",renderBlock);
-  safeRender("most waived players",renderWaivedBlock);
-  safeRender("head to head",renderHeadToHead);
-  safeRender("league records",renderRecords);
   safeRender("recent trades",renderRecent);
-  safeRender("biggest trades",renderBiggestTrades);
-  safeRender("voting",renderVoting);
+  safeRender("head to head",renderHeadToHead);
   safeRender("ticker",renderTicker);
-  requestAnimationFrame(observeManagerProfileLinks);
+  scheduleRenderChunks([
+    ["leaderboard",renderLeaderboard],
+    ["trade partners",renderHeatmap],
+    ["player form",renderPlayerForm],
+    ["league records",renderRecords],
+    ["most traded players",renderBlock],
+    ["most waived players",renderWaivedBlock],
+    ["biggest trades",renderBiggestTrades],
+    ["voting",renderVoting],
+    ["odds",renderOdds]
+  ]);
 }
 
 function relevantPlayerIds(){
