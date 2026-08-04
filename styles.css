@@ -2168,3 +2168,10 @@ body.manager-picks-open{overflow:hidden}
   .trade-centre-recent-list .recent-trade-toggle{grid-column:2;grid-row:1}
   .trade-centre-recent-list>details[open] .trade-detail-body{grid-template-columns:1fr}
 }
+\n\n/* V3.3.52 — keep Power Ranking movement visible in the collapsed mobile row */
+@media(max-width:650px){
+  .power-odds-row>summary{grid-template-columns:28px 34px minmax(0,1fr) 60px 30px 14px!important;gap:6px!important}
+  .power-odds-row>summary .movement{display:block!important;min-width:0!important;width:30px;text-align:center;font-size:8px;white-space:nowrap}
+  .power-odds-row>summary .movement.flat{opacity:.72}
+  .power-market-stack{min-width:0}
+}

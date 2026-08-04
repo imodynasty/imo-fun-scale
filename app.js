@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.51 — Offseason Power Rankings + Current-Season Luck */
+/* IMO DYNASTY V3.3.52 — Independent Power Rankings + Championship Odds Models */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,h2hHouseMargin:1.05,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -54,8 +54,32 @@ function selectModelBundle(){const current=state.bundles.find(b=>String(b.league
 function matchupRows(bundle,throughWeek=Infinity){return safeArray(bundle?.matchups).filter(x=>Number(x?.week)<=throughWeek&&Number.isFinite(Number(x?.points)))}
 function outcomesForBundle(bundle,throughWeek=Infinity){const rows=matchupRows(bundle,throughWeek),byWeek={};rows.forEach(x=>(byWeek[x.week]??=[]).push(x));const out={};Object.values(byWeek).forEach(weekRows=>{const groups={};weekRows.forEach(x=>{if(x.matchup_id!=null)(groups[x.matchup_id]??=[]).push(x)});Object.values(groups).forEach(g=>{if(g.length<2)return;const scores=g.map(x=>Number(x.points));if(scores.some(x=>!Number.isFinite(x))||scores.every(x=>x===0))return;const max=Math.max(...scores),ties=scores.filter(x=>x===max).length;g.forEach((x,i)=>{const owner=bundle.ownerByRoster[String(x.roster_id)];if(!owner)return;(out[owner]??=[]).push({week:x.week,points:scores[i],result:scores[i]===max?(ties>1?.5:1):0})})})});return out}
 function minMax(value,values,higher=true){const nums=values.filter(Number.isFinite);if(!nums.length)return .5;const min=Math.min(...nums),max=Math.max(...nums);if(max===min)return .5;const n=(value-min)/(max-min);return higher?n:1-n}
-function standingsTable(bundle,throughWeek=Infinity){const outcomes=outcomesForBundle(bundle,throughWeek);return [...state.managers.values()].map(m=>{const games=outcomes[m.id]||[],wins=games.reduce((s,g)=>s+g.result,0),pts=games.reduce((s,g)=>s+g.points,0);return {...m,wins,games:games.length,pts}}).sort((a,b)=>b.wins-a.wins||b.pts-a.pts||a.name.localeCompare(b.name)).map((x,i)=>({...x,standingRank:i+1}))}
-function modelRows(bundle,throughWeek=Infinity,mode="power"){const standings=standingsTable(bundle,throughWeek),outcomes=outcomesForBundle(bundle,throughWeek),teamCount=Math.max(standings.length,1);const raw=standings.map(team=>{const games=outcomes[team.id]||[],formN=mode==="odds"?5:3,recent=games.slice(-formN),last5=games.slice(-5),form=recent.length?recent.reduce((s,g)=>s+g.result,0)/recent.length:0,avg5=last5.length?last5.reduce((s,g)=>s+g.points,0)/last5.length:0,ladder=teamCount===1?1:1-(team.standingRank-1)/(teamCount-1),streak=winningStreak(games);return {...team,form,avg5,ladder,streak}});const avgs=raw.map(x=>x.avg5);return raw.map(x=>{const avgNorm=minMax(x.avg5,avgs,true),score=mode==="odds"?x.form*.50+avgNorm*.25+x.ladder*.25:x.ladder*.35+x.form*.35+avgNorm*.30;return {...x,score}}).sort((a,b)=>b.score-a.score||b.avg5-a.avg5||a.name.localeCompare(b.name)).map((x,i)=>({...x,rank:i+1}))}
+function bundleOwnerKeyForManager(bundle,managerId){
+  const id=String(managerId),rosterId=state.managers.get(id)?.roster?.roster_id,owner=rosterId!=null?bundle?.ownerByRoster?.[String(rosterId)]:null;
+  return String(owner??id)
+}
+function standingsTable(bundle,throughWeek=Infinity){
+  const outcomes=outcomesForBundle(bundle,throughWeek);
+  return [...state.managers.values()].map(m=>{
+    const sourceId=bundleOwnerKeyForManager(bundle,m.id),games=outcomes[sourceId]||outcomes[m.id]||[],wins=games.reduce((s,g)=>s+g.result,0),pts=games.reduce((s,g)=>s+g.points,0);
+    return {...m,sourceId,wins,games:games.length,pts}
+  }).sort((a,b)=>b.wins-a.wins||b.pts-a.pts||a.name.localeCompare(b.name)).map((x,i)=>({...x,standingRank:i+1}))
+}
+function modelRows(bundle,throughWeek=Infinity,mode="power"){
+  // Power Rankings are intentionally independent from Championship Odds.
+  // In season: 40% last-five scoring, 35% last-three form, 25% ladder.
+  if(mode==="odds")return liveChampionshipScoreRows(bundle,throughWeek);
+  const standings=standingsTable(bundle,throughWeek),outcomes=outcomesForBundle(bundle,throughWeek),teamCount=Math.max(standings.length,1);
+  const raw=standings.map(team=>{
+    const games=outcomes[team.sourceId]||outcomes[team.id]||[],recent=games.slice(-3),last5=games.slice(-5),form=recent.length?recent.reduce((s,g)=>s+g.result,0)/recent.length:0,avg5=last5.length?last5.reduce((s,g)=>s+g.points,0)/last5.length:0,ladder=teamCount===1?1:1-(team.standingRank-1)/(teamCount-1),streak=winningStreak(games);
+    return {...team,form,avg5,ladder,streak,recentGames:recent.length,lastFiveGames:last5.length}
+  });
+  const avgs=raw.map(x=>x.avg5);
+  return raw.map(x=>{
+    const recentScoring=minMax(x.avg5,avgs,true),score=recentScoring*.40+x.form*.35+x.ladder*.25;
+    return {...x,recentScoring,score,powerModel:'in-season'}
+  }).sort((a,b)=>b.score-a.score||b.avg5-a.avg5||a.name.localeCompare(b.name)).map((x,i)=>({...x,rank:i+1}))
+}
 function winningStreak(games){let n=0;for(let i=games.length-1;i>=0;i--){if(games[i].result===1)n++;else break}return n}
 function calculatedPlayerAverages(bundle,throughWeek=Infinity){const sums={},games={};matchupRows(bundle,throughWeek).forEach(row=>Object.entries(row.players_points||{}).forEach(([id,v])=>{const pts=Number(v);if(!Number.isFinite(pts)||pts<=0)return;sums[id]=(sums[id]||0)+pts;games[id]=(games[id]||0)+1}));return Object.fromEntries(Object.keys(sums).map(id=>[id,games[id]?sums[id]/games[id]:0]))}
 function exactAverageMap(season){return state.exactSeasonAverages?.[String(season)]||{}}
@@ -365,24 +389,101 @@ function leagueLuckRatings(bundle=state.modelBundle,throughWeek=Infinity){
 function managerLuckRating(managerId,bundle=state.modelBundle,throughWeek=Infinity){return Number(leagueLuckRatings(bundle,throughWeek)[String(managerId)]||0)}
 function recentThreePointAverage(managerId,bundle=state.modelBundle,throughWeek=Infinity){const games=(outcomesForBundle(bundle,throughWeek)[String(managerId)]||[]).slice(-3);return games.length?games.reduce((s,g)=>s+g.points,0)/games.length:0}
 function activeTrendBundle(){const current=state.bundles.find(b=>String(b.league?.league_id)===CONFIG.currentLeagueId);if(current&&meaningfulWeeks(current).length)return current;return state.bundles.filter(b=>meaningfulWeeks(b).length).sort((a,b)=>Number(b.league?.season)-Number(a.league?.season))[0]||state.modelBundle}
-function currentRosterPlayerValue(managerId){const manager=state.managers.get(String(managerId)),players=(manager?.roster?.players||[]).map(String);return players.reduce((sum,pid)=>{const avg=playerSeasonAverage(pid,"2025")||playerSeasonAverage(pid,"2026")||0;return sum+playerDynastyValue(pid,avg,Date.now())},0)}
+function previousCompletedBundle(bundle){
+  const season=Number(bundle?.league?.season||0);
+  return state.bundles.filter(b=>Number(b.league?.season||0)<season&&meaningfulWeeks(b).length).sort((a,b)=>Number(b.league?.season||0)-Number(a.league?.season||0))[0]||null
+}
+function rookieProjectionValue(playerId){
+  const id=String(playerId),selection=[...safeArray(state.allDraftSelections)].filter(x=>x?.isRookieDraft&&String(x.playerId)===id).sort((a,b)=>Number(b.season||0)-Number(a.season||0)||Number(b.created||0)-Number(a.created||0))[0];
+  if(!selection)return 0;
+  const overall=Number(selection.overallPick||selection.pickNo||0),round=Number(selection.round||0);
+  if(overall>=1&&overall<=16)return Math.max(5,27.5-(overall-1)*1.5);
+  return fixedPickValue(round)
+}
+function projectedPlayerAverage(playerId,primarySeason,fallbackSeason){
+  const id=String(playerId),primary=Number(playerSeasonAverage(id,String(primarySeason))||seasonAverageMap(String(primarySeason))?.[id]||0);
+  if(primary>0)return primary;
+  const fallback=Number(playerSeasonAverage(id,String(fallbackSeason))||seasonAverageMap(String(fallbackSeason))?.[id]||0);
+  if(fallback>0)return fallback;
+  const latest=Number(latestKnownAverage(id)||0);
+  return latest>0?latest:rookieProjectionValue(id)
+}
+function rosterProjectionRaw(roster,primarySeason,fallbackSeason){
+  const values=safeArray(roster?.players).map(String).map(pid=>projectedPlayerAverage(pid,primarySeason,fallbackSeason)).filter(v=>Number.isFinite(v)&&v>0).sort((a,b)=>b-a),top10=values.slice(0,10),top3=values.slice(0,3);
+  return {top10:top10.reduce((a,b)=>a+b,0),top3:top3.reduce((a,b)=>a+b,0),playerCount:values.length}
+}
+function rosterAssetValueRaw(roster,primarySeason,fallbackSeason){
+  return safeArray(roster?.players).map(String).reduce((sum,pid)=>{
+    const average=projectedPlayerAverage(pid,primarySeason,fallbackSeason),value=average>0?playerDynastyValue(pid,average,Date.now()):rookieProjectionValue(pid);
+    return sum+(Number(value)||0)
+  },0)
+}
+function currentRosterProjectionProfiles(bundle){
+  const season=String(bundle?.league?.season||'2026'),prior=previousCompletedBundle(bundle),fallback=String(prior?.league?.season||Number(season)-1),isCurrent=String(bundle?.league?.league_id||'')===String(CONFIG.currentLeagueId),rows=[...state.managers.values()].map(m=>{
+    const rosterId=String(m.roster?.roster_id??''),historicalRoster=safeArray(bundle?.rosters).find(r=>String(r.roster_id)===rosterId),roster=isCurrent?(m.roster||historicalRoster||{}):(historicalRoster||m.roster||{}),raw=rosterProjectionRaw(roster,season,fallback);
+    return {...m,...raw,assetValue:rosterAssetValueRaw(roster,season,fallback)}
+  }),top10Values=rows.map(x=>x.top10),top3Values=rows.map(x=>x.top3);
+  return rows.map(x=>({...x,rosterStrength:minMax(x.top10,top10Values,true),starPower:minMax(x.top3,top3Values,true),rosterStarScore:minMax(x.top10,top10Values,true)*.65+minMax(x.top3,top3Values,true)*.35}))
+}
+function priorSeasonFormRows(bundle){
+  const prior=previousCompletedBundle(bundle);if(!prior)return [];
+  const outcomes=outcomesForBundle(prior),standings=standingsTable(prior),teamCount=Math.max(1,standings.length),raw=standings.map(team=>{
+    const games=outcomes[team.sourceId]||outcomes[team.id]||[],last5=games.slice(-5),wins=last5.reduce((s,g)=>s+g.result,0),avg=last5.length?last5.reduce((s,g)=>s+g.points,0)/last5.length:0,winRate=last5.length?wins/last5.length:.5,ladder=teamCount===1?1:1-(team.standingRank-1)/(teamCount-1);
+    return {...team,last5Wins:wins,last5Games:last5.length,last5Average:avg,winRate,ladder}
+  }),avgs=raw.map(x=>x.last5Average);
+  return raw.map(x=>({...x,finalForm:x.winRate*.50+minMax(x.last5Average,avgs,true)*.50,projectionSeason:String(prior.league?.season||'')}))
+}
+function offseasonMomentumRows(bundle){
+  const prior=previousCompletedBundle(bundle),currentSeason=String(bundle?.league?.season||'2026'),priorSeason=String(prior?.league?.season||Number(currentSeason)-1),raw=[...state.managers.values()].map(m=>{
+    const currentRoster=m.roster||{},rosterId=String(currentRoster.roster_id??''),priorRoster=safeArray(prior?.rosters).find(r=>String(r.roster_id)===rosterId),currentValue=rosterAssetValueRaw(currentRoster,currentSeason,priorSeason),priorValue=priorRoster?rosterAssetValueRaw(priorRoster,priorSeason,priorSeason):currentValue,delta=priorValue>0?(currentValue-priorValue)/priorValue:0;
+    return {...m,currentValue,priorValue,delta}
+  }),deltas=raw.map(x=>x.delta);
+  return raw.map(x=>({...x,momentum:minMax(x.delta,deltas,true)}))
+}
 function preseasonProjectionRows(bundle){
-  const prior=state.bundles.filter(b=>String(b.league?.season)<String(bundle.league?.season)&&meaningfulWeeks(b).length).sort((a,b)=>Number(b.league?.season||0)-Number(a.league?.season||0))[0];
-  const current=[...state.managers.values()].map(m=>({...m,wins:0,games:0,pts:0,standingRank:0}));
-  const priorRows=prior?modelRows(prior,Infinity,"power"):[];
-  const priorById=Object.fromEntries(priorRows.map(x=>[String(x.id),x]));
-  const rosterValues=current.map(x=>currentRosterPlayerValue(x.id));
-  const priorAvgValues=priorRows.map(x=>Number(x.avg5||0));
-  return current.map((team,index)=>{
-    const previous=priorById[String(team.id)];
-    const ladder=previous?Number(previous.ladder||0):.5;
-    const form=previous?Number(previous.form||0):.5;
-    const avg5=previous?Number(previous.avg5||0):0;
-    const scoring=minMax(avg5,priorAvgValues,true);
-    const roster=minMax(rosterValues[index],rosterValues,true);
-    const score=priorRows.length?ladder*.35+form*.25+scoring*.20+roster*.20:roster;
-    return {...team,form,avg5,ladder,streak:0,score,projection:true,projectionSeason:String(prior?.league?.season||''),priorStandingRank:previous?.standingRank||null,rosterStrength:roster};
-  }).sort((a,b)=>b.score-a.score||b.rosterStrength-a.rosterStrength||a.name.localeCompare(b.name)).map((x,i)=>({...x,rank:i+1,standingRank:x.priorStandingRank||i+1}));
+  // Offseason Power Rankings: 35% roster strength, 30% prior final form,
+  // 20% offseason momentum, 15% prior final ladder.
+  const rosterRows=currentRosterProjectionProfiles(bundle),formRows=priorSeasonFormRows(bundle),momentumRows=offseasonMomentumRows(bundle),rosterBy=Object.fromEntries(rosterRows.map(x=>[String(x.id),x])),formBy=Object.fromEntries(formRows.map(x=>[String(x.id),x])),momentumBy=Object.fromEntries(momentumRows.map(x=>[String(x.id),x]));
+  return [...state.managers.values()].map(team=>{
+    const roster=rosterBy[String(team.id)],prior=formBy[String(team.id)],momentum=momentumBy[String(team.id)],rosterStrength=Number(roster?.rosterStrength??.5),finalForm=Number(prior?.finalForm??.5),offseasonMomentum=Number(momentum?.momentum??.5),ladder=Number(prior?.ladder??.5),score=rosterStrength*.35+finalForm*.30+offseasonMomentum*.20+ladder*.15;
+    return {...team,wins:0,games:0,pts:0,form:prior?.winRate??.5,avg5:prior?.last5Average??0,ladder,streak:0,score,projection:true,powerModel:'offseason',projectionSeason:String(prior?.projectionSeason||previousCompletedBundle(bundle)?.league?.season||''),priorStandingRank:prior?.standingRank||null,priorLast5Wins:prior?.last5Wins??0,priorLast5Games:prior?.last5Games??0,rosterStrength,offseasonMomentum,finalForm,standingRank:prior?.standingRank||0}
+  }).sort((a,b)=>b.score-a.score||b.rosterStrength-a.rosterStrength||a.name.localeCompare(b.name)).map((x,i)=>({...x,rank:i+1,standingRank:x.priorStandingRank||i+1}))
+}
+function seasonQualityRows(bundle,throughWeek=Infinity){
+  const standings=standingsTable(bundle,throughWeek),outcomes=outcomesForBundle(bundle,throughWeek),byWeek={};
+  standings.forEach(team=>{
+    const games=outcomes[team.sourceId]||outcomes[team.id]||[];
+    games.forEach(game=>{(byWeek[String(game.week)]??=[]).push({id:String(team.id),points:Number(game.points)||0})})
+  });
+  const allPlay={};standings.forEach(team=>allPlay[String(team.id)]={earned:0,possible:0});
+  Object.values(byWeek).forEach(rows=>rows.forEach(row=>{
+    const others=rows.filter(x=>x.id!==row.id);if(!others.length)return;
+    const lower=others.filter(x=>row.points>x.points).length,equal=others.filter(x=>row.points===x.points).length;
+    allPlay[row.id].earned+=(lower+equal*.5)/others.length;allPlay[row.id].possible+=1
+  }));
+  const totals=standings.map(x=>Number(x.pts)||0);
+  return standings.map(team=>{
+    const rec=allPlay[String(team.id)]||{earned:0,possible:0},allPlayRate=rec.possible?rec.earned/rec.possible:.5,totalPointsNorm=minMax(Number(team.pts)||0,totals,true),quality=totalPointsNorm*.50+allPlayRate*.50;
+    return {...team,allPlayRate,totalPointsNorm,quality}
+  })
+}
+function preseasonOddsScoreRows(bundle){
+  // Offseason Championship Odds: 50% roster strength/star power,
+  // 35% prior full-year quality, 15% prior final ladder.
+  const prior=previousCompletedBundle(bundle),rosterRows=currentRosterProjectionProfiles(bundle),qualityRows=prior?seasonQualityRows(prior,Infinity):[],priorStandings=prior?standingsTable(prior,Infinity):[],teamCount=Math.max(1,priorStandings.length),rosterBy=Object.fromEntries(rosterRows.map(x=>[String(x.id),x])),qualityBy=Object.fromEntries(qualityRows.map(x=>[String(x.id),x])),standingBy=Object.fromEntries(priorStandings.map(x=>[String(x.id),x]));
+  return [...state.managers.values()].map(team=>{
+    const roster=rosterBy[String(team.id)],quality=qualityBy[String(team.id)],standing=standingBy[String(team.id)],ladder=standing?(teamCount===1?1:1-(standing.standingRank-1)/(teamCount-1)):.5,rosterStarScore=Number(roster?.rosterStarScore??.5),fullSeasonQuality=Number(quality?.quality??.5),score=rosterStarScore*.50+fullSeasonQuality*.35+ladder*.15;
+    return {...team,score,rosterStarScore,fullSeasonQuality,ladder,standingRank:standing?.standingRank||0,avg5:0,form:0,streak:0,oddsModel:'offseason',projectionSeason:String(prior?.league?.season||'')}
+  }).sort((a,b)=>b.score-a.score||b.rosterStarScore-a.rosterStarScore||a.name.localeCompare(b.name)).map((x,i)=>({...x,rank:i+1}))
+}
+function liveChampionshipScoreRows(bundle,throughWeek=Infinity){
+  // In-season Championship Odds: 40% season-long quality,
+  // 35% current roster strength/star power, 25% ladder/playoff security.
+  const qualityRows=seasonQualityRows(bundle,throughWeek),rosterRows=currentRosterProjectionProfiles(bundle),teamCount=Math.max(1,qualityRows.length),rosterBy=Object.fromEntries(rosterRows.map(x=>[String(x.id),x]));
+  return qualityRows.map(team=>{
+    const ladder=teamCount===1?1:1-(team.standingRank-1)/(teamCount-1),rosterStarScore=Number(rosterBy[String(team.id)]?.rosterStarScore??.5),score=team.quality*.40+rosterStarScore*.35+ladder*.25,games=outcomesForBundle(bundle,throughWeek)[team.sourceId]||outcomesForBundle(bundle,throughWeek)[team.id]||[],last5=games.slice(-5);
+    return {...team,score,ladder,rosterStarScore,seasonQuality:team.quality,form:last5.length?last5.reduce((s,g)=>s+g.result,0)/last5.length:0,avg5:last5.length?last5.reduce((s,g)=>s+g.points,0)/last5.length:0,streak:winningStreak(games),oddsModel:'in-season'}
+  }).sort((a,b)=>b.score-a.score||b.seasonQuality-a.seasonQuality||a.name.localeCompare(b.name)).map((x,i)=>({...x,rank:i+1}))
 }
 function currentSeasonLuckContext(){
   const current=currentLeagueBundle(),weeks=meaningfulWeeks(current),through=weeks.at(-1)||Infinity;
@@ -395,11 +496,11 @@ function powerRowsForDisplay(){
 function priceRowsForBundle(bundle,through){
   const isCurrent=String(bundle.league?.league_id)===CONFIG.currentLeagueId,weeks=meaningfulWeeks(bundle),weekCount=weeks.filter(w=>through===Infinity||w<=through).length;
   let rows;
-  if(isCurrent&&weekCount===0)rows=preseasonProjectionRows(bundle);
+  if(isCurrent&&weekCount===0)rows=preseasonOddsScoreRows(bundle);
   else if(isCurrent&&weekCount<4){
-    const live=modelRows(bundle,through,"odds"),pre=Object.fromEntries(preseasonProjectionRows(bundle).map(x=>[String(x.id),x])),priorWeight=({1:.30,2:.20,3:.10}[weekCount]||0);
-    rows=live.map(x=>({...x,score:x.score*(1-priorWeight)+(pre[String(x.id)]?.score??.5)*priorWeight,preseasonWeight:priorWeight})).sort((a,b)=>b.score-a.score||b.avg5-a.avg5||a.name.localeCompare(b.name)).map((x,i)=>({...x,rank:i+1}));
-  }else rows=modelRows(bundle,through,"odds");
+    const live=liveChampionshipScoreRows(bundle,through),pre=Object.fromEntries(preseasonOddsScoreRows(bundle).map(x=>[String(x.id),x])),preseasonWeight=({1:.30,2:.20,3:.10}[weekCount]||0);
+    rows=live.map(x=>({...x,score:x.score*(1-preseasonWeight)+(pre[String(x.id)]?.score??.5)*preseasonWeight,preseasonWeight,liveWeight:1-preseasonWeight,oddsModel:'blended'})).sort((a,b)=>b.score-a.score||b.seasonQuality-a.seasonQuality||a.name.localeCompare(b.name)).map((x,i)=>({...x,rank:i+1}))
+  }else rows=liveChampionshipScoreRows(bundle,through);
   const strengths=rows.map(x=>Math.pow(CONFIG.oddsBaseline+(1-CONFIG.oddsBaseline)*Math.max(0,Math.min(1,x.score)),CONFIG.oddsExponent)),sum=strengths.reduce((a,b)=>a+b,0)||1;
   return rows.map((x,i)=>{const fair=strengths[i]/sum,market=Math.min(.99,fair*CONFIG.bookmakerMargin),odds=roundFive(Math.min(CONFIG.maxDisplayedOdds,Math.max(1.01,1/market)));return {...x,odds,probability:fair,eliminated:false}})
 }
@@ -439,8 +540,9 @@ function renderPower(){
     const priceMove=state.oddsMovement?.changes?.[String(x.id)],prev=Number(priceMove?.oldOdds),current=Number(priceMove?.newOdds??o.odds),hasMovement=Number.isFinite(prev)&&Number.isFinite(current)&&Math.abs(current-prev)>=.001,delta=hasMovement?current-prev:0,oddsClass=delta<0?'up':delta>0?'down':'flat',moveText=hasMovement?`$${prev.toFixed(2)} → $${current.toFixed(2)}`:`Opening price $${Number(o.odds).toFixed(2)}`;
     const ladderMove=(oldOdds[String(x.id)]?.standingRank||o.standingRank)-o.standingRank;
     const ladderText=isOffseason?(x.priorStandingRank?`Finished ${ordinal(x.priorStandingRank)} in ${x.projectionSeason}`:'Offseason roster projection'):ladderMove>0?`Moved up to ${ordinal(o.standingRank)} on ladder`:ladderMove<0?`Dropped to ${ordinal(o.standingRank)} on ladder`:`Currently ${ordinal(o.standingRank)} on ladder`;
-    const streak=isOffseason?'Offseason projection':o.streak>=1?`Won last ${o.streak}`:`Form: ${Math.round(o.form*5)} wins from last 5`;
-    const scoringText=isOffseason?`${x.projectionSeason||'Last season'} form + current roster strength`:`Averaging ${Number(o.avg5||0).toFixed(1)} over last five games`;
+    const finalGames=Number(x.priorLast5Games||5),finalWins=Number(x.priorLast5Wins||0),winLabel=Number.isInteger(finalWins)?String(finalWins):finalWins.toFixed(1);
+    const streak=isOffseason?`Won ${winLabel} of final ${finalGames} in ${x.projectionSeason||'last season'}`:o.streak>=1?`Won last ${o.streak}`:`Form: ${Math.round(o.form*3)} wins from last 3`;
+    const scoringText=isOffseason?`Averaged ${Number(x.avg5||0).toFixed(1)} over final ${finalGames}`:`Averaging ${Number(o.avg5||0).toFixed(1)} over last five games`;
     const luck=Number(luckContext.ratings?.[String(x.id)]||0),luckText=luckContext.weeks.length?`${luck>=0?'+':''}${luck.toFixed(1)} wins vs expected`:`${String(luckContext.bundle?.league?.season||'Current')} season not started`;
     const tag=String(x.id)===favouriteId?'<span class="market-tag favourite-tag">Favourite</span>':String(x.id)===smokeyId?'<span class="market-tag smokey-tag">Smokey</span>':'';
     return `<details class="power-odds-row ${x.rank===1?'featured-number-one':''}" style="--rank-colour:hsl(${hue} 85% 52%)"><summary><b class="power-rank-number">${x.rank}</b><span class="power-avatar">${avatar}</span><span class="power-copy"><button class="power-name manager-profile-link" type="button" data-manager-id="${esc(x.id)}">${esc(x.name)}</button><small>View manager profile</small></span><span class="power-market-stack"><span class="power-odds-price">${championshipOddsLabel(o)}</span>${tag}</span>${arrow}<span class="power-chevron">⌄</span></summary><div class="power-detail"><div>${isOffseason?'🗓️':'✅'} ${streak}</div><div>${isOffseason?'📊':'🔥'} ${scoringText}</div><div>${isOffseason?'🏁':ladderMove<0?'⬇':'⬆'} ${ladderText}</div><div class="odds-move ${oddsClass}">${moveText}</div><div class="luck-rating ${luckContext.weeks.length?(luck>0.5?'lucky':luck<-0.5?'unlucky':'neutral'):'neutral'}">🍀 Luck rating: ${luckText}</div></div></details>`;
