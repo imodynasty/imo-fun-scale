@@ -2201,8 +2201,8 @@ function managerProfileCoreFingerprint(managerId){
   const id=String(managerId||''),manager=state.managers.get(id),roster=safeArray(manager?.roster?.players).map(String).sort().join(','),picks=safeArray(manager?.roster?.draft_picks||[]).map(String).sort().join(',');
   return `${CONFIG.currentLeagueId}|${id}|${roster}|${picks}`
 }
-function managerProfileSessionKey(key){return `imo-profile-v3371-session|${key}`}
-function managerProfilePersistentKey(key){return `imo-profile-v3371-persistent|${key}`}
+function managerProfileSessionKey(key){return `imo-profile-v3372-session|${key}`}
+function managerProfilePersistentKey(key){return `imo-profile-v3372-persistent|${key}`}
 function parseManagerProfileCache(raw){
   if(!raw)return null;
   try{const parsed=JSON.parse(raw);if(parsed&&typeof parsed.html==='string')return parsed}catch(_){ }
@@ -3333,7 +3333,7 @@ document.addEventListener("click",e=>{
   if(e.target.closest("[data-close-player-history]")||e.target.closest("#playerHistoryClose")){closePlayerHistory();return}
   if(e.target.closest("#managerDirectoryBtn")){openManagerDirectory();return}
   if(e.target.closest("[data-close-manager-directory]")||e.target.closest("#managerDirectoryClose")){closeManagerDirectory();return}
-  const ledgerToggle=e.target.closest('[data-manager-ledger-toggle]');if(ledgerToggle){const column=ledgerToggle.closest('.manager-ledger-column'),extras=safeArray(column?.querySelectorAll('.manager-ledger-item-wrap.is-extra'));if(column&&extras.length){const expanded=column.classList.toggle('expanded');ledgerToggle.setAttribute('aria-expanded',expanded?'true':'false');ledgerToggle.textContent=managerTradeLedgerToggleLabel(extras.length,expanded)}return}
+  const ledgerToggle=e.target.closest('[data-manager-ledger-toggle]');if(ledgerToggle){const column=ledgerToggle.closest('.manager-ledger-column'),extras=column?Array.from(column.querySelectorAll('.manager-ledger-item-wrap.is-extra')):[];if(column&&extras.length){const expanded=column.classList.toggle('expanded');ledgerToggle.setAttribute('aria-expanded',expanded?'true':'false');ledgerToggle.textContent=managerTradeLedgerToggleLabel(extras.length,expanded)}return}
   const managerTabBtn=e.target.closest("[data-manager-tab]");if(managerTabBtn){setManagerProfileTab(managerTabBtn.dataset.managerTab,true);return}
   const seasonBtn=e.target.closest("[data-profile-season]");if(seasonBtn){state.profileAverageSeason=seasonBtn.dataset.profileSeason;const id=$("managerProfileModal")?.dataset.managerId;if(id){const content=$("managerProfileContent"),activeTab=$("managerProfileModal")?.dataset.activeTab||"roster",rosterIds=safeArray(state.managers.get(String(id))?.roster?.players).map(String);content.innerHTML='<div class="manager-profile-loading"><strong>Loading season metrics…</strong><small>Resolving FPTS/G, MPG and FPTS/36.</small></div>';ensurePlayerEfficiencyData(rosterIds,state.profileAverageSeason).catch(error=>console.warn('Season metric hydration failed:',error)).finally(()=>{clearManagerProfileCachedHTML(id);if($("managerProfileModal")?.dataset.managerId!==String(id))return;content.innerHTML=cachedManagerProfileHTML(id);bindSparklineTooltips(content);setManagerProfileTab(activeTab,false)})}return}
   const link=e.target.closest(".manager-profile-link");if(link){if(Date.now()-lastManagerPointerAction<700)return;closeManagerDirectory();openManagerProfile(link.dataset.managerId);return}
