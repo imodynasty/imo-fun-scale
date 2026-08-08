@@ -1789,7 +1789,17 @@ function managerNetTradeLedger(managerId,season){
     if(!raw||transactionSeason(raw)!==targetSeason||String(raw.type||'trade')!=='trade'||(raw.status&&raw.status!=='complete'))return;
     const t=normaliseTrade(raw),created=Number(t.created||t.created_at||t.timestamp||0);
     Object.entries(t.adds||{}).forEach(([playerId,rosterId])=>{if(transactionManagerForRoster(t,rosterId)!==id||!playerId||playerId==='0')return;const pid=String(playerId);adjust(`player|${pid}`,1,{type:'player',id:pid});tradeAcquiredAt.set(pid,Math.max(Number(tradeAcquiredAt.get(pid)||0),created))});
-    Object.entries(t.drops||{}).forEach(([playerId,rosterId])=>{if(transactionManagerForRoster(t,rosterId)!==id||!playerId||playerId==='0')return;adjust(`player|${playerId}`,-1,{type:'player',id:String(playerId)})});
+    Object.entries(t.drops||{}).forEach(([playerId,rosterId])=>{
+      const pid=String(playerId||'');
+      if(transactionManagerForRoster(t,rosterId)!==id||!pid||pid==='0')return;
+      // Sleeper can include roster cuts inside a trade transaction. Only count
+      // a player as TRADED OUT when that exact player is also added to another
+      // roster in the same transaction. A drop with no recipient is a release,
+      // not a trade exit, and must stay out of the net trade ledger.
+      const recipientRoster=t.adds?.[pid];
+      if(recipientRoster==null||String(recipientRoster)===String(rosterId))return;
+      adjust(`player|${pid}`,-1,{type:'player',id:pid})
+    });
     safeArray(t.draft_picks).forEach(p=>{
       if(!p||typeof p!=='object')return;
       const key=pickAssetKey(p),incoming=transactionManagerForRoster(t,p.owner_id)===id,outgoing=transactionManagerForRoster(t,p.previous_owner_id)===id;
@@ -2191,8 +2201,8 @@ function managerProfileCoreFingerprint(managerId){
   const id=String(managerId||''),manager=state.managers.get(id),roster=safeArray(manager?.roster?.players).map(String).sort().join(','),picks=safeArray(manager?.roster?.draft_picks||[]).map(String).sort().join(',');
   return `${CONFIG.currentLeagueId}|${id}|${roster}|${picks}`
 }
-function managerProfileSessionKey(key){return `imo-profile-v3370-session|${key}`}
-function managerProfilePersistentKey(key){return `imo-profile-v3370-persistent|${key}`}
+function managerProfileSessionKey(key){return `imo-profile-v3371-session|${key}`}
+function managerProfilePersistentKey(key){return `imo-profile-v3371-persistent|${key}`}
 function parseManagerProfileCache(raw){
   if(!raw)return null;
   try{const parsed=JSON.parse(raw);if(parsed&&typeof parsed.html==='string')return parsed}catch(_){ }
