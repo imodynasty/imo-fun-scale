@@ -2187,14 +2187,42 @@ function openManagerDirectory(){const modal=$("managerDirectoryModal"),list=$("m
 function closeManagerDirectory(){const modal=$("managerDirectoryModal");if(!modal)return;modal.classList.remove("open");modal.setAttribute("aria-hidden","true");document.body.classList.remove("manager-directory-open")}
 
 function managerProfileCacheKey(managerId){return `${String(managerId)}|${String(state.profileAverageSeason||"")}`}
-function managerProfileDataFingerprint(){const latest=state.trades?.[0]?.created||0,current=state.modelBundle?.league?.season||'';return `${CONFIG.currentLeagueId}|${current}|${latest}|${state.trades.length}|${state.managers.size}|${state.draftSelections.length}`}
-function managerProfileSessionKey(key){return `imo-profile-v3368-season-ledger-release-cleanup|${managerProfileDataFingerprint()}|${key}`}
-function managerProfilePersistentKey(key){return `imo-profile-v3366-persistent|${managerProfileDataFingerprint()}|${key}`}
-function readManagerProfileCachedHTML(key){
+function managerProfileCoreFingerprint(managerId){
+  const id=String(managerId||''),manager=state.managers.get(id),roster=safeArray(manager?.roster?.players).map(String).sort().join(','),picks=safeArray(manager?.roster?.draft_picks||[]).map(String).sort().join(',');
+  return `${CONFIG.currentLeagueId}|${id}|${roster}|${picks}`
+}
+function managerProfileSessionKey(key){return `imo-profile-v3370-session|${key}`}
+function managerProfilePersistentKey(key){return `imo-profile-v3370-persistent|${key}`}
+function parseManagerProfileCache(raw){
+  if(!raw)return null;
+  try{const parsed=JSON.parse(raw);if(parsed&&typeof parsed.html==='string')return parsed}catch(_){ }
+  // Backward compatibility with older caches that stored raw HTML.
+  if(String(raw).trim().startsWith('<'))return{html:String(raw),savedAt:0,fingerprint:''};
+  return null
+}
+function readManagerProfileCachedHTML(key,managerId=null){
   if(state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
-  try{const saved=sessionStorage.getItem(managerProfileSessionKey(key));if(saved){state.profileHTMLCache.set(key,saved);return saved}}catch(_){ }
-  try{const saved=localStorage.getItem(managerProfilePersistentKey(key));if(saved){state.profileHTMLCache.set(key,saved);try{sessionStorage.setItem(managerProfileSessionKey(key),saved)}catch(_){ }return saved}}catch(_){ }
+  const expected=managerId!=null?managerProfileCoreFingerprint(managerId):'';
+  for(const storage of [sessionStorage,localStorage]){
+    try{
+      const storageKey=storage===sessionStorage?managerProfileSessionKey(key):managerProfilePersistentKey(key),entry=parseManagerProfileCache(storage.getItem(storageKey));
+      if(!entry?.html)continue;
+      // If the current roster has changed, do not reuse an old profile. Otherwise
+      // allow the last known profile to paint immediately, even before history has loaded.
+      if(expected&&entry.fingerprint&&entry.fingerprint!==expected)continue;
+      state.profileHTMLCache.set(key,entry.html);
+      if(storage===localStorage){try{sessionStorage.setItem(managerProfileSessionKey(key),JSON.stringify(entry))}catch(_){ }}
+      return entry.html
+    }catch(_){ }
+  }
   return null;
+}
+function writeManagerProfileCachedHTML(key,managerId,html){
+  if(!html)return;
+  state.profileHTMLCache.set(key,html);
+  const entry=JSON.stringify({html,savedAt:Date.now(),fingerprint:managerProfileCoreFingerprint(managerId)});
+  try{sessionStorage.setItem(managerProfileSessionKey(key),entry)}catch(_){ }
+  try{localStorage.setItem(managerProfilePersistentKey(key),entry)}catch(_){ }
 }
 function clearManagerProfileCachedHTML(managerId){
   const key=managerProfileCacheKey(managerId);state.profileHTMLCache.delete(key);
@@ -2202,12 +2230,10 @@ function clearManagerProfileCachedHTML(managerId){
   try{localStorage.removeItem(managerProfilePersistentKey(key))}catch(_){ }
 }
 function cachedManagerProfileHTML(managerId){
-  const key=managerProfileCacheKey(managerId),cached=readManagerProfileCachedHTML(key);
+  const key=managerProfileCacheKey(managerId),cached=readManagerProfileCachedHTML(key,managerId);
   if(cached)return cached;
   const html=managerProfileHTML(managerId);
-  state.profileHTMLCache.set(key,html);
-  try{sessionStorage.setItem(managerProfileSessionKey(key),html)}catch(_){ }
-  try{localStorage.setItem(managerProfilePersistentKey(key),html)}catch(_){ }
+  writeManagerProfileCachedHTML(key,managerId,html);
   return html;
 }
 const managerProfilePrewarmQueue=[];
@@ -2264,16 +2290,22 @@ async function openManagerProfile(managerId,pushState=true){
   document.body.classList.add("manager-profile-open");
   modal.dataset.managerId=id;
   const key=managerProfileCacheKey(id);
-  // During initial hydration keep the instantly painted profile shell active.
-  // Building all-time grades and transaction history at this moment would
-  // compete with the startup path and make every other button feel frozen.
+  // Persistent profiles are allowed to paint before historical league hydration.
+  // This is the key speed path for repeat visits: the manager sees the last verified
+  // profile immediately while the normal league-history pipeline continues untouched.
+  const earlyStoredProfile=readManagerProfileCachedHTML(key,id);
   if(!state.historyReady){
-    content.innerHTML=managerProfileFastHTML(id);modal.dataset.pendingFullProfile='1';
+    if(earlyStoredProfile){
+      content.innerHTML=earlyStoredProfile;bindSparklineTooltips(content);initialiseManagerProfileTab();
+      modal.dataset.pendingFullProfile='1';modal.dataset.cachedProfileShown='1';
+    }else{
+      content.innerHTML=managerProfileFastHTML(id);modal.dataset.pendingFullProfile='1';delete modal.dataset.cachedProfileShown;
+    }
     if(pushState)history.pushState({managerProfile:id,tab:'overview'},'',`#manager=${encodeURIComponent(id)}&tab=overview`);
     requestAnimationFrame(()=>$('managerProfileClose')?.focus());return
   }
-  delete modal.dataset.pendingFullProfile;
-  const storedProfile=readManagerProfileCachedHTML(key);
+  delete modal.dataset.pendingFullProfile;delete modal.dataset.cachedProfileShown;
+  const storedProfile=earlyStoredProfile||readManagerProfileCachedHTML(key,id);
   if(storedProfile){
     content.innerHTML=storedProfile;
     bindSparklineTooltips(content);
@@ -2293,7 +2325,7 @@ async function openManagerProfile(managerId,pushState=true){
   if(pushState)history.pushState({managerProfile:id,tab:"overview"},"",`#manager=${encodeURIComponent(id)}&tab=overview`);
   requestAnimationFrame(()=>$('managerProfileClose')?.focus());
 }
-function upgradeOpenManagerProfile(){const modal=$('managerProfileModal');if(!modal?.classList.contains('open')||!modal.dataset.pendingFullProfile||!modal.dataset.managerId)return;const id=modal.dataset.managerId;delete modal.dataset.pendingFullProfile;setTimeout(()=>openManagerProfile(id,false),120)}
+function upgradeOpenManagerProfile(){const modal=$('managerProfileModal');if(!modal?.classList.contains('open')||!modal.dataset.pendingFullProfile||!modal.dataset.managerId)return;const id=modal.dataset.managerId,active=modal.dataset.activeTab||managerProfileTabFromHash()||'overview';delete modal.dataset.pendingFullProfile;setTimeout(()=>{clearManagerProfileCachedHTML(id);openManagerProfile(id,false);requestAnimationFrame(()=>setManagerProfileTab(active,false))},180)}
 function closeManagerProfile(updateHistory=true){
   const modal=$("managerProfileModal");
   if(!modal)return;
