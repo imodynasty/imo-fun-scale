@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.66 — Manager Front Office Net Seasonal Trade Ledger */
+/* IMO DYNASTY V3.3.68 — Trade Ledger Released-Player Cleanup */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,h2hHouseMargin:1.05,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -19,10 +19,11 @@ const CANONICAL_DRAFT_COLUMNS={
 function normaliseTeamKey(name){return String(name||"").toLowerCase().replace(/[^a-z0-9]/g,"")}
 function canonicalDraftSlot(season,teamName){return CANONICAL_DRAFT_COLUMNS[String(season)]?.[normaliseTeamKey(teamName)]??null}
 
-const state={jsonRequestCache:new Map(),globalSearchIndex:null,league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,draftSelections:[],allDraftSelections:[],oddsMovement:null,sportState:null,h2hRefreshTimer:null,h2hRefreshBusy:false,lazyHomepageModules:new Map(),lazyHomepageObserver:null,historyReady:false,snapshotApplied:false,marketReady:false,verifiedMarketHTML:null,verifiedMarketSavedAt:0,renderGeneration:0,computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null,managerGrades:null}};
+const state={jsonRequestCache:new Map(),globalSearchIndex:null,league:null,currentUsers:[],currentRosters:[],managers:new Map(),trades:[],selectedWindow:"14",players:{},bundles:[],modelBundle:null,playerAverages:{},previousPowerRanks:{},heatmapExpanded:false,draftPickMap:{},previousPlayerAverages:{},votePlayers:[],activeWindow:"14",biggestTradesExpanded:false,profileAverageSeason:"2025",exactSeasonAverages:{},gameLogAverages:{},gameLogMeta:{},seasonTotalAverages:{},seasonTotalMeta:{},gameLogs:{},playerInterest:[],profileHTMLCache:new Map(),profilePrewarmQueued:false,profileBuilds:new Map(),statsRequestCache:new Map(),seasonTotalsLoading:false,draftSelections:[],allDraftSelections:[],oddsMovement:null,sportState:null,h2hRefreshTimer:null,h2hRefreshBusy:false,lazyHomepageModules:new Map(),lazyHomepageObserver:null,historyReady:false,snapshotApplied:false,marketReady:false,verifiedMarketHTML:null,verifiedMarketSavedAt:0,renderGeneration:0,renderQueue:new Set(),renderQueueScheduled:false,renderStats:{flushes:0,modules:0},computedCache:{seasonAverages:new Map(),managerTrades:new Map(),tradeSide:new Map(),completedMatchups:new Map(),tendencyLeague:null,managerGrades:null}};
 const $=id=>document.getElementById(id),WL={"14":"14 days","28":"28 days","season":"2026 season","all":"All time"};
 try{for(let i=sessionStorage.length-1;i>=0;i--){const key=sessionStorage.key(i);if(key&&key.startsWith('imo-profile-'))sessionStorage.removeItem(key)}}catch(_){ }
 function resetComputedCaches(){state.computedCache.seasonAverages.clear();state.computedCache.managerTrades.clear();state.computedCache.tradeSide.clear();state.computedCache.completedMatchups.clear();state.computedCache.tendencyLeague=null;state.computedCache.managerGrades=null;state.profileHTMLCache.clear()}
+function resetModelCaches(){state.computedCache.seasonAverages.clear();state.computedCache.managerGrades=null;state.profileHTMLCache.clear()}
 async function getJSON(url,optional=false){
   const key=String(url);
   if(state.jsonRequestCache.has(key))return state.jsonRequestCache.get(key);
@@ -1782,12 +1783,12 @@ function tradeLedgerRoundLabel(round){
   return `${n}${suffix}`
 }
 function managerNetTradeLedger(managerId,season){
-  const id=String(managerId),targetSeason=String(season),net=new Map();
+  const id=String(managerId),targetSeason=String(season),net=new Map(),tradeAcquiredAt=new Map();
   const adjust=(key,delta,asset)=>{const current=net.get(key)||{delta:0,asset};current.delta+=delta;if(asset)current.asset=asset;net.set(key,current)};
   safeArray(state.trades).forEach(raw=>{
     if(!raw||transactionSeason(raw)!==targetSeason||String(raw.type||'trade')!=='trade'||(raw.status&&raw.status!=='complete'))return;
-    const t=normaliseTrade(raw);
-    Object.entries(t.adds||{}).forEach(([playerId,rosterId])=>{if(transactionManagerForRoster(t,rosterId)!==id||!playerId||playerId==='0')return;adjust(`player|${playerId}`,1,{type:'player',id:String(playerId)})});
+    const t=normaliseTrade(raw),created=Number(t.created||t.created_at||t.timestamp||0);
+    Object.entries(t.adds||{}).forEach(([playerId,rosterId])=>{if(transactionManagerForRoster(t,rosterId)!==id||!playerId||playerId==='0')return;const pid=String(playerId);adjust(`player|${pid}`,1,{type:'player',id:pid});tradeAcquiredAt.set(pid,Math.max(Number(tradeAcquiredAt.get(pid)||0),created))});
     Object.entries(t.drops||{}).forEach(([playerId,rosterId])=>{if(transactionManagerForRoster(t,rosterId)!==id||!playerId||playerId==='0')return;adjust(`player|${playerId}`,-1,{type:'player',id:String(playerId)})});
     safeArray(t.draft_picks).forEach(p=>{
       if(!p||typeof p!=='object')return;
@@ -1795,6 +1796,20 @@ function managerNetTradeLedger(managerId,season){
       const asset={type:'pick',key,pick:{...p,_trade:t},season:String(p.season||'Future'),round:Number(p.round)||1,originalOwner:pickOriginalOwner(p,t)||pickOriginalOwnerNameByKey(key)};
       if(incoming)adjust(`pick|${key}`,1,asset);
       if(outgoing)adjust(`pick|${key}`,-1,asset)
+    })
+  });
+  // A player acquired by trade should not remain in the net ledger if that
+  // manager subsequently released them during the same season. Waiver-type
+  // transactions are included because Sleeper can record a drop made while
+  // submitting a waiver claim as a waiver transaction rather than free_agent.
+  const releasedAfterTrade=new Set();
+  allLeagueTransactions().forEach(raw=>{
+    if(!raw||transactionSeason(raw)!==targetSeason||!['free_agent','waiver'].includes(String(raw.type||''))||(raw.status&&raw.status!=='complete'))return;
+    const created=Number(raw.created||raw.created_at||raw.timestamp||0);
+    Object.entries(raw.drops||{}).forEach(([playerId,rosterId])=>{
+      const pid=String(playerId||''),acquired=Number(tradeAcquiredAt.get(pid)||0);
+      if(!pid||pid==='0'||!acquired||transactionManagerForRoster(raw,rosterId)!==id)return;
+      if(!created||created>=acquired)releasedAfterTrade.add(pid)
     })
   });
   const decorate=entry=>{
@@ -1806,7 +1821,7 @@ function managerNetTradeLedger(managerId,season){
     return{...asset,name:`${asset.season} ${asset.originalOwner||'Original Team'} ${tradeLedgerRoundLabel(asset.round)}`}
   };
   const incoming=[],outgoing=[];
-  net.forEach(entry=>{if(entry.delta>0)incoming.push(decorate(entry));else if(entry.delta<0)outgoing.push(decorate(entry))});
+  net.forEach(entry=>{if(entry.delta>0){if(entry.asset?.type==='player'&&releasedAfterTrade.has(String(entry.asset.id)))return;incoming.push(decorate(entry))}else if(entry.delta<0)outgoing.push(decorate(entry))});
   const sortAssets=(a,b)=>a.type===b.type?(a.type==='player'?(Number(b.avg)||0)-(Number(a.avg)||0)||String(a.name).localeCompare(String(b.name)):(Number(a.season)||9999)-(Number(b.season)||9999)||(Number(a.round)||9)-(Number(b.round)||9)||String(a.name).localeCompare(String(b.name))):(a.type==='player'?-1:1);
   incoming.sort(sortAssets);outgoing.sort(sortAssets);
   return{incoming,outgoing}
@@ -2160,7 +2175,7 @@ function closeManagerDirectory(){const modal=$("managerDirectoryModal");if(!moda
 
 function managerProfileCacheKey(managerId){return `${String(managerId)}|${String(state.profileAverageSeason||"")}`}
 function managerProfileDataFingerprint(){const latest=state.trades?.[0]?.created||0,current=state.modelBundle?.league?.season||'';return `${CONFIG.currentLeagueId}|${current}|${latest}|${state.trades.length}|${state.managers.size}|${state.draftSelections.length}`}
-function managerProfileSessionKey(key){return `imo-profile-v3366-season-ledger|${managerProfileDataFingerprint()}|${key}`}
+function managerProfileSessionKey(key){return `imo-profile-v3368-season-ledger-release-cleanup|${managerProfileDataFingerprint()}|${key}`}
 function managerProfilePersistentKey(key){return `imo-profile-v3366-persistent|${managerProfileDataFingerprint()}|${key}`}
 function readManagerProfileCachedHTML(key){
   if(state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
@@ -2317,7 +2332,7 @@ function renderTicker(){
     root.innerHTML=`<span class="ticker-live">LIVE</span><div class="ticker-window"><div class="ticker-track"><div class="ticker-group">${group}</div><div class="ticker-group" aria-hidden="true">${group}</div></div></div>`;
   }catch(error){console.error('Ticker render failed',error);root.innerHTML='<span class="ticker-live">LIVE</span><div class="ticker-window"><div class="ticker-track"><div class="ticker-group"><span class="ticker-item">IMO Dynasty · Live League HQ</span></div></div></div>'}
 }
-async function loadTickerGameLogs(){const season=String(tradeTargetAverageContext().season||state.modelBundle?.league?.season||'2025'),ids=[...new Set((state.currentRosters||[]).flatMap(r=>(r.players||[]).map(String)))],scoring=seasonBundleForStats(season)?.league?.scoring_settings||state.modelBundle?.league?.scoring_settings||{};if(!ids.length)return;const rows=await limitedMap(ids,8,async id=>{const result=await loadPlayerGameLogAverage(id,season,scoring);return result?{id,...result}:null});state.gameLogs[season]??={};rows.filter(Boolean).forEach(row=>state.gameLogs[season][row.id]=row.rows||[]);renderPlayerForm();renderPlayerSpotlight();renderTicker();renderHeadToHead()}
+async function loadTickerGameLogs(){const season=String(tradeTargetAverageContext().season||state.modelBundle?.league?.season||'2025'),ids=[...new Set((state.currentRosters||[]).flatMap(r=>(r.players||[]).map(String)))],scoring=seasonBundleForStats(season)?.league?.scoring_settings||state.modelBundle?.league?.scoring_settings||{};if(!ids.length)return;const rows=await limitedMap(ids,8,async id=>{const result=await loadPlayerGameLogAverage(id,season,scoring);return result?{id,...result}:null});state.gameLogs[season]??={};rows.filter(Boolean).forEach(row=>state.gameLogs[season][row.id]=row.rows||[]);renderPlayerSpotlight();renderForChange('gameLogs')}
 
 
 function insiderEventKey(){
@@ -2520,19 +2535,67 @@ function lazyHomepageDefinitions(){return[
   ['leaderboard','leaderboard',renderLeaderboard],['tradeHeatmap','trade partners',renderHeatmap],['goodForm','player form',renderPlayerForm],['leagueRecords','league records',renderRecords],['tradeBlock','most traded players',renderBlock],['waiverBlock','most waived players',renderWaivedBlock],['biggestTrades','biggest trades',renderBiggestTrades],['allNbaChoices','voting',renderVoting]
 ]}
 function setupLazyHomepageModules(){
-  if(!('IntersectionObserver' in window)){lazyHomepageDefinitions().forEach(([,name,fn])=>safeRender(name,fn));return}
+  if(!('IntersectionObserver' in window)){lazyHomepageDefinitions().forEach(([id,name,fn])=>{const prior=state.lazyHomepageModules.get(id);state.lazyHomepageModules.set(id,{name,fn,rendered:true,node:$(id)});if(!prior?.rendered)safeRender(name,fn)});return}
   if(!state.lazyHomepageObserver)state.lazyHomepageObserver=new IntersectionObserver(entries=>entries.forEach(entry=>{if(!entry.isIntersecting)return;const key=entry.target.dataset.lazyHomepageKey,record=state.lazyHomepageModules.get(key);if(!record)return;record.rendered=true;safeRender(record.name,record.fn);state.lazyHomepageObserver.unobserve(entry.target)}),{rootMargin:'650px 0px'});
-  lazyHomepageDefinitions().forEach(([id,name,fn])=>{const node=$(id),panel=node?.closest('.panel,article,section,details')||node;if(!node||!panel)return;const key=id;state.lazyHomepageModules.set(key,{name,fn,rendered:state.lazyHomepageModules.get(key)?.rendered||false,node:panel});panel.dataset.lazyHomepageKey=key;if(state.lazyHomepageModules.get(key).rendered)safeRender(name,fn);else state.lazyHomepageObserver.observe(panel)});
+  lazyHomepageDefinitions().forEach(([id,name,fn])=>{const node=$(id),panel=node?.closest('.panel,article,section,details')||node;if(!node||!panel)return;const key=id;state.lazyHomepageModules.set(key,{name,fn,rendered:state.lazyHomepageModules.get(key)?.rendered||false,node:panel});panel.dataset.lazyHomepageKey=key;if(!state.lazyHomepageModules.get(key).rendered)state.lazyHomepageObserver.observe(panel)});
 }
-function rerenderVisibleLazyModules(){state.lazyHomepageModules.forEach(record=>{if(record.rendered)safeRender(record.name,record.fn)})}
-function renderAll(){
-  ensureManagerGradeStyles();
-  const generation=++state.renderGeneration;
-  // Split even the above-the-fold modules across separate frames. This prevents
-  // one large historical render from monopolising the main thread on mobile.
-  safeRender('power rankings',renderPower);
-  requestAnimationFrame(()=>{if(generation!==state.renderGeneration)return;safeRender('trade of the week',renderTradeWeek);safeRender('recent trades',renderRecent);requestAnimationFrame(()=>{if(generation!==state.renderGeneration)return;safeRender('head to head',renderHeadToHead);safeRender('ticker',renderTicker);setupLazyHomepageModules()})});
+function rerenderVisibleLazyModules(){state.lazyHomepageModules.forEach(record=>{if(record.rendered)scheduleHubRender(record.name)})}
+
+// V3.3.67: module-level render scheduler. Data refreshes mark only the modules
+// whose inputs changed instead of rebuilding the whole homepage. Multiple data
+// updates arriving in the same frame are deduplicated into one render pass.
+const HUB_RENDERERS={
+  'power rankings':renderPower,
+  'trade of the week':renderTradeWeek,
+  'recent trades':renderRecent,
+  'head to head':renderHeadToHead,
+  'ticker':renderTicker,
+  'leaderboard':renderLeaderboard,
+  'trade partners':renderHeatmap,
+  'player form':renderPlayerForm,
+  'league records':renderRecords,
+  'most traded players':renderBlock,
+  'most waived players':renderWaivedBlock,
+  'biggest trades':renderBiggestTrades,
+  'voting':renderVoting
+};
+const HUB_CHANGESETS={
+  core:['power rankings','trade of the week','recent trades','head to head','ticker','leaderboard','trade partners','league records','most traded players','most waived players','biggest trades','voting'],
+  current:['power rankings','trade of the week','recent trades','head to head','ticker','leaderboard','trade partners','league records','most traded players','most waived players','biggest trades','voting'],
+  history:['power rankings','trade of the week','recent trades','head to head','ticker','leaderboard','trade partners','league records','most traded players','most waived players','biggest trades'],
+  market:['power rankings','trade of the week','biggest trades'],
+  trades:['trade of the week','recent trades','ticker','leaderboard','trade partners','league records','most traded players','biggest trades'],
+  gameLogs:['player form','ticker','head to head']
+};
+function hubModuleIsVisible(name){
+  const isLazy=lazyHomepageDefinitions().some(([,lazyName])=>lazyName===name);
+  if(!isLazy)return true;
+  const lazy=[...state.lazyHomepageModules.values()].find(record=>record.name===name);
+  return Boolean(lazy?.rendered);
 }
+function flushHubRenderQueue(){
+  state.renderQueueScheduled=false;
+  if(!state.renderQueue.size)return;
+  const names=[...state.renderQueue];state.renderQueue.clear();state.renderStats.flushes++;
+  let index=0;
+  const runFrame=()=>{
+    const started=performance.now();
+    while(index<names.length&&performance.now()-started<7){
+      const name=names[index++],fn=HUB_RENDERERS[name];
+      if(fn&&hubModuleIsVisible(name)){safeRender(name,fn);state.renderStats.modules++}
+    }
+    if(index<names.length)requestAnimationFrame(runFrame);
+    else setupLazyHomepageModules();
+  };
+  requestAnimationFrame(runFrame);
+}
+function scheduleHubRender(...names){
+  names.flat().filter(Boolean).forEach(name=>state.renderQueue.add(name));
+  if(state.renderQueueScheduled)return;state.renderQueueScheduled=true;
+  queueMicrotask(flushHubRenderQueue);
+}
+function renderForChange(change){ensureManagerGradeStyles();scheduleHubRender(HUB_CHANGESETS[change]||[])}
+function renderAll(){ensureManagerGradeStyles();scheduleHubRender(HUB_CHANGESETS.core)}
 
 
 function relevantPlayerIds(){
@@ -3084,7 +3147,7 @@ async function load(){
     const current=await currentPromise;
     if(current)freshBundles.push(current);else freshBundles.push(core);
     state.bundles=[...freshBundles,...state.bundles.filter(b=>String(b?.league?.league_id)!==String(CONFIG.currentLeagueId))];
-    rebuildStateFromBundles();renderAll();document.documentElement.classList.add('imo-interactive');
+    rebuildStateFromBundles();renderForChange('current');document.documentElement.classList.add('imo-interactive');
     if(status)status.textContent='Live · loading history in the background…';
     await yieldToBrowser();
 
@@ -3094,7 +3157,7 @@ async function load(){
       await yieldToBrowser();
     }
     state.bundles=freshBundles.length?freshBundles:[current||core];
-    state.historyReady=true;rebuildStateFromBundles();renderAll();rerenderVisibleLazyModules();setupHeadToHeadRefresh();upgradeOpenManagerProfile();
+    state.historyReady=true;rebuildStateFromBundles();renderForChange('history');setupHeadToHeadRefresh();upgradeOpenManagerProfile();
     if(status)status.textContent=`Live · ${state.bundles.length} seasons loaded · verifying markets`;
     scheduleHubCacheWrite();
 
@@ -3107,15 +3170,15 @@ async function load(){
           const currentBundle=currentLeagueBundle(),priorBundle=previousCompletedBundle(currentBundle),priorSeason=String(priorBundle?.league?.season||"");
           await loadSeasonTotalAverages(priorSeason?[priorSeason]:null);
         }
-        resetComputedCaches();prepareModels();state.globalSearchIndex=null;state.marketReady=verifiedMarketInputsReady();
-        if(state.marketReady){prepareOddsMovement();safeRender('verified power rankings',renderPower)}
+        resetModelCaches();prepareModels();state.globalSearchIndex=null;state.marketReady=verifiedMarketInputsReady();
+        if(state.marketReady){prepareOddsMovement();renderForChange('market')}
         else safeRender('market fallback',renderVerifiedMarketFallback);
-        safeRender('trade of the week',renderTradeWeek);rerenderVisibleLazyModules();scheduleHubCacheWrite();
+        scheduleHubCacheWrite();
         const averageCount=Object.values(state.seasonTotalMeta||{}).reduce((sum,season)=>sum+Object.keys(season||{}).length,0);
         if(status)status.textContent=state.marketReady?`Live · verified rankings · ${averageCount} exact averages`:`Live · market verification unavailable`;
         const remainingSeasons=state.bundles.map(b=>String(b?.league?.season||"")).filter(season=>season&&!Object.keys(state.seasonTotalAverages?.[season]||{}).length);
         if(remainingSeasons.length){
-          const finishTotals=()=>loadSeasonTotalAverages(remainingSeasons).then(()=>{resetComputedCaches();prepareModels();state.globalSearchIndex=null;scheduleHubCacheWrite()}).catch(error=>console.warn('Deferred season totals unavailable:',error));
+          const finishTotals=()=>loadSeasonTotalAverages(remainingSeasons).then(()=>{resetModelCaches();prepareModels();state.globalSearchIndex=null;scheduleHubCacheWrite()}).catch(error=>console.warn('Deferred season totals unavailable:',error));
           if('requestIdleCallback' in window)requestIdleCallback(finishTotals,{timeout:12000});else setTimeout(finishTotals,7000);
         }
       }catch(error){console.warn('Exact Sleeper season averages unavailable:',error);safeRender('market fallback',renderVerifiedMarketFallback)}
