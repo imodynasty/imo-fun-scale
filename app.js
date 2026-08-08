@@ -2097,15 +2097,29 @@ function closeManagerDirectory(){const modal=$("managerDirectoryModal");if(!moda
 
 function managerProfileCacheKey(managerId){return `${String(managerId)}|${String(state.profileAverageSeason||"")}`}
 function managerProfileDataFingerprint(){const latest=state.trades?.[0]?.created||0,current=state.modelBundle?.league?.season||'';return `${CONFIG.currentLeagueId}|${current}|${latest}|${state.trades.length}|${state.managers.size}|${state.draftSelections.length}`}
-function managerProfileSessionKey(key){return `imo-profile-v3357-mobile-fast-profile|${managerProfileDataFingerprint()}|${key}`}
-function cachedManagerProfileHTML(managerId){
+function managerProfileSessionKey(key){return `imo-profile-v3364-session|${managerProfileDataFingerprint()}|${key}`}
+function managerProfilePersistentKey(key){return `imo-profile-v3364-persistent|${CONFIG.currentLeagueId}|${key}`}
+function readPersistentManagerProfile(key){
+  try{const raw=localStorage.getItem(managerProfilePersistentKey(key));if(!raw)return null;const parsed=JSON.parse(raw);if(!parsed?.html)return null;return parsed}catch(_){return null}
+}
+function writePersistentManagerProfile(key,html){
+  try{localStorage.setItem(managerProfilePersistentKey(key),JSON.stringify({html,savedAt:Date.now(),fingerprint:managerProfileDataFingerprint()}))}catch(_){ }
+}
+function clearManagerProfileCache(managerId,{persistent=false}={}){
+  const key=managerProfileCacheKey(managerId);state.profileHTMLCache.delete(key);
+  try{sessionStorage.removeItem(managerProfileSessionKey(key))}catch(_){ }
+  if(persistent){try{localStorage.removeItem(managerProfilePersistentKey(key))}catch(_){ }}
+}
+function cachedManagerProfileHTML(managerId,force=false){
   const key=managerProfileCacheKey(managerId);
-  if(state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
-  try{const saved=sessionStorage.getItem(managerProfileSessionKey(key));if(saved){state.profileHTMLCache.set(key,saved);return saved}}catch(_){ }
-  const html=managerProfileHTML(managerId);
-  state.profileHTMLCache.set(key,html);
+  if(!force&&state.profileHTMLCache.has(key))return state.profileHTMLCache.get(key);
+  if(!force){
+    try{const saved=sessionStorage.getItem(managerProfileSessionKey(key));if(saved){state.profileHTMLCache.set(key,saved);return saved}}catch(_){ }
+    const persistent=readPersistentManagerProfile(key);if(persistent?.html){state.profileHTMLCache.set(key,persistent.html);return persistent.html}
+  }
+  const html=managerProfileHTML(managerId);state.profileHTMLCache.set(key,html);
   try{sessionStorage.setItem(managerProfileSessionKey(key),html)}catch(_){ }
-  return html;
+  writePersistentManagerProfile(key,html);return html;
 }
 const managerProfilePrewarmQueue=[];
 const managerProfilePrewarmIds=new Set();
@@ -2115,25 +2129,43 @@ function drainManagerProfilePrewarmQueue(){}
 function queueManagerProfilePrewarm(){}
 function observeManagerProfileLinks(){}
 
-
 function managerProfileFastHTML(managerId){
   const id=String(managerId),manager=state.managers.get(id);
   if(!manager)return '<div class="profile-empty">Manager profile unavailable.</div>';
   const avatar=manager.avatar?`<img src="${esc(manager.avatar)}" alt="${esc(manager.name)} team avatar" loading="eager">`:esc(manager.initials||manager.name.slice(0,2).toUpperCase());
-  const rosterIds=safeArray(manager?.roster?.players).map(String).slice(0,8);
-  const rosterRows=rosterIds.map((pid,i)=>{const player=state.players?.[pid]||{},name=playerName(pid),pic=`https://sleepercdn.com/content/nba/players/${pid}.jpg`,avg=Number(playerCurrentAverage(pid)?.avg||0);return `<div class="profile-roster-row"><span class="profile-roster-rank">${i+1}</span><span class="player-avatar-wrap"><img src="${esc(pic)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><span class="player-avatar-fallback">${esc(name.split(/\s+/).map(x=>x[0]).slice(0,2).join(''))}</span></span><div>${playerLink(pid,name,'profile-player-name')}<small>${esc(player.position||'NBA')}</small></div><b class="profile-player-average">${avg>0?avg.toFixed(2):'—'}</b></div>`}).join('');
-  return `<header class="manager-profile-hero"><div class="manager-profile-avatar">${avatar}</div><div class="manager-profile-hero-copy"><span class="eyebrow">TEAM PROFILE</span><h2>${esc(manager.name)}</h2><p>Profile opened — loading deeper analytics in the background.</p></div></header><nav class="manager-profile-tabs manager-profile-tabs-fast" aria-label="Manager profile sections"><button type="button" class="manager-profile-tab active" disabled>Overview</button><button type="button" class="manager-profile-tab" disabled>Roster</button><button type="button" class="manager-profile-tab" disabled>Front Office</button><button type="button" class="manager-profile-tab" disabled>History</button></nav><div class="manager-profile-grid manager-profile-fast-grid"><section class="manager-profile-card profile-roster-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">CURRENT TEAM</span><h3>Roster preview</h3></div><span class="period-pill">${safeArray(manager?.roster?.players).length} players</span></div><div class="profile-roster-list">${rosterRows||'<div class="profile-empty">No roster data available.</div>'}</div></section><section class="manager-profile-card manager-profile-fast-status"><div class="manager-profile-card-heading"><div><span class="eyebrow">LIVE PROFILE</span><h3>Loading analytics</h3></div></div><div class="manager-profile-loading-fast-bars"><span></span><span></span><span></span></div><small>Grades, history and advanced roster metrics will appear shortly.</small></section></div>`;
+  const rosterIds=safeArray(manager?.roster?.players).map(String);
+  const rosterRows=rosterIds.slice(0,10).map((pid,i)=>{const player=state.players?.[pid]||{},name=playerName(pid),pic=`https://sleepercdn.com/content/nba/players/${pid}.jpg`,avg=Number(playerCurrentAverage(pid)?.avg||0);return `<div class="profile-roster-row"><span class="profile-roster-rank">${i+1}</span><span class="player-avatar-wrap"><img src="${esc(pic)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><span class="player-avatar-fallback">${esc(name.split(/\s+/).map(x=>x[0]).slice(0,2).join(''))}</span></span><div>${playerLink(pid,name,'profile-player-name')}<small>${esc(player.position||'NBA')}</small></div><b class="profile-player-average">${avg>0?avg.toFixed(2):'—'}</b></div>`}).join('');
+  const rosterCard=`<section class="manager-profile-card profile-roster-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">CURRENT TEAM</span><h3>Roster</h3></div><span class="period-pill">${rosterIds.length} players</span></div><div class="profile-roster-list">${rosterRows||'<div class="profile-empty">No roster data available.</div>'}</div>${rosterIds.length>10?'<small class="profile-muted">Open the Roster tab for the complete roster and advanced metrics.</small>':''}</section>`;
+  const deferred=(label,copy)=>`<section class="manager-profile-card manager-profile-fast-status"><div class="manager-profile-card-heading"><div><span class="eyebrow">${label}</span><h3>Ready on demand</h3></div></div><small>${copy}</small></section>`;
+  return `<header class="manager-profile-hero"><div class="manager-profile-avatar">${avatar}</div><div class="manager-profile-hero-copy"><span class="eyebrow">TEAM PROFILE</span><h2>${esc(manager.name)}</h2><p>Current franchise overview</p></div></header><nav class="manager-profile-tabs" aria-label="Manager profile sections"><button type="button" class="manager-profile-tab active" data-manager-tab="overview">Overview</button><button type="button" class="manager-profile-tab" data-manager-tab="roster">Roster</button><button type="button" class="manager-profile-tab" data-manager-tab="front-office">Front Office</button><button type="button" class="manager-profile-tab" data-manager-tab="history">History</button></nav><div class="manager-profile-tab-panels"><section class="manager-profile-tab-panel active" data-manager-tab-panel="overview"><div class="manager-profile-grid">${rosterCard}</div></section><section class="manager-profile-tab-panel" data-manager-tab-panel="roster" hidden><div class="manager-profile-grid">${rosterCard}</div></section><section class="manager-profile-tab-panel" data-manager-tab-panel="front-office" hidden><div class="manager-profile-grid">${deferred('FRONT OFFICE','Trade, drafting and acquisition analytics load only when this section is opened.')}</div></section><section class="manager-profile-tab-panel" data-manager-tab-panel="history" hidden><div class="manager-profile-grid">${deferred('LEAGUE HISTORY','Head-to-head and historical records load only when this section is opened.')}</div></section></div>`;
 }
 function hydrateManagerProfileSection(managerId,tab){
-  const id=String(managerId||''),section=String(tab||'overview'),season=String(state.profileAverageSeason||'2026'),key=managerProfileCacheKey(id),rosterIds=safeArray(state.managers.get(id)?.roster?.players).map(String);
+  const id=String(managerId||''),section=String(tab||'overview'),season=String(state.profileAverageSeason||'2026'),rosterIds=safeArray(state.managers.get(id)?.roster?.players).map(String);
   const jobs=[];
   if(section==='roster')jobs.push(ensurePlayerEfficiencyData(rosterIds,season));
   if(section==='front-office')jobs.push(hydrateManagerAcquisitionGameLogs(id));
   if(!jobs.length)return;
   const hydrationKey=`hydrate|${id}|${season}|${section}`;
   if(state.profileBuilds.has(hydrationKey))return;
-  const hydration=Promise.allSettled(jobs).then(()=>{state.computedCache.managerGrades=null;state.profileHTMLCache.delete(key);try{sessionStorage.removeItem(managerProfileSessionKey(key))}catch(_){ }const modal=$('managerProfileModal'),content=$('managerProfileContent');if(modal?.dataset.managerId===id&&modal.classList.contains('open')&&modal.dataset.activeTab===section){const active=section;content.innerHTML=cachedManagerProfileHTML(id);bindSparklineTooltips(content);setManagerProfileTab(active,false)}}).finally(()=>state.profileBuilds.delete(hydrationKey));
+  const hydration=Promise.allSettled(jobs).then(()=>{state.computedCache.managerGrades=null;clearManagerProfileCache(id,{persistent:true});const modal=$('managerProfileModal'),content=$('managerProfileContent');if(modal?.dataset.managerId===id&&modal.classList.contains('open')&&modal.dataset.activeTab===section){const active=section;content.innerHTML=cachedManagerProfileHTML(id,true);modal.dataset.profileMode='full';bindSparklineTooltips(content);setManagerProfileTab(active,false)}}).finally(()=>state.profileBuilds.delete(hydrationKey));
   state.profileBuilds.set(hydrationKey,hydration);
+}
+function buildManagerProfileInBackground(managerId,{force=false,tab='overview',immediate=false}={}){
+  const id=String(managerId),key=`full|${managerProfileCacheKey(id)}|${force?'force':'normal'}`;
+  if(state.profileBuilds.has(key))return state.profileBuilds.get(key);
+  const run=()=>new Promise((resolve,reject)=>{try{resolve(cachedManagerProfileHTML(id,force))}catch(error){reject(error)}});
+  const job=new Promise((resolve,reject)=>{
+    const execute=()=>run().then(resolve,reject);
+    if(immediate){requestAnimationFrame(()=>setTimeout(execute,0));return}
+    if('requestIdleCallback' in window)requestIdleCallback(execute,{timeout:8000});else setTimeout(execute,1800);
+  }).finally(()=>state.profileBuilds.delete(key));
+  state.profileBuilds.set(key,job);
+  job.then(html=>{const modal=$('managerProfileModal'),content=$('managerProfileContent');if(!modal?.classList.contains('open')||modal.dataset.managerId!==id)return;const desired=modal.dataset.requestedFullTab||modal.dataset.activeTab||tab||'overview';delete modal.dataset.requestedFullTab;content.innerHTML=html;modal.dataset.profileMode='full';bindSparklineTooltips(content);setManagerProfileTab(desired,false)}).catch(error=>console.warn('Manager profile background build failed:',error));
+  return job;
+}
+function scheduleManagerProfileRevalidation(managerId){
+  const id=String(managerId),key=managerProfileCacheKey(id),saved=readPersistentManagerProfile(key);if(!state.historyReady||!saved?.html||saved.fingerprint===managerProfileDataFingerprint())return;
+  buildManagerProfileInBackground(id,{force:true,tab:$('managerProfileModal')?.dataset.activeTab||'overview',immediate:false});
 }
 
 function closeManagerSwitchers(except=null){document.querySelectorAll('[data-manager-switcher].open').forEach(sw=>{if(sw===except)return;sw.classList.remove('open');const trigger=sw.querySelector('[data-manager-switcher-trigger]');const menu=sw.querySelector('.manager-switcher-menu');if(trigger)trigger.setAttribute('aria-expanded','false');if(menu)menu.hidden=true})}
@@ -2148,48 +2180,49 @@ function setManagerProfileTab(tab,updateUrl=true){
   modal.dataset.activeTab=next;
   modal.querySelectorAll('[data-manager-tab]').forEach(btn=>{const active=btn.dataset.managerTab===next;btn.classList.toggle('active',active);btn.setAttribute('aria-selected',String(active))});
   modal.querySelectorAll('[data-manager-tab-panel]').forEach(panel=>{const active=panel.dataset.managerTabPanel===next;panel.classList.toggle('active',active);panel.hidden=!active});
-  if(modal.dataset.managerId)hydrateManagerProfileSection(modal.dataset.managerId,next);
+  if(modal.dataset.managerId){
+    if(modal.dataset.profileMode==='full')hydrateManagerProfileSection(modal.dataset.managerId,next);
+    else if(next!=='overview'){
+      modal.dataset.requestedFullTab=next;
+      if(state.historyReady)buildManagerProfileInBackground(modal.dataset.managerId,{tab:next,immediate:true});
+      else modal.dataset.pendingFullProfile='1';
+    }
+  }
   if(updateUrl&&modal.dataset.managerId){const id=encodeURIComponent(modal.dataset.managerId),hash=`#manager=${id}&tab=${encodeURIComponent(next)}`;history.replaceState({managerProfile:modal.dataset.managerId,tab:next},'',hash)}
 }
 function initialiseManagerProfileTab(){setManagerProfileTab(managerProfileTabFromHash()||$('managerProfileModal')?.dataset.activeTab||'overview',false)}
 async function openManagerProfile(managerId,pushState=true){
-  const modal=$("managerProfileModal"),content=$("managerProfileContent");
-  if(!modal||!content)return;
-  const id=String(managerId);
-  modal.classList.add("open");
-  modal.setAttribute("aria-hidden","false");
-  document.body.classList.add("manager-profile-open");
-  modal.dataset.managerId=id;
-  const key=managerProfileCacheKey(id);
-  // During initial hydration keep the instantly painted profile shell active.
-  // Building all-time grades and transaction history at this moment would
-  // compete with the startup path and make every other button feel frozen.
-  if(!state.historyReady){
-    content.innerHTML=managerProfileFastHTML(id);modal.dataset.pendingFullProfile='1';
-    if(pushState)history.pushState({managerProfile:id,tab:'overview'},'',`#manager=${encodeURIComponent(id)}&tab=overview`);
-    requestAnimationFrame(()=>$('managerProfileClose')?.focus());return
-  }
-  delete modal.dataset.pendingFullProfile;
-  if(state.profileHTMLCache.has(key)){
-    content.innerHTML=state.profileHTMLCache.get(key);
-    bindSparklineTooltips(content);
-    initialiseManagerProfileTab();
+  const modal=$("managerProfileModal"),content=$("managerProfileContent");if(!modal||!content)return;
+  const id=String(managerId),key=managerProfileCacheKey(id),desired=managerProfileTabFromHash()||'overview';
+  modal.classList.add("open");modal.setAttribute("aria-hidden","false");document.body.classList.add("manager-profile-open");modal.dataset.managerId=id;modal.dataset.activeTab=desired;delete modal.dataset.requestedFullTab;
+
+  let html=null,source='';
+  if(state.profileHTMLCache.has(key)){html=state.profileHTMLCache.get(key);source='memory'}
+  if(!html){try{const saved=sessionStorage.getItem(managerProfileSessionKey(key));if(saved){html=saved;state.profileHTMLCache.set(key,saved);source='session'}}catch(_){ }}
+  if(!html){const saved=readPersistentManagerProfile(key);if(saved?.html){html=saved.html;state.profileHTMLCache.set(key,html);source='persistent'}}
+
+  if(html){
+    content.innerHTML=html;modal.dataset.profileMode='full';delete modal.dataset.pendingFullProfile;bindSparklineTooltips(content);setManagerProfileTab(desired,false);
+    if(source==='persistent')scheduleManagerProfileRevalidation(id);
   }else{
-    content.innerHTML=managerProfileFastHTML(id);
-    let build=state.profileBuilds.get(key);
-    if(!build){
-      // Give the browser two paint opportunities so the modal opens instantly before
-      // the heavier profile HTML is assembled on the main thread.
-      build=new Promise((resolve,reject)=>requestAnimationFrame(()=>requestAnimationFrame(()=>setTimeout(()=>{try{resolve(cachedManagerProfileHTML(id))}catch(error){reject(error)}},0))));
-      state.profileBuilds.set(key,build);build.finally(()=>state.profileBuilds.delete(key));
-    }
-    build.then(html=>{if(modal.dataset.managerId!==id)return;const desired=managerProfileTabFromHash()||modal.dataset.activeTab||'overview';content.innerHTML=html||'<div class="profile-empty">No profile data is available.</div>';bindSparklineTooltips(content);setManagerProfileTab(desired,false)}).catch(error=>{console.error('Manager profile failed:',error);if(modal.dataset.managerId===id){const manager=state.managers.get(id);content.innerHTML=`<header class="manager-profile-hero"><div class="manager-profile-avatar">${manager?.avatar?`<img src="${esc(manager.avatar)}" alt="">`:esc(manager?.initials||'GM')}</div><div class="manager-profile-hero-copy"><span class="eyebrow">TEAM PROFILE</span><h2>${esc(manager?.name||'Manager')}</h2><p>The full profile encountered a data issue. Core roster and trade data remain available below.</p></div></header><section class="manager-profile-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">CURRENT TEAM</span><h3>Roster</h3></div></div><div class="profile-roster-list">${safeArray(manager?.roster?.players).map(pid=>`<div class="profile-roster-row">${playerLink(pid,playerName(pid))}</div>`).join('')||'<div class="profile-empty">No roster data available.</div>'}</div></section><section class="manager-profile-card"><div class="manager-profile-card-heading"><div><span class="eyebrow">TRANSACTIONS</span><h3>Recent Trades</h3></div></div><div class="profile-trades-list">${safeArray(state.trades).filter(t=>mids(t).includes(id)).slice(0,5).map(t=>managerTradeSummaryHTML(t,id)).join('')||'<div class="profile-empty">No trades found.</div>'}</div></section>`}});
+    content.innerHTML=managerProfileFastHTML(id);modal.dataset.profileMode='instant';setManagerProfileTab(desired,false);
+    if(state.historyReady){
+      if(desired!=='overview')buildManagerProfileInBackground(id,{tab:desired,immediate:true});
+      else buildManagerProfileInBackground(id,{tab:'overview',immediate:false});
+    }else if(desired!=='overview')modal.dataset.pendingFullProfile='1';
   }
-  // Heavy roster efficiency and acquisition history are hydrated only when their tabs are opened.
-  if(pushState)history.pushState({managerProfile:id,tab:"overview"},"",`#manager=${encodeURIComponent(id)}&tab=overview`);
+  if(pushState)history.pushState({managerProfile:id,tab:desired},"",`#manager=${encodeURIComponent(id)}&tab=${encodeURIComponent(desired)}`);
   requestAnimationFrame(()=>$('managerProfileClose')?.focus());
 }
-function upgradeOpenManagerProfile(){const modal=$('managerProfileModal');if(!modal?.classList.contains('open')||!modal.dataset.pendingFullProfile||!modal.dataset.managerId)return;const id=modal.dataset.managerId;delete modal.dataset.pendingFullProfile;setTimeout(()=>openManagerProfile(id,false),120)}
+function upgradeOpenManagerProfile(){
+  const modal=$('managerProfileModal');if(!modal?.classList.contains('open')||!modal.dataset.managerId)return;
+  const id=modal.dataset.managerId,requested=modal.dataset.requestedFullTab||modal.dataset.activeTab||'overview';
+  if(modal.dataset.profileMode==='full'){scheduleManagerProfileRevalidation(id);return}
+  if(modal.dataset.pendingFullProfile||requested!=='overview'){
+    delete modal.dataset.pendingFullProfile;buildManagerProfileInBackground(id,{tab:requested,immediate:requested!=='overview'});return;
+  }
+  buildManagerProfileInBackground(id,{tab:'overview',immediate:false});
+}
 function closeManagerProfile(updateHistory=true){
   const modal=$("managerProfileModal");
   if(!modal)return;
@@ -3140,7 +3173,7 @@ document.addEventListener("click",e=>{
   if(e.target.closest("#managerDirectoryBtn")){openManagerDirectory();return}
   if(e.target.closest("[data-close-manager-directory]")||e.target.closest("#managerDirectoryClose")){closeManagerDirectory();return}
   const managerTabBtn=e.target.closest("[data-manager-tab]");if(managerTabBtn){setManagerProfileTab(managerTabBtn.dataset.managerTab,true);return}
-  const seasonBtn=e.target.closest("[data-profile-season]");if(seasonBtn){state.profileAverageSeason=seasonBtn.dataset.profileSeason;const id=$("managerProfileModal")?.dataset.managerId;if(id){const content=$("managerProfileContent"),activeTab=$("managerProfileModal")?.dataset.activeTab||"roster",rosterIds=safeArray(state.managers.get(String(id))?.roster?.players).map(String);content.innerHTML='<div class="manager-profile-loading"><strong>Loading season metrics…</strong><small>Resolving FPTS/G, MPG and FPTS/36.</small></div>';ensurePlayerEfficiencyData(rosterIds,state.profileAverageSeason).catch(error=>console.warn('Season metric hydration failed:',error)).finally(()=>{state.profileHTMLCache.delete(managerProfileCacheKey(id));try{sessionStorage.removeItem(managerProfileSessionKey(managerProfileCacheKey(id)))}catch(_){ }if($("managerProfileModal")?.dataset.managerId!==String(id))return;content.innerHTML=cachedManagerProfileHTML(id);bindSparklineTooltips(content);setManagerProfileTab(activeTab,false)})}return}
+  const seasonBtn=e.target.closest("[data-profile-season]");if(seasonBtn){state.profileAverageSeason=seasonBtn.dataset.profileSeason;const id=$("managerProfileModal")?.dataset.managerId;if(id){const content=$("managerProfileContent"),activeTab=$("managerProfileModal")?.dataset.activeTab||"roster",rosterIds=safeArray(state.managers.get(String(id))?.roster?.players).map(String);content.innerHTML='<div class="manager-profile-loading"><strong>Loading season metrics…</strong><small>Resolving FPTS/G, MPG and FPTS/36.</small></div>';ensurePlayerEfficiencyData(rosterIds,state.profileAverageSeason).catch(error=>console.warn('Season metric hydration failed:',error)).finally(()=>{clearManagerProfileCache(id,{persistent:true});if($("managerProfileModal")?.dataset.managerId!==String(id))return;content.innerHTML=cachedManagerProfileHTML(id,true);$("managerProfileModal").dataset.profileMode='full';bindSparklineTooltips(content);setManagerProfileTab(activeTab,false)})}return}
   const link=e.target.closest(".manager-profile-link");if(link){if(Date.now()-lastManagerPointerAction<700)return;closeManagerDirectory();openManagerProfile(link.dataset.managerId);return}
   if(e.target.closest("[data-close-manager-profile]")||e.target.closest("#managerProfileClose"))closeManagerProfile()
 });
