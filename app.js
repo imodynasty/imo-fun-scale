@@ -1,4 +1,4 @@
-/* IMO DYNASTY V3.3.62 — Verified Markets + Lite Rendering */
+/* IMO DYNASTY V3.3.63 — Trade Grade Star Premium + Diminishing Returns */
 const CONFIG={currentLeagueId:"1341763186407276544",leagueIds:["1341763186407276544","1212553673821929472","1138349648558624768"],api:"https://api.sleeper.app/v1",statsApi:"https://api.sleeper.com/stats/nba/player",bulkStatsApi:"https://api.sleeper.com/stats/nba",roundsToCheck:60,bookmakerMargin:1.08,h2hHouseMargin:1.05,oddsBaseline:.25,oddsExponent:2,maxDisplayedOdds:51,voteEndpoint:"",votingOpens:"2027-02-23T00:00:00+08:00",votingCloses:"2027-03-01T00:00:00+08:00",awardsAnnounced:"2027-03-01T12:00:00+08:00"};
 
 // Completed-draft column ownership is the source of truth for converting a
@@ -211,6 +211,17 @@ function tradeSideMetrics(t,managerId){
   let sent=outgoing;
   if(!sent.length&&mids(t).length===2){const other=mids(t).find(x=>String(x)!==id);sent=tradeAssets(t)[other]||[]}
   const rawReceivedValue=received.reduce((sum,a)=>sum+(Number(a.value)||0),0),rawSentValue=sent.reduce((sum,a)=>sum+(Number(a.value)||0),0);
+
+  // Package depth is intentionally worth less than headline quality. Every side is
+  // scored with the same diminishing-return curve so collecting extra B/C assets
+  // cannot automatically overpower a single elite dynasty player.
+  const packageWeights=[1.00,0.85,0.70,0.55];
+  const weightedPackageValue=assets=>[...assets]
+    .sort((a,b)=>(Number(b.value)||0)-(Number(a.value)||0))
+    .reduce((sum,a,index)=>sum+(Number(a.value)||0)*(packageWeights[index]??0.40),0);
+  const weightedReceivedValue=weightedPackageValue(received);
+  const weightedSentValue=weightedPackageValue(sent);
+
   const allPlayers=Object.values(tradeAssets(t)).flat().filter(a=>a.type==='player').sort((a,b)=>(Number(b.value)||0)-(Number(a.value)||0));
   const bestPlayer=allPlayers[0]||null,nextBest=allPlayers[1]||null;
   const bestReceived=Boolean(bestPlayer&&received.some(a=>a.type==='player'&&String(a.id)===String(bestPlayer.id)));
@@ -224,23 +235,30 @@ function tradeSideMetrics(t,managerId){
   const bestReceivedPlayer=received.filter(a=>a.type==='player').sort((a,b)=>Number(b.value||0)-Number(a.value||0))[0]||null;
   const meaningfulCentrepiece=Boolean(bestReceivedPlayer&&(Number(bestReceivedPlayer.value||0)>=22||Number(bestReceivedPlayer.average||0)>=24));
 
-  // Star premium: the clear best player carries 10% extra effective value.
-  const starBonus=clearCentrepiece?Number(bestPlayer.value)*0.10:0;
+  // Strong best-player premium. The manager landing the clear headline player
+  // receives an extra 12–25% of that player's value depending on how far ahead
+  // they are of the next-best player. A top-10 tagged player gets at least 20%.
+  let starPremiumRate=0;
+  if(bestReceived&&bestPlayer){
+    if(bestRatio>=1.35)starPremiumRate=0.25;
+    else if(bestRatio>=1.20)starPremiumRate=0.20;
+    else if(bestRatio>=1.10)starPremiumRate=0.12;
+    if(bestPlayer.topTenBonus)starPremiumRate=Math.max(starPremiumRate,0.20);
+  }
+  const starBonus=bestReceived&&bestPlayer?Number(bestPlayer.value||0)*starPremiumRate:0;
 
-  // Consolidation premium: reward the side turning a larger outgoing package into fewer incoming assets.
-  // This stacks only when the side also secured the clear best player in the deal.
+  // Diminishing returns already create the consolidation effect, so do not stack
+  // the old asset-count bonus on top and double-reward the same behaviour.
   const assetReduction=Math.max(0,sent.length-received.length);
-  const consolidationRate=clearCentrepiece?(assetReduction>=3?0.10:assetReduction===2?0.08:assetReduction===1?0.05:0):0;
-  const consolidationBonus=rawReceivedValue*consolidationRate;
+  const consolidationRate=0;
+  const consolidationBonus=0;
+  const contextualBonus=starBonus;
+  const adjustedReceivedValue=weightedReceivedValue+contextualBonus;
+  const average=(adjustedReceivedValue+weightedSentValue)/2;
+  const edge=average>0?(adjustedReceivedValue-weightedSentValue)/average*100:0;
+  const net=adjustedReceivedValue-weightedSentValue;
 
-  // Keep the combined contextual lift meaningful but controlled.
-  const contextualBonus=Math.min(rawReceivedValue*0.18,starBonus+consolidationBonus);
-  const adjustedReceivedValue=rawReceivedValue+contextualBonus;
-  const average=(adjustedReceivedValue+rawSentValue)/2;
-  const edge=average>0?(adjustedReceivedValue-rawSentValue)/average*100:0;
-  const net=adjustedReceivedValue-rawSentValue;
-
-  const result={id,received,sent,receivedValue:rawReceivedValue,sentValue:rawSentValue,adjustedReceivedValue,edge,net,bestReceived,bestPlayer,bestReceivedPlayer,clearCentrepiece,meaningfulCentrepiece,bestRatio,starBonus,consolidationRate,consolidationBonus,contextualBonus,assetReduction};
+  const result={id,received,sent,receivedValue:rawReceivedValue,sentValue:rawSentValue,weightedReceivedValue,weightedSentValue,adjustedReceivedValue,edge,net,bestReceived,bestPlayer,bestReceivedPlayer,clearCentrepiece,meaningfulCentrepiece,bestRatio,starPremiumRate,starBonus,consolidationRate,consolidationBonus,contextualBonus,assetReduction};
   state.computedCache.tradeSide.set(cacheKey,result);
   return result
 }
