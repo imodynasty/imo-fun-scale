@@ -1234,6 +1234,25 @@ function upcomingFirstCount(managerId){
   // counted as if the original manager still owns them.
   return managerCurrentDraftPicks(managerId).filter(p=>Number(p.round)===1).length
 }
+function managerBlockbusterTradeCount(managerId,avgMap){
+  const id=String(managerId),averages=avgMap||{};
+  return currentSeasonTrades().reduce((count,raw)=>{
+    try{
+      const t=normaliseTrade(raw);
+      if(!mids(t).includes(id))return count;
+      const adds=t.adds||{},drops=t.drops||{},owners=t.roster_owner_map||{};
+      const qualifies=Object.entries(adds).some(([pid,rid])=>String(owners[String(rid)]||'')===id&&Number(averages[String(pid)]||0)>26)
+        ||Object.entries(drops).some(([pid,rid])=>{
+          if(String(owners[String(rid)]||'')!==id||Number(averages[String(pid)]||0)<=26)return false;
+          const destinationRoster=adds[String(pid)];
+          if(destinationRoster==null)return false;
+          const destinationManager=String(owners[String(destinationRoster)]||'');
+          return destinationManager&&destinationManager!==id
+        });
+      return count+(qualifies?1:0)
+    }catch(_){return count}
+  },0)
+}
 function managerBadges(managerId){
   const id=String(managerId),badges=[],trades=managerTrades(id),cutoff=Date.now()-28*864e5,recent28=trades.filter(t=>(t.created||0)>=cutoff).length;
   if(recent28>=5)badges.push({icon:"⚡",name:"The Day Trader",copy:`Completed ${recent28} trades in the last 28 days.`});
@@ -1242,7 +1261,8 @@ function managerBadges(managerId){
   const weeks=meaningfulWeeks(state.modelBundle),through=weeks.at(-1)||Infinity,odds=priceRows(through);if(odds.length&&odds.at(-1)?.id===id)badges.push({icon:"🥞",name:"Pancakes",copy:"Currently owns the longest championship odds."});
   const currentSeason=String(state.bundles.find(b=>String(b.league?.league_id)===CONFIG.currentLeagueId)?.league?.season||state.modelBundle?.league?.season||"2026"),avgMap=seasonAverageMap(currentSeason),topPlayer=Object.entries(avgMap).sort((a,b)=>b[1]-a[1])[0]?.[0],manager=state.managers.get(id),roster=(manager?.roster?.players||[]).map(String);if(topPlayer&&roster.includes(String(topPlayer)))badges.push({icon:"👑",name:"MVP",copy:`Currently owns ${playerName(topPlayer)}, the league's highest-average player.`});
   const infinityPlayers=roster.filter(pid=>Number(avgMap[pid]||0)>28);if(infinityPlayers.length>=5)badges.push({icon:"💎",name:"Infinity Stones",copy:`Owns ${infinityPlayers.length} players averaging more than 28.00 this season.`});
-  const currentForm=managerFormData(id),lastFive=currentForm.outcomes.slice(-5);if(lastFive.length===5&&lastFive.every(g=>g.result===0))badges.push({icon:"🏖️",name:"Cancun",copy:"Has lost five games in a row."});
+  const blockbusterTrades=managerBlockbusterTradeCount(id,avgMap);if(blockbusterTrades>=6)badges.push({icon:"🧨",name:"Blockbuster Merchant",copy:`Involved in ${blockbusterTrades} blockbuster trades this season.`});
+  const currentForm=managerFormData(id),lastThree=currentForm.outcomes.slice(-3);if(lastThree.length===3&&lastThree.every(g=>g.result===0))badges.push({icon:"🏖️",name:"Cancun",copy:"Has lost three games in a row."});
   const young=roster.filter(pid=>Number(state.players[pid]?.age)<21).length,old=roster.filter(pid=>Number(state.players[pid]?.age)>30).length;if(young>10)badges.push({icon:"🐶",name:"Young Pups",copy:`Owns ${young} players under the age of 21.`});if(old>=8)badges.push({icon:"🐕",name:"Old Dogs",copy:`Owns ${old} players over the age of 30.`});return badges
 }
 function managerAverageAge(id){const ages=managerRosterPlayers(id,"2025").map(x=>x.age).filter(Number.isFinite);return ages.length?ages.reduce((a,b)=>a+b,0)/ages.length:0}
@@ -2202,8 +2222,8 @@ function managerProfileCoreFingerprint(managerId){
   const id=String(managerId||''),manager=state.managers.get(id),roster=safeArray(manager?.roster?.players).map(String).sort().join(','),picks=safeArray(manager?.roster?.draft_picks||[]).map(String).sort().join(',');
   return `${CONFIG.currentLeagueId}|${id}|${roster}|${picks}`
 }
-function managerProfileSessionKey(key){return `imo-profile-v3373-session|${key}`}
-function managerProfilePersistentKey(key){return `imo-profile-v3373-persistent|${key}`}
+function managerProfileSessionKey(key){return `imo-profile-v3374-session|${key}`}
+function managerProfilePersistentKey(key){return `imo-profile-v3374-persistent|${key}`}
 function parseManagerProfileCache(raw){
   if(!raw)return null;
   try{const parsed=JSON.parse(raw);if(parsed&&typeof parsed.html==='string')return parsed}catch(_){ }
